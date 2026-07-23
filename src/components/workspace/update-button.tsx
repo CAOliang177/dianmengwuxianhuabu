@@ -163,17 +163,31 @@ export function UpdateButton({ className }: { className?: string }) {
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className={`relative ${className ?? ""}`}
-                            aria-label={t("title")}
+                            className={`relative ${className ?? ""} ${
+                                hasUpdate
+                                    ? "border-red-400/70 bg-red-500/20 text-red-100 shadow-[0_0_0_1px_rgba(248,113,113,.2),0_0_22px_rgba(239,68,68,.28)] hover:border-red-300 hover:bg-red-500/30 hover:text-white"
+                                    : ""
+                            }`}
+                            aria-label={
+                                hasUpdate
+                                    ? `发现新版本 ${state.latestVersion ?? ""}`
+                                    : t("title")
+                            }
                         >
                             <CircleArrowUp className="h-5 w-5" />
                             {hasUpdate ? (
-                                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
+                                <span className="absolute -right-2 -top-2 flex min-w-6 items-center justify-center rounded-full border-2 border-[#060914] bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-lg shadow-red-500/40">
+                                    新
+                                </span>
                             ) : null}
                         </Button>
                     </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">{t("title")}</TooltipContent>
+                <TooltipContent side="bottom">
+                    {hasUpdate
+                        ? `发现新版本 v${state.latestVersion ?? ""}`
+                        : t("title")}
+                </TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-64 p-3">
                 <div className="mb-2 flex items-baseline justify-between">
