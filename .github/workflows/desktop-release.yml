@@ -35,7 +35,7 @@ jobs:
 
             - name: Install desktop dependencies
               working-directory: desktop
-              run: pnpm install --no-frozen-lockfile
+              run: pnpm install --ignore-workspace --no-frozen-lockfile
 
             - name: Fetch bundled runtimes
               working-directory: desktop
