@@ -10,6 +10,7 @@
 import { CircleArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -96,7 +97,64 @@ export function UpdateButton({ className }: { className?: string }) {
         return null;
     })();
 
+    const progressOverlay =
+        (downloading || status === "downloaded") &&
+        typeof document !== "undefined"
+            ? createPortal(
+                  <div className="fixed right-6 top-6 z-[250] w-80 rounded-2xl border border-border/80 bg-background/95 p-4 text-foreground shadow-2xl backdrop-blur-xl">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                              {downloading ? (
+                                  <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-500" />
+                              ) : (
+                                  <CircleArrowUp className="h-5 w-5 shrink-0 text-green-500" />
+                              )}
+                              <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold">
+                                      {downloading
+                                          ? "正在下载应用更新"
+                                          : "应用更新已下载完成"}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                      v{state.currentVersion} → v
+                                      {state.latestVersion ?? "最新版本"}
+                                  </div>
+                              </div>
+                          </div>
+                          <span className="text-sm font-semibold tabular-nums">
+                              {downloading
+                                  ? `${Math.round(state.percent ?? 0)}%`
+                                  : "100%"}
+                          </span>
+                      </div>
+                      <Progress
+                          value={downloading ? (state.percent ?? 0) : 100}
+                          className="h-2"
+                      />
+                      <p className="mt-2 text-xs text-muted-foreground">
+                          {downloading
+                              ? "正在下载完整安装包，请保持应用打开。"
+                              : "点击下方按钮重启并安装新版本。"}
+                      </p>
+                      {status === "downloaded" ? (
+                          <Button
+                              type="button"
+                              size="sm"
+                              className="mt-3 w-full"
+                              onClick={() =>
+                                  void window.tongflowDesktop?.installUpdate()
+                              }
+                          >
+                              {t("restart")}
+                          </Button>
+                      ) : null}
+                  </div>,
+                  document.body,
+              )
+            : null;
+
     return (
+        <>
         <DropdownMenu>
             <Tooltip>
                 <TooltipTrigger asChild>
@@ -184,5 +242,7 @@ export function UpdateButton({ className }: { className?: string }) {
                 )}
             </DropdownMenuContent>
         </DropdownMenu>
+        {progressOverlay}
+        </>
     );
 }

@@ -62,11 +62,25 @@ let state: UpdateState = {
 let getWindow: () => BrowserWindow | null = () => null;
 let log: (line: string) => void = () => {};
 let downloadedDmgPath: string | null = null;
+let notifiedAvailableVersion: string | null = null;
 
 function setState(patch: Partial<UpdateState>): void {
     state = { ...state, ...patch };
     const win = getWindow();
     if (win && !win.isDestroyed()) {
+        if (state.status === "downloading") {
+            const progress = Math.max(
+                0.01,
+                Math.min(1, (state.percent ?? 0) / 100),
+            );
+            win.setProgressBar(progress, { mode: "normal" });
+        } else if (state.status === "available") {
+            win.setProgressBar(2, { mode: "indeterminate" });
+        } else if (state.status === "downloaded") {
+            win.setProgressBar(1, { mode: "normal" });
+        } else {
+            win.setProgressBar(-1);
+        }
         win.webContents.send("tongflow:update-state", state);
     }
 }
@@ -166,8 +180,37 @@ async function promptRestart(version: string): Promise<void> {
 
 // --- Windows: electron-updater ----------------------------------------------
 
+/** Tell the user immediately that a download has started. */
+async function promptUpdateAvailable(version: string): Promise<void> {
+    if (notifiedAvailableVersion === version) return;
+    notifiedAvailableVersion = version;
+    const options = {
+        type: "info" as const,
+        title: "发现新版本",
+        message: `dianmeng无限画布 v${version} 可更新`,
+        detail:
+            "新版本正在后台下载。下载完成后会再次提示重启安装，请在下载完成前保持应用打开。",
+        buttons: ["知道了"],
+        defaultId: 0,
+    };
+    const win = getWindow();
+    if (win && !win.isDestroyed()) {
+        await dialog.showMessageBox(win, options);
+    } else {
+        await dialog.showMessageBox(options);
+    }
+}
+
 async function setupWindowsAutoUpdater(): Promise<void> {
     const { autoUpdater } = await import("electron-updater");
+
+    // Locally distributed installers and GitHub Actions artifacts are built on
+    // different machines, so their binary block maps are not interchangeable.
+    // A differential attempt can reach the end and fail checksum validation;
+    // use the stable full installer download instead.
+    autoUpdater.disableDifferentialDownload = true;
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
 
     // Every updater step goes to the log file — update failures on user
     // machines must be diagnosable from a bug report.
@@ -180,6 +223,10 @@ async function setupWindowsAutoUpdater(): Promise<void> {
 
     autoUpdater.on("update-available", (info) => {
         setState({ status: "available", latestVersion: info.version });
+        log(
+            `[updater] update available: ${state.currentVersion} -> ${info.version}; full download starting`,
+        );
+        void promptUpdateAvailable(info.version);
     });
     autoUpdater.on("update-not-available", (info) => {
         setState({ status: "up-to-date", latestVersion: info.version });
