@@ -4,6 +4,7 @@ import { ensureUserDirs } from "./fs-setup";
 import { initLogFile, logFilePath, logLine, recentLogs } from "./logging";
 import { ensurePythonEnv } from "./python-manager";
 import { startServer, stopServer } from "./server-manager";
+import { initUpdater } from "./updater";
 import {
     createMainWindow,
     createSplash,
@@ -47,6 +48,13 @@ async function boot(): Promise<void> {
         const port = await findFreePort();
         log("Starting dianmeng无限画布 server…");
         await startServer(port, logLine, onServerCrash);
+
+        // Register updater IPC before the renderer loads, then let the update
+        // check/download continue in the background without delaying startup.
+        void initUpdater(() => mainWindow, logLine).catch((err) => {
+            const message = err instanceof Error ? err.message : String(err);
+            logLine(`[updater] initialization failed: ${message}`);
+        });
 
         mainWindow = createMainWindow(`http://127.0.0.1:${port}`);
         mainWindow.on("closed", () => {
