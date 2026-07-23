@@ -18,6 +18,7 @@ import {
     renameCanvas,
     setActiveCanvasId,
 } from "@/lib/canvas-history";
+import { UpdateButton } from "@/components/workspace/update-button";
 
 const LETTER_COLORS = ["#72a7ff", "#9d8cff", "#63e6be", "#ffd38a", "#ff8fb3", "#89ddff"];
 
@@ -99,9 +100,12 @@ export default function Home() {
                             <div className="mt-1 text-[11px] tracking-[.26em] text-slate-500">AI CREATIVE CANVAS</div>
                         </div>
                     </div>
-                    <button type="button" onClick={newCanvas} className="group flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.07] px-4 py-2.5 text-sm font-medium text-white/90 transition duration-300 hover:-translate-y-0.5 hover:border-blue-300/30 hover:bg-white/[.12]">
-                        <Plus className="h-4 w-4 transition-transform duration-300 group-hover:rotate-90" /> 新建画布
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <UpdateButton className="h-10 w-10 rounded-xl border border-white/10 bg-white/[.07] text-slate-200 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-blue-300/30 hover:bg-white/[.12] hover:text-white" />
+                        <button type="button" onClick={newCanvas} className="group flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.07] px-4 py-2.5 text-sm font-medium text-white/90 transition duration-300 hover:-translate-y-0.5 hover:border-blue-300/30 hover:bg-white/[.12]">
+                            <Plus className="h-4 w-4 transition-transform duration-300 group-hover:rotate-90" /> 新建画布
+                        </button>
+                    </div>
                 </header>
 
                 <section className="grid min-h-[520px] items-center gap-8 py-10 lg:grid-cols-[1.12fr_.72fr] lg:gap-14 lg:py-12">
