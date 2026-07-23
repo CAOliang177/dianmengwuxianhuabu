@@ -4,6 +4,7 @@ import {
 	Download,
 	Image as ImageIcon,
 	Maximize2,
+	Ungroup,
 	X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -16,6 +17,7 @@ import {
 	useFileAsyncLoader,
 	useFileAsyncLoaderBatch,
 } from "@/hooks/use-file-async-loader";
+import useFlow from "@/hooks/use-flow";
 import { logger } from "@/lib/logger";
 import type { RfDataNodeProps } from "@/types/nodes";
 import { BaseNodeShell } from "../base/base-node-shell";
@@ -260,7 +262,7 @@ const ImageGridThumb = ({
 	);
 };
 
-const ImageNode = ({ selected, data }: ImageNodeRfProps) => {
+const ImageNode = ({ id, selected, data }: ImageNodeRfProps) => {
 	const t = useTranslations("Workspace.nodes.modal");
 	const keys: string[] = data.fileKeys ?? EMPTY_IMAGE_KEYS;
 	const isSingle = keys.length === 1;
@@ -384,6 +386,21 @@ const ImageNode = ({ selected, data }: ImageNodeRfProps) => {
 								: t("images", { count })}
 					</NodeHeaderTitle>
 					<NodeHeaderActions>
+						{isUploadGroup && (
+							<Button
+								size="sm"
+								variant="ghost"
+								onClick={(event) => {
+									event.stopPropagation();
+									useFlow.getState().ungroupImageNode(id);
+								}}
+								title="解组为独立图片"
+								aria-label="解组为独立图片"
+							>
+								<Ungroup className="h-4 w-4" />
+								<span className="ml-1 text-xs">解组</span>
+							</Button>
+						)}
 						{isSingle && singleImageUrl && (
 							<a
 								href={singleImageUrl}

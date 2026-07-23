@@ -144,10 +144,13 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 			)
 			.map((edge) => nodeLookup.get(edge.source))
 			.filter((node) => Boolean(node));
-		const previews = sources
-			.map((node) => coerceBaseNodeData(node?.data).fileKeys?.[0])
-			.filter((fileKey): fileKey is string => Boolean(fileKey));
-		return { referenceCount: sources.length, referenceImages: previews };
+		const previews = sources.flatMap(
+			(node) => coerceBaseNodeData(node?.data).fileKeys ?? [],
+		);
+		return {
+			referenceCount: previews.length,
+			referenceImages: previews,
+		};
 	}, [nodeId, edges, nodeLookup]);
 
 	const { url: firstReferenceUrl } = useFileAsyncLoader(referenceImages[0], {
@@ -478,7 +481,7 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 					>
 						<div className="nodrag nopan nowheel w-[min(800px,calc(100vw-32px))] select-text rounded-2xl border border-border/80 bg-background/95 p-3 text-foreground shadow-2xl backdrop-blur-xl [text-rendering:geometricPrecision]">
 							<div className="mb-2 flex min-h-16 flex-wrap items-start gap-2">
-								{referenceImages.length > 0 ? referenceImages.slice(0, 14).map((fileKey, index) => (
+								{referenceImages.length > 0 ? referenceImages.map((fileKey, index) => (
 									<button key={`${fileKey}:${index}`} type="button"
 										className={`nodrag relative rounded-xl border border-border/70 bg-muted/50 p-0.5 text-left transition hover:-translate-y-0.5 hover:ring-2 hover:ring-primary/60 ${activeReference === index ? "scale-105 ring-2 ring-primary" : ""}`}
 										title={`点击引用图片${index + 1}`} onClick={() => insertReferenceToken(index)}>

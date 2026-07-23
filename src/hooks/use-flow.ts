@@ -114,6 +114,8 @@ export interface FlowState {
         position?: { x: number; y: number },
     ) => string;
     removeNode: (nodeId: string) => void;
+    /** Dissolve a multi-image upload group into standalone image nodes. */
+    ungroupImageNode: (nodeId: string) => string[];
     // Node-created listeners
     nodeCreatedCallbacks: Set<(nodeIds: string[]) => void>;
     onNodeCreated: (callback: (nodeIds: string[]) => void) => () => void;
@@ -289,6 +291,64 @@ export const useFlow = create<FlowState>((set, get) => ({
         });
         saveCanvasNodes(newNodes);
         saveCanvasEdges(newEdges);
+    },
+    ungroupImageNode: (nodeId: string) => {
+        const { nodes, edges } = get();
+        const group = nodes.find((node) => node.id === nodeId);
+        const fileKeys = Array.isArray(group?.data?.fileKeys)
+            ? (group.data.fileKeys as string[]).filter(Boolean)
+            : [];
+        if (!group || group.type !== "imageNode" || fileKeys.length < 2) {
+            return [];
+        }
+
+        const columns = Math.min(3, Math.ceil(Math.sqrt(fileKeys.length)));
+        const rows = Math.ceil(fileKeys.length / columns);
+        const xGap = 340;
+        const yGap = 270;
+        const startX = group.position.x - ((columns - 1) * xGap) / 2;
+        const startY = group.position.y - ((rows - 1) * yGap) / 2;
+        const outgoing = edges.filter((edge) => edge.source === nodeId);
+
+        const standaloneNodes: Node[] = fileKeys.map((fileKey, index) => ({
+            id: v4(),
+            type: "imageNode",
+            position: {
+                x: startX + (index % columns) * xGap,
+                y: startY + Math.floor(index / columns) * yGap,
+            },
+            origin: [0.5, 0.5],
+            data: { fileKeys: [fileKey] },
+        }));
+
+        // Preserve every downstream reference. A former single group edge
+        // becomes one edge per image, so the target keeps the same references
+        // and visibly shows one thumbnail for each standalone image.
+        const replacementEdges: Edge[] = standaloneNodes.flatMap((node) =>
+            outgoing.map((edge) => ({
+                ...edge,
+                id: v4(),
+                source: node.id,
+                selected: false,
+            })),
+        );
+        const nextNodes = nodes
+            .filter((node) => node.id !== nodeId)
+            .concat(standaloneNodes);
+        const nextEdges = edges
+            .filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+            .concat(replacementEdges);
+
+        set({
+            nodes: nextNodes,
+            edges: nextEdges,
+            selectedNodes: [],
+        });
+        saveCanvasNodes(nextNodes);
+        saveCanvasEdges(nextEdges);
+        const ids = standaloneNodes.map((node) => node.id);
+        get().nodeCreatedCallbacks.forEach((callback) => callback(ids));
+        return ids;
     },
 
     expands: (nodeId, possibleNodes): string[] => {
