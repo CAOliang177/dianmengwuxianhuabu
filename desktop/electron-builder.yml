@@ -37,7 +37,7 @@ mac:
     # entitlements: build/entitlements.mac.plist  # add when notarizing
 
 win:
-    icon: build/icon.png
+    icon: build/icon.ico
     # Version-free name so /releases/latest/download/<name> stays a stable link.
     artifactName: dianmeng-infinite-canvas-setup.${ext}
     target:
@@ -47,6 +47,11 @@ nsis:
     oneClick: false
     perMachine: false
     allowToChangeInstallationDirectory: true
+    installerIcon: build/icon.ico
+    uninstallerIcon: build/icon.ico
+    installerHeaderIcon: build/icon.ico
+    createDesktopShortcut: always
+    shortcutName: dianmeng无限画布
 
 # Configure a real feed (e.g. GitHub Releases) to enable electron-updater.
 publish:
