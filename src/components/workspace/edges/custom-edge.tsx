@@ -7,7 +7,14 @@ import {
 } from "@xyflow/react";
 import { Scissors } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 
 import {
 	Select,
@@ -55,17 +62,28 @@ const CustomEdge = ({
 
 	const { getNodes } = useReactFlow();
 	const t = useTranslations("Workspace.handles");
+	const controlsVisible = hovered || Boolean(selected);
 
 	// Fields this edge could plug into. Node types are fixed after creation, so
 	// computing from a non-reactive snapshot is fine (the edge re-renders as its
 	// endpoints move anyway).
 	const options = useMemo(
-		() =>
-			getEdgeTargetOptions(
+		() => {
+			if (!controlsVisible) return [];
+			return getEdgeTargetOptions(
 				{ id, source, target, sourceHandle, targetHandle },
 				getNodes(),
-			),
-		[id, source, target, sourceHandle, targetHandle, getNodes],
+			);
+		},
+		[
+			controlsVisible,
+			id,
+			source,
+			target,
+			sourceHandle,
+			targetHandle,
+			getNodes,
+		],
 	);
 
 	const onSelect = useCallback(
@@ -155,7 +173,7 @@ const CustomEdge = ({
 					}
 				}}
 			/>
-			{(hovered || selected) && (
+			{controlsVisible && (
 				<EdgeLabelRenderer>
 					<button
 						type="button"
@@ -183,7 +201,7 @@ const CustomEdge = ({
 					</button>
 				</EdgeLabelRenderer>
 			)}
-			{options.length >= 2 && (
+			{controlsVisible && options.length >= 2 && (
 				<EdgeLabelRenderer>
 					<div
 						className="nodrag nopan absolute"
@@ -232,4 +250,4 @@ const CustomEdge = ({
 
 CustomEdge.displayName = "CustomEdge";
 
-export default CustomEdge;
+export default memo(CustomEdge);

@@ -176,15 +176,28 @@ export const useFlow = create<FlowState>((set, get) => ({
             nodes,
             edges,
         });
-        debouncedSaveNodes(nodes);
-        debouncedSaveEdges(edges);
+        // Do not serialize the entire canvas on every pointer-move or
+        // selection frame. Persist structural changes and the final drag
+        // position; edges only change here when a node was removed.
+        const shouldPersistNodes = changes.some(
+            (change) =>
+                change.type === "add" ||
+                change.type === "remove" ||
+                change.type === "replace" ||
+                (change.type === "position" && change.dragging !== true),
+        );
+        if (shouldPersistNodes) debouncedSaveNodes(nodes);
+        if (removedIds.length > 0) debouncedSaveEdges(edges);
     },
     onEdgesChange: (changes) => {
         const edges = applyEdgeChanges(changes, get().edges);
         set({
             edges: edges,
         });
-        debouncedSaveEdges(edges);
+        // Selection is presentation-only and does not belong in persistence.
+        if (changes.some((change) => change.type !== "select")) {
+            debouncedSaveEdges(edges);
+        }
     },
     onConnect: (connection) => {
         const edges = addEdge(

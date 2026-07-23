@@ -510,30 +510,35 @@ function WorkspaceInner({
 				const uploads = await Promise.allSettled(
 					images.map((file) => getPresignedUploadUrl(file)),
 				);
-				let createdCount = 0;
 				let failedCount = rejectedCount;
-				for (const [index, upload] of uploads.entries()) {
+				const uploadedFileKeys: string[] = [];
+				for (const upload of uploads) {
 					if (upload.status === "rejected") {
 						failedCount += 1;
 						logger.error("Failed to upload dropped image:", upload.reason);
 						continue;
 					}
+					uploadedFileKeys.push(upload.value.fileKey);
+				}
+
+				if (uploadedFileKeys.length > 0) {
 					useFlow.getState().addNode(
 						{
 							type: "imageNode",
-							data: { fileKeys: [upload.value.fileKey] },
+							data: {
+								fileKeys: uploadedFileKeys,
+								isUploadGroup: uploadedFileKeys.length > 1,
+								groupLabel:
+									uploadedFileKeys.length > 1 ? "上传组" : undefined,
+							},
 						},
-						{
-							x: dropPosition.x + (index % 4) * 340,
-							y: dropPosition.y + Math.floor(index / 4) * 280,
-						},
+						dropPosition,
 					);
-					createdCount += 1;
 				}
 
 				if (failedCount > 0) {
 					showErrorToast({
-						message: `已导入 ${createdCount} 张图片，另有 ${failedCount} 个文件导入失败`,
+						message: `已导入 ${uploadedFileKeys.length} 张图片，另有 ${failedCount} 个文件导入失败`,
 					});
 				}
 			} finally {
@@ -754,10 +759,12 @@ function WorkspaceInner({
 				onPaneContextMenu={handlePaneContextMenu}
 				onEdgeContextMenu={handleEdgeContextMenu}
 				nodeOrigin={[0.5, 0.5]}
+				onlyRenderVisibleElements
+				elevateNodesOnSelect={false}
 				selectNodesOnDrag={false}
 				fitView
-				minZoom={0.001} // Minimum zoom limit
-				maxZoom={1000} // Maximum zoom limit
+				minZoom={0.02}
+				maxZoom={8}
 				connectionRadius={64}
 				reconnectRadius={40}
 				connectionDragThreshold={0}

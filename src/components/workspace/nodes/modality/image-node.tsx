@@ -7,7 +7,7 @@ import {
 	X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuLabel } from "@/components/ui/dropdown-menu";
@@ -35,6 +35,7 @@ import {
 import { ModalityPlaceholder } from "./modality-placeholder";
 
 type ImageNodeRfProps = RfDataNodeProps<"imageNode">;
+const EMPTY_IMAGE_KEYS: string[] = [];
 
 // Single-image lightbox modal
 const FullScreenImageModal = ({
@@ -261,7 +262,19 @@ const ImageGridThumb = ({
 
 const ImageNode = ({ selected, data }: ImageNodeRfProps) => {
 	const t = useTranslations("Workspace.nodes.modal");
-	const keys: string[] = data.fileKeys ?? [];
+	const keys: string[] = data.fileKeys ?? EMPTY_IMAGE_KEYS;
+	const isSingle = keys.length === 1;
+	const count = keys.length;
+	const isUploadGroup = Boolean(
+		(data as Record<string, unknown>).isUploadGroup && count > 1,
+	);
+	const groupLabel = String(
+		(data as Record<string, unknown>).groupLabel ?? "上传组",
+	);
+	const batchPreviewKeys = useMemo(
+		() => (isSingle ? EMPTY_IMAGE_KEYS : keys.slice(0, 6)),
+		[isSingle, keys],
+	);
 	const [isFullScreen, setIsFullScreen] = useState(false);
 	const [isWaterfallFullScreen, setIsWaterfallFullScreen] = useState(false);
 	const [imageDimensions, setImageDimensions] = useState<{
@@ -271,12 +284,13 @@ const ImageNode = ({ selected, data }: ImageNodeRfProps) => {
 	const [imageError, setImageError] = useState(false);
 
 	// Lazy-load one asset via async hook
-	const { url: singleImageUrl } = useFileAsyncLoader(keys[0], {
-		priority: "high",
-	});
+	const { url: singleImageUrl } = useFileAsyncLoader(
+		isSingle ? keys[0] : null,
+		{ priority: "high" },
+	);
 
 	// Batch lazy-load multiple assets
-	const { urls: batchUrls } = useFileAsyncLoaderBatch(keys.slice(0, 6), {
+	const { urls: batchUrls } = useFileAsyncLoaderBatch(batchPreviewKeys, {
 		priority: "normal",
 	});
 
@@ -303,10 +317,6 @@ const ImageNode = ({ selected, data }: ImageNodeRfProps) => {
 		img.src = singleImageUrl;
 	}, [singleImageUrl]);
 
-	// Determine if single or multiple
-	const isSingle = keys.length === 1;
-	const count = keys.length;
-
 	const mediaNodeWidthPx =
 		isSingle && imageDimensions
 			? normalizedImageNodeWidthPx(
@@ -320,7 +330,13 @@ const ImageNode = ({ selected, data }: ImageNodeRfProps) => {
 			<BaseNodeShell
 				selected={selected}
 				count={count}
-				className={mediaNodeWidthPx != null ? "min-w-0 max-w-none" : undefined}
+				className={
+					mediaNodeWidthPx != null
+						? "min-w-0 max-w-none"
+						: isUploadGroup
+							? "min-w-[520px] max-w-[680px]"
+							: undefined
+				}
 				style={
 					mediaNodeWidthPx != null ? { width: mediaNodeWidthPx } : undefined
 				}
@@ -361,7 +377,11 @@ const ImageNode = ({ selected, data }: ImageNodeRfProps) => {
 						<ImageIcon />
 					</NodeHeaderIcon>
 					<NodeHeaderTitle>
-						{isSingle ? t("image") : t("images", { count })}
+						{isSingle
+							? t("image")
+							: isUploadGroup
+								? `${groupLabel} · ${count} 张`
+								: t("images", { count })}
 					</NodeHeaderTitle>
 					<NodeHeaderActions>
 						{isSingle && singleImageUrl && (
@@ -503,10 +523,17 @@ const ImageNode = ({ selected, data }: ImageNodeRfProps) => {
 const areEqual = (prevProps: ImageNodeRfProps, nextProps: ImageNodeRfProps) => {
 	const prevFileKeys = prevProps.data.fileKeys || [];
 	const nextFileKeys = nextProps.data.fileKeys || [];
+	const sameFileKeys =
+		prevFileKeys.length === nextFileKeys.length &&
+		prevFileKeys.every((key, index) => key === nextFileKeys[index]);
 
 	return (
 		prevProps.selected === nextProps.selected &&
-		JSON.stringify(prevFileKeys) === JSON.stringify(nextFileKeys)
+		sameFileKeys &&
+		(prevProps.data as Record<string, unknown>).isUploadGroup ===
+			(nextProps.data as Record<string, unknown>).isUploadGroup &&
+		(prevProps.data as Record<string, unknown>).groupLabel ===
+			(nextProps.data as Record<string, unknown>).groupLabel
 	);
 };
 
