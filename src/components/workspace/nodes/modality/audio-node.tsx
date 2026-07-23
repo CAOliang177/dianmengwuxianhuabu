@@ -235,7 +235,8 @@ const AudioNode = ({ selected, data }: AudioNodeRfProps) => {
                     type="source"
                     position={Position.Right}
                     id="out:audioNode"
-                    isConnectableStart={false}
+                    isConnectableStart={true}
+                    isConnectableEnd={false}
                 />
                 <NodeHeader>
                     <NodeHeaderIcon>

@@ -48,7 +48,7 @@ const ImageGenVideoNode = ({
             if (parseTargetHandleId(edge.targetHandle) !== "image")
                 return false;
             const source = nodeLookup.get(edge.source);
-            if (source?.type !== "imageNode") return false;
+            if (!source) return false;
             const keys = coerceBaseNodeData(source.data).fileKeys;
             return (keys?.length ?? 0) > 0;
         });

@@ -7,6 +7,11 @@ out/
 
 # production
 build/
+/desktop/resources/
+/desktop/release/
+/desktop/bundled-plugins/tongflow-api-gada-*/
+/desktop/bundled-plugins/tongflow-api-openai/
+*.bak-*
 
 # env files
 .env
@@ -30,6 +35,7 @@ legal/
 
 # misc
 .DS_Store
+connection-dev*.log
 *.tsbuildinfo
 next-env.d.ts
 

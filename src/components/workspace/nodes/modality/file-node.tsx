@@ -178,7 +178,8 @@ const FileNode = ({ selected, data }: FileNodeRfProps) => {
                 type="source"
                 position={Position.Right}
                 id="out:fileNode"
-                isConnectableStart={false}
+                isConnectableStart={true}
+                isConnectableEnd={false}
             />
             <NodeHeader>
                 <NodeHeaderIcon>

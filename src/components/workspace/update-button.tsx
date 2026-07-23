@@ -119,7 +119,7 @@ export function UpdateButton({ className }: { className?: string }) {
             </Tooltip>
             <DropdownMenuContent align="end" className="w-64 p-3">
                 <div className="mb-2 flex items-baseline justify-between">
-                    <span className="text-sm font-medium">TongFlow</span>
+                    <span className="text-sm font-medium">dianmeng无限画布</span>
                     <span className="text-xs text-muted-foreground">
                         {t("currentVersion")} v{state.currentVersion}
                     </span>

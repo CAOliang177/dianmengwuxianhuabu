@@ -57,19 +57,22 @@ export function NodeLoadingOverlay({
                     </div>
                 )}
                 {onCancel ? (
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onCancel();
-                        }}
-                        title={t("cancelExecution")}
-                        aria-label={t("cancelExecution")}
-                        className="nodrag group/cancel relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-red-500/10 dark:hover:bg-red-500/15"
-                    >
-                        <Loader2 className="h-8 w-8 animate-spin text-blue-500 transition-opacity duration-150 group-hover/cancel:opacity-0" />
-                        <Square className="absolute h-4 w-4 fill-red-500 text-red-500 opacity-0 transition-opacity duration-150 group-hover/cancel:opacity-100" />
-                    </button>
+                    <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onCancel();
+                            }}
+                            title={t("cancelExecution")}
+                            aria-label={t("cancelExecution")}
+                            className="nodrag flex cursor-pointer items-center gap-2 rounded-full border border-red-400/40 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-600 shadow-sm transition hover:border-red-500 hover:bg-red-500 hover:text-white dark:text-red-300"
+                        >
+                            <Square className="h-3.5 w-3.5 fill-current" />
+                            取消生成
+                        </button>
+                    </div>
                 ) : (
                     <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                 )}

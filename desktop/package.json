@@ -1,14 +1,14 @@
 {
-    "name": "tongflow-desktop",
-    "version": "0.1.13",
-    "description": "TongFlow desktop app (Electron shell around the Next.js standalone server + portable Python).",
+    "name": "dianmeng-infinite-canvas-desktop",
+    "version": "0.1.14",
+    "description": "dianmeng无限画布 desktop app",
     "author": "tong-io",
     "license": "AGPL-3.0-only",
     "private": true,
     "main": "dist/main.js",
     "scripts": {
         "build:main": "tsc -p tsconfig.json",
-        "assemble": "node scripts/assemble-app.mjs",
+        "assemble": "node scripts/assemble-app.mjs && node scripts/filter-bundled-plugins.mjs",
         "fetch-runtimes": "node scripts/fetch-runtimes.mjs",
         "smoke": "node scripts/smoke-test-app.mjs",
         "start": "pnpm build:main && electron .",

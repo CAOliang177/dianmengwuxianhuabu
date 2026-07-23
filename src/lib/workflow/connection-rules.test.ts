@@ -103,11 +103,11 @@ describe("isValidFlowConnection — add node out handle is single-edge", () => {
         data: {},
     });
 
-    it("rejects a second outgoing edge from an add node", () => {
+    it("allows a second outgoing edge from an add node", () => {
         const existing = edge("e1", "a", "out:textNode", "t1", "in:textNode");
         const c = conn("a", "out:textNode", "t2", "in:textNode");
         const nodes = [addNode("a"), textNode("t1"), textNode("t2")];
-        expect(isValidFlowConnection(c, nodes, [existing])).toBe(false);
+        expect(isValidFlowConnection(c, nodes, [existing])).toBe(true);
     });
 
     it("allows reconnecting the add node's own existing edge", () => {
@@ -115,7 +115,7 @@ describe("isValidFlowConnection — add node out handle is single-edge", () => {
         // Drag e1's target endpoint from t1 to t2; source (add node) unchanged.
         const c = conn("a", "out:textNode", "t2", "in:textNode");
         const nodes = [addNode("a"), textNode("t1"), textNode("t2")];
-        expect(isValidFlowConnection(c, nodes, [e1])).toBe(false);
+        expect(isValidFlowConnection(c, nodes, [e1])).toBe(true);
         expect(isValidFlowConnection(c, nodes, [e1], "e1")).toBe(true);
     });
 });

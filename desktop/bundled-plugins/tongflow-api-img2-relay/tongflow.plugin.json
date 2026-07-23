@@ -1,0 +1,43 @@
+{
+	"plugin": {
+		"name": "IMG2 图像 API",
+		"description": "独立的 GPT Image 2 文生图、图生图和多图参考接口。",
+		"icon": "/dianmeng-brand.png"
+	},
+	"env": [
+		{
+			"key": "IMG2_API_KEY",
+			"required": true,
+			"description": "IMG2 接口令牌；留空时兼容读取 OPENAI_API_KEY"
+		},
+		{
+			"key": "IMG2_BASE_URL",
+			"default": "http://ai.maxagent.top/v1",
+			"description": "专属 IMG2 分类接口地址，已预设中转站；仍可在设置中修改"
+		},
+		{
+			"key": "IMG2_IMAGE_MODEL",
+			"default": "gpt-image-2",
+			"description": "默认 IMG2 模型；每个节点也可以单独选择"
+		},
+		{
+			"key": "IMG2_ASYNC",
+			"default": "true",
+			"description": "文生图使用异步任务并自动轮询结果"
+		},
+		{
+			"key": "IMG2_EDIT_ASYNC",
+			"default": "false",
+			"description": "图生图异步开关；中转站不支持 edits 任务查询时请保持 false"
+		},
+		{
+			"key": "IMG2_IMAGE_SIZE",
+			"description": "可选固定尺寸；留空时按节点比例与模型 1K/2K/4K 档位计算"
+		},
+		{
+			"key": "IMG2_TIMEOUT",
+			"default": "600",
+			"description": "生成和轮询超时秒数"
+		}
+	]
+}

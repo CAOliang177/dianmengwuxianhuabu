@@ -1,6 +1,6 @@
 {
     "name": "tongflow",
-    "version": "0.1.13",
+    "version": "0.1.14",
     "description": "A multi-modal AIGC studio for building generative AI workflows",
     "author": "tong-io",
     "keywords": [
@@ -12,9 +12,9 @@
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/tong-io/tongflow"
+        "url": "https://github.com/CAOliang177/dianmengwuxianhuabu"
     },
-    "homepage": "https://github.com/tong-io/tongflow#readme",
+    "homepage": "https://github.com/CAOliang177/dianmengwuxianhuabu#readme",
     "license": "AGPL-3.0-only",
     "private": true,
     "pnpm": {
@@ -30,7 +30,7 @@
     "scripts": {
         "predev": "pnpm gen:abi",
         "dev": "next dev",
-        "prebuild": "pnpm gen:abi",
+        "prebuild": "tsx scripts/gen-abi-types.ts",
         "build": "next build",
         "start": "next start",
         "start:prod": "pnpm build && pnpm start",

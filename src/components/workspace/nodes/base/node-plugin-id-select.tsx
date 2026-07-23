@@ -15,9 +15,11 @@ import type { BaseNodeData } from "@/types/nodes";
 import { NodePluginSelect } from "./node-plugin-select";
 
 export function pluginDisplayName(pluginId: string): string {
+    if (pluginId === "tongflow-api-img2-relay") return "img-relay";
+    if (pluginId === "tongflow-api-banana-relay") return "banana-relay";
+    if (pluginId === "tongflow-api-new-channel") return "\u65b0\u6e20\u9053";
     const parts = pluginId.split("-").filter(Boolean);
-    // Strip only the leading vendor prefix, keep the type segment
-    // (e.g. "tongflow-api-openai" -> "api-openai").
+    // Strip only the leading vendor prefix and keep the semantic remainder.
     const semantic = parts[0] === "tongflow" ? parts.slice(1) : parts;
     return semantic.join("-");
 }
@@ -30,6 +32,7 @@ type NodePluginIdSelectProps = {
      * Use this when a node stores plugin id under a different key.
      */
     dataKey?: string;
+    compact?: boolean;
 };
 
 export function useResolvedPluginId(
@@ -52,6 +55,7 @@ export function NodePluginIdSelect({
     nodeSlot,
     data,
     dataKey = "pluginId",
+    compact = false,
 }: NodePluginIdSelectProps) {
     const id = useNodeId()!;
     const updates = useFlow((s) => s.updates);
@@ -129,6 +133,7 @@ export function NodePluginIdSelect({
                 updates(id, { ...data, [dataKey]: value })
             }
             options={options}
+            compact={compact}
         />
     );
 }

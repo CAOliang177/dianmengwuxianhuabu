@@ -656,6 +656,22 @@ export function useNodeActions(args: UseNodeActionsArgs): UseNodeActionsResult {
                     <ActionItem
                         buttons={[
                             {
+                                text: "图生图",
+                                id: "image-to-image",
+                                nodeType: "textGenImageNode",
+                                onClick: () =>
+                                    expands(id, [
+                                        {
+                                            type: "textGenImageNode",
+                                            data: {
+                                                ...data,
+                                                pluginId:
+                                                    "tongflow-api-banana-relay",
+                                            },
+                                        },
+                                    ]),
+                            },
+                            {
                                 text: t("describeReverse"),
                                 id: "desc-audio",
                                 nodeType: "audioDescribeNode",
@@ -920,7 +936,14 @@ export function useNodeActions(args: UseNodeActionsArgs): UseNodeActionsResult {
                                 nodeType: "imageGenImageNode",
                                 onClick: () =>
                                     expands(id, [
-                                        { type: "imageGenImageNode", data },
+                                        {
+                                            type: "imageGenImageNode",
+                                            data: {
+                                                ...data,
+                                                pluginId:
+                                                    "tongflow-api-banana-relay",
+                                            },
+                                        },
                                     ]),
                             },
                             {

@@ -1,6 +1,6 @@
-appId: io.tongflow.desktop
-productName: TongFlow
-copyright: Copyright © TongFlow
+appId: ai.dianmeng.infinite-canvas
+productName: dianmeng无限画布
+copyright: Copyright © dianmeng无限画布
 
 directories:
     output: release
@@ -37,8 +37,9 @@ mac:
     # entitlements: build/entitlements.mac.plist  # add when notarizing
 
 win:
+    icon: build/icon.png
     # Version-free name so /releases/latest/download/<name> stays a stable link.
-    artifactName: TongFlow-win-setup.${ext}
+    artifactName: dianmeng-infinite-canvas-setup.${ext}
     target:
         - nsis
 
@@ -50,8 +51,8 @@ nsis:
 # Configure a real feed (e.g. GitHub Releases) to enable electron-updater.
 publish:
     provider: github
-    owner: tong-io
-    repo: tongflow
+    owner: CAOliang177
+    repo: dianmengwuxianhuabu
     # Upload assets to a DRAFT release first. A published GitHub Release is
     # immutable the moment it goes public (repo "Immutable releases"), so
     # electron-builder's per-arch asset uploads 422 with "Cannot upload assets

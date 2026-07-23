@@ -42,10 +42,22 @@ interface HandleSpec {
 
 function distributeHandles(targets: string[], sources: string[]): HandleSpec[] {
     const out: HandleSpec[] = [];
-    // All handles emit from the vertical center of their side, regardless of
-    // count. Note: multiple handles on the same side overlap at 50%.
-    targets.forEach((id) => out.push({ id, role: "target", offset: 0.5 }));
-    sources.forEach((id) => out.push({ id, role: "source", offset: 0.5 }));
+    // Give every input/output its own hit target. Overlapping handles made it
+    // impossible to reliably choose the intended input on multi-input nodes.
+    targets.forEach((id, index) =>
+        out.push({
+            id,
+            role: "target",
+            offset: (index + 1) / (targets.length + 1),
+        }),
+    );
+    sources.forEach((id, index) =>
+        out.push({
+            id,
+            role: "source",
+            offset: (index + 1) / (sources.length + 1),
+        }),
+    );
     return out;
 }
 
@@ -97,10 +109,23 @@ export function AbiHandles<F extends NodeSlot>({
                     }
                     id={h.id}
                     isConnectable={true}
-                    // Disallow starting a new connection by hand; reconnect only.
-                    isConnectableStart={false}
+                    isConnectableStart={h.role === "source"}
+                    isConnectableEnd={h.role === "target"}
                     className={handleClassName}
-                    style={{ top: `${(h.offset * 100).toFixed(2)}%` }}
+                    style={{
+                        top: `${(h.offset * 100).toFixed(2)}%`,
+                        width: h.role === "target" ? 24 : 28,
+                        height: h.role === "target" ? 24 : 28,
+                        zIndex: 50,
+                        pointerEvents: "all",
+                        cursor: "crosshair",
+                        background: h.role === "target" ? "#3b82f6" : "#f59e0b",
+                        border: "3px solid white",
+                        boxShadow:
+                            h.role === "target"
+                                ? "0 0 0 4px rgba(59,130,246,.2)"
+                                : "0 0 0 4px rgba(245,158,11,.25)",
+                    }}
                 />
             ))}
         </>

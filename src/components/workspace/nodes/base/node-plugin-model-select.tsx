@@ -12,7 +12,20 @@ import { NodePluginSelect } from "./node-plugin-select";
 type NodePluginModelSelectProps = {
     nodeSlot: string;
     data: BaseNodeData;
+    compact?: boolean;
 };
+
+const NEW_CHANNEL_MODEL_LABELS: Record<string, string> = {
+	"gemini-3-pro-image-preview": "Nano Banana Pro（Gemini 3 Pro）",
+	"gemini-3.1-flash-image-preview": "Nano Banana 2 预览版",
+	"gpt-image-2-pro": "GPT Image 2 Pro",
+};
+
+function modelDisplayName(pluginId: string, model: string): string {
+    if (pluginId === "tongflow-api-new-channel")
+        return NEW_CHANNEL_MODEL_LABELS[model] ?? model;
+    return model;
+}
 
 /**
  * Model selector for router-style plugins that declare per-slot model lists
@@ -24,6 +37,7 @@ type NodePluginModelSelectProps = {
 export function NodePluginModelSelect({
     nodeSlot,
     data,
+    compact = false,
 }: NodePluginModelSelectProps) {
     const id = useNodeId()!;
     const updates = useFlow((s) => s.updates);
@@ -44,8 +58,12 @@ export function NodePluginModelSelect({
     }, [id, data, current, resolved, updates]);
 
     const options = useMemo(
-        () => models.map((m) => ({ value: m, label: m })),
-        [models],
+        () =>
+            models.map((model) => ({
+                value: model,
+                label: modelDisplayName(pluginId, model),
+            })),
+        [models, pluginId],
     );
 
     if (options.length === 0) return null;
@@ -58,6 +76,7 @@ export function NodePluginModelSelect({
             }
             options={options}
             title={t("pluginModelTitle")}
+            compact={compact}
         />
     );
 }

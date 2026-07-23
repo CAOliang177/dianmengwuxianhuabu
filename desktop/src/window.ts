@@ -17,8 +17,8 @@ const SPLASH_HTML = `<!doctype html>
   @keyframes slide{0%{margin-left:-40%}100%{margin-left:100%}}
 </style></head><body>
   <div class="box">
-    <div class="title">TongFlow</div>
-    <div class="sub">multi-modal AIGC studio</div>
+    <div class="title">dianmeng无限画布</div>
+    <div class="sub">AI infinite canvas</div>
     <div class="status" id="status">Starting…</div>
     <div class="bar"><i></i></div>
   </div>
@@ -74,7 +74,7 @@ export function createMainWindow(url: string): BrowserWindow {
             if (errorCode === -3) return;
             showErrorPage(
                 win,
-                "Failed to load TongFlow",
+                "Failed to load dianmeng无限画布",
                 `${validatedURL || url} — ${errorDescription} (${errorCode})`,
             );
         },
@@ -82,7 +82,7 @@ export function createMainWindow(url: string): BrowserWindow {
     win.webContents.on("render-process-gone", (_event, details) => {
         showErrorPage(
             win,
-            "TongFlow page crashed",
+            "dianmeng无限画布 page crashed",
             `Renderer process gone: ${details.reason} (exit code ${details.exitCode})`,
         );
     });

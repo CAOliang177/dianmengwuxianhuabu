@@ -1243,7 +1243,8 @@ const ModelNode = ({ selected, data }: ModelNodeRfProps) => {
                     type="source"
                     position={Position.Right}
                     id="out:modelNode"
-                    isConnectableStart={false}
+                    isConnectableStart={true}
+                    isConnectableEnd={false}
                 />
                 <NodeHeader>
                     <NodeHeaderIcon>
@@ -1269,7 +1270,8 @@ const ModelNode = ({ selected, data }: ModelNodeRfProps) => {
                     type="source"
                     position={Position.Right}
                     id="out:modelNode"
-                    isConnectableStart={false}
+                    isConnectableStart={true}
+                    isConnectableEnd={false}
                 />
                 <NodeHeader>
                     <NodeHeaderIcon>

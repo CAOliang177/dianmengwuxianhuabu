@@ -37,7 +37,7 @@ export const NODE_TYPE_TO_ABI_FEATURE: Readonly<Record<string, NodeSlot>> = {
     speechGenVideoNode: "speech-text-gen-video",
     imageGenImageNode: "image-edit",
     imageGenImageUpscaleNode: "image-upscale",
-    textGenImageNode: "image-gen",
+    textGenImageNode: "image-fusion",
     textGenMusicNode: "gen-music",
     textGenSpeechCloneNode: "text-gen-speech-clone",
     textGenSpeechCloneComposeNode: "text-gen-speech-clone",
@@ -106,6 +106,10 @@ export const NODE_TYPE_SOURCE_SPEC: Partial<
 > = {
     textGenVideoNode: {
         text: batchOn({ nodeType: "textNode", path: "texts" }),
+    },
+    textGenImageNode: {
+        images: collectAll({ nodeType: "imageNode" }),
+        text: configField(),
     },
     imageGenVideoNode: {
         image: batchOn(),

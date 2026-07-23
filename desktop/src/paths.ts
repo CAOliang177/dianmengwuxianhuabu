@@ -56,6 +56,10 @@ export function wheelsDir(): string {
     return path.join(resourcesRoot(), "wheels");
 }
 
+export function bundledPluginsDir(): string {
+    return path.join(resourcesRoot(), "bundled-plugins");
+}
+
 export function userDataDir(): string {
     return app.getPath("userData");
 }

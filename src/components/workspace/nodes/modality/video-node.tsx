@@ -373,7 +373,8 @@ const VideoNode = ({ selected, data }: VideoNodeRfProps) => {
                     type="source"
                     position={Position.Right}
                     id="out:videoNode"
-                    isConnectableStart={false}
+                    isConnectableStart={true}
+                    isConnectableEnd={false}
                 />
                 <NodeHeader>
                     <NodeHeaderIcon>

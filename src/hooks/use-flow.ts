@@ -21,6 +21,11 @@ import {
     resolveEdgeHandles,
 } from "@/lib/abi/node-feature-registry";
 import { DATA_NODE_TYPES } from "@/lib/workflow/executable-workflow";
+import {
+    saveCanvasEdges,
+    saveCanvasMeta,
+    saveCanvasNodes,
+} from "@/lib/canvas-history";
 
 // True when React Flow reports a persisted data/input node type
 function isDataNode(nodeType: string): boolean {
@@ -47,18 +52,18 @@ function createDebounce<T extends unknown[]>(
 
 // Persist React Flow nodes to localStorage with debouncing
 const debouncedSaveNodes = createDebounce((nodes: Node[]) => {
-    localStorage.setItem("nodes", JSON.stringify(nodes));
+    saveCanvasNodes(nodes);
 }, 500);
 
 // Persist edges similarly
 const debouncedSaveEdges = createDebounce((edges: Edge[]) => {
-    localStorage.setItem("edges", JSON.stringify(edges));
+    saveCanvasEdges(edges);
 }, 500);
 
 // Persist workflow meta (title, ids, notes)
 const debouncedSaveWorkflowMeta = createDebounce(
     (meta: { id: number | null; name: string; description: string }) => {
-        localStorage.setItem("workflowMeta", JSON.stringify(meta));
+        saveCanvasMeta(meta);
     },
     500,
 );
@@ -269,8 +274,8 @@ export const useFlow = create<FlowState>((set, get) => ({
             nodes: newNodes,
             edges: newEdges,
         });
-        localStorage.setItem("nodes", JSON.stringify(newNodes));
-        localStorage.setItem("edges", JSON.stringify(newEdges));
+        saveCanvasNodes(newNodes);
+        saveCanvasEdges(newEdges);
     },
 
     expands: (nodeId, possibleNodes): string[] => {

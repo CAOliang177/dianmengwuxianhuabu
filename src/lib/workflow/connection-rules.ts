@@ -2,9 +2,8 @@
  * React Flow connection validation: logical output types, ABI schema checks,
  * and duplicate-edge rules for single-value (non-array) target handles.
  *
- * Manual edge creation is disabled in the UI (handles set `isConnectableStart`
- * to false); this validator runs when users *reconnect* an existing edge's
- * endpoint, so it must enforce the full ABI contract on the new endpoint.
+ * Runs for both new manual connections and reconnecting an existing edge, so
+ * every path enforces the same ABI contract and duplicate-edge rules.
  */
 
 import type { Connection, Edge, Node } from "@xyflow/react";
@@ -103,23 +102,6 @@ export function hasDuplicateTargetHandle(
 }
 
 /**
- * Add nodes own a single out handle and represent one created asset, so their
- * output fans out to at most one downstream edge. `ignoreEdgeId` excludes the
- * edge being reconnected (so dragging its target endpoint isn't a self-collision).
- */
-export function hasDuplicateAddSourceEdge(
-    edges: Edge[],
-    connection: Connection,
-    sourceType: string | undefined,
-    ignoreEdgeId?: string,
-): boolean {
-    if (!sourceType || !(sourceType in ADD_NODE_OUTPUT_TYPE)) return false;
-    const sourceId = connection.source;
-    if (!sourceId) return false;
-    return edges.some((e) => e.id !== ignoreEdgeId && e.source === sourceId);
-}
-
-/**
  * Validate whether a connection is allowed. Unknown configurations are allowed
  * by default so unregistered or non-ABI nodes remain connectable.
  *
@@ -140,17 +122,6 @@ export function isValidFlowConnection(
     const sourceNode = nodes.find((n) => n.id === source);
     const targetNode = nodes.find((n) => n.id === target);
     if (!sourceNode || !targetNode) return false;
-
-    if (
-        hasDuplicateAddSourceEdge(
-            edges,
-            connection,
-            sourceNode.type,
-            ignoreEdgeId,
-        )
-    ) {
-        return false;
-    }
 
     const outType = getEffectiveOutputType(
         sourceNode.id,

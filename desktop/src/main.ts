@@ -4,7 +4,6 @@ import { ensureUserDirs } from "./fs-setup";
 import { initLogFile, logFilePath, logLine, recentLogs } from "./logging";
 import { ensurePythonEnv } from "./python-manager";
 import { startServer, stopServer } from "./server-manager";
-import { initUpdater } from "./updater";
 import {
     createMainWindow,
     createSplash,
@@ -46,7 +45,7 @@ async function boot(): Promise<void> {
         await ensurePythonEnv(log);
 
         const port = await findFreePort();
-        log("Starting TongFlow server…");
+        log("Starting dianmeng无限画布 server…");
         await startServer(port, logLine, onServerCrash);
 
         mainWindow = createMainWindow(`http://127.0.0.1:${port}`);
@@ -58,7 +57,6 @@ async function boot(): Promise<void> {
             splash = null;
         });
 
-        void maybeCheckForUpdates();
     } catch (err) {
         fatal(err);
     }
@@ -66,23 +64,12 @@ async function boot(): Promise<void> {
 
 /** Server died after a successful start: show the failure instead of a dead UI. */
 function onServerCrash(code: number | null): void {
-    const message = `TongFlow server exited unexpectedly (code ${code})`;
+    const message = `dianmeng无限画布 server exited unexpectedly (code ${code})`;
     logLine(`[tongflow] ${message}`);
     if (mainWindow && !mainWindow.isDestroyed()) {
-        showErrorPage(mainWindow, "TongFlow server stopped", message);
+        showErrorPage(mainWindow, "dianmeng无限画布 server stopped", message);
     } else {
         fatal(new Error(message));
-    }
-}
-
-/** Updater IPC bridge + background checks. Never blocks or crashes startup. */
-async function maybeCheckForUpdates(): Promise<void> {
-    try {
-        await initUpdater(() => mainWindow, logLine);
-    } catch (e) {
-        logLine(
-            `[updater] skipped: ${e instanceof Error ? e.message : String(e)}`,
-        );
     }
 }
 
@@ -93,7 +80,7 @@ function fatal(err: unknown): void {
     // Include the log tail + log path so a distributed build produces an
     // actionable report, not just a one-line message.
     dialog.showErrorBox(
-        "TongFlow failed to start",
+        "dianmeng无限画布 failed to start",
         `${message}\n\nFull log: ${logFilePath()}\n\nRecent log output:\n${
             recentLogs(30) || "(no log output captured)"
         }`,

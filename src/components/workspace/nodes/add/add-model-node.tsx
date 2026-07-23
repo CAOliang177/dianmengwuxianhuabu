@@ -176,7 +176,8 @@ export const AddModelNode: React.FC<NodeProps> = ({ selected, data }) => {
                 type="source"
                 position={Position.Right}
                 id="out:modelNode"
-                isConnectableStart={false}
+                isConnectableStart={true}
+                isConnectableEnd={false}
             />
             <div className="p-4 space-y-2">
                 <Tabs

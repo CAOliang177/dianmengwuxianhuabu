@@ -64,6 +64,14 @@ interface EnvCardGroup {
     vars: GroupVar[];
 }
 
+function isSecretEnvKey(key: string): boolean {
+    return /(?:KEY|TOKEN|SECRET|PASSWORD)/i.test(key);
+}
+
+function isConnectionEnvVar(v: PluginEnvVar): boolean {
+    return /(?:BASE_URL|ENDPOINT|MODEL)$/.test(v.key);
+}
+
 /**
  * Splits declarations into one "shared" group (keys declared by >=2 installed
  * plugins — e.g. MODAL_TOKEN_ID or HF_TOKEN) plus one group per plugin with
@@ -134,6 +142,7 @@ function DeclaredVarRow({
     onToggleReveal: () => void;
 }) {
     const t = useTranslations("Settings");
+    const secret = isSecretEnvKey(v.key);
     return (
         <div className="space-y-1">
             <div className="flex items-center gap-1.5">
@@ -164,26 +173,28 @@ function DeclaredVarRow({
                 <Input
                     value={value}
                     placeholder={v.default ?? t("valuePlaceholder")}
-                    type={revealed ? "text" : "password"}
+                    type={!secret || revealed ? "text" : "password"}
                     spellCheck={false}
                     autoComplete="off"
                     className="flex-1 font-mono text-xs"
                     onChange={(e) => onChange(e.target.value)}
                 />
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 shrink-0 text-muted-foreground"
-                    aria-label={t("toggleReveal")}
-                    onClick={onToggleReveal}
-                >
-                    {revealed ? (
-                        <EyeOff className="h-4 w-4" />
-                    ) : (
-                        <Eye className="h-4 w-4" />
-                    )}
-                </Button>
+                {secret ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 text-muted-foreground"
+                        aria-label={t("toggleReveal")}
+                        onClick={onToggleReveal}
+                    >
+                        {revealed ? (
+                            <EyeOff className="h-4 w-4" />
+                        ) : (
+                            <Eye className="h-4 w-4" />
+                        )}
+                    </Button>
+                ) : null}
             </div>
             {v.description ? (
                 <p className="text-xs text-muted-foreground">{v.description}</p>
@@ -215,6 +226,8 @@ function PluginEnvCard({
 
     const requiredVars = group.vars.filter((v) => v.required);
     const optionalVars = group.vars.filter((v) => !v.required);
+    const connectionVars = optionalVars.filter(isConnectionEnvVar);
+    const advancedVars = optionalVars.filter((v) => !isConnectionEnvVar(v));
     const setCount = requiredVars.filter((v) =>
         (values[v.key] ?? "").trim(),
     ).length;
@@ -245,7 +258,18 @@ function PluginEnvCard({
                 />
             ))}
 
-            {optionalVars.length > 0 ? (
+            {connectionVars.map((v) => (
+                <DeclaredVarRow
+                    key={v.key}
+                    v={v}
+                    value={values[v.key] ?? ""}
+                    revealed={Boolean(revealed[v.key])}
+                    onChange={(value) => onChangeValue(v.key, value)}
+                    onToggleReveal={() => onToggleReveal(v.key)}
+                />
+            ))}
+
+            {advancedVars.length > 0 ? (
                 <>
                     <button
                         type="button"
@@ -257,10 +281,10 @@ function PluginEnvCard({
                         ) : (
                             <ChevronRight className="h-3.5 w-3.5" />
                         )}
-                        {t("advanced", { count: optionalVars.length })}
+                        {t("advanced", { count: advancedVars.length })}
                     </button>
                     {advancedOpen
-                        ? optionalVars.map((v) => (
+                        ? advancedVars.map((v) => (
                               <DeclaredVarRow
                                   key={v.key}
                                   v={v}

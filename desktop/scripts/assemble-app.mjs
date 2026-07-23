@@ -17,6 +17,7 @@ const repoRoot = path.resolve(desktopDir, "..");
 
 const appOut = path.join(desktopDir, "resources", "app");
 const wheelsOut = path.join(desktopDir, "resources", "wheels");
+const bundledPluginsOut = path.join(desktopDir, "resources", "bundled-plugins");
 
 function rmrf(p) {
     fs.rmSync(p, { recursive: true, force: true });
@@ -167,6 +168,11 @@ function assembleApp() {
     copy(path.join(repoRoot, "drizzle"), path.join(appOut, "drizzle"));
     copy(path.join(repoRoot, "config"), path.join(appOut, "config"));
     copySdk(path.join(repoRoot, "sdk"), path.join(appOut, "sdk"));
+
+    console.log("[assemble] copying bundled desktop plugins");
+    rmrf(bundledPluginsOut);
+    const bundledPlugins = path.join(desktopDir, "bundled-plugins");
+    if (fs.existsSync(bundledPlugins)) copy(bundledPlugins, bundledPluginsOut);
 }
 
 // prebuild-install lives in the repo's node_modules; pnpm nests it in the

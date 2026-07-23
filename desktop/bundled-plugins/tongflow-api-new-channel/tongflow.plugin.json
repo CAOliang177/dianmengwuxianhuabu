@@ -1,0 +1,43 @@
+{
+  "plugin": {
+    "name": "新渠道",
+    "description": "新渠道 Gemini C 与 GPT Image 文生图、图生图、多图参考接口，自动兼容 Images API 和多模态协议。",
+    "icon": "/dianmeng-brand.png"
+  },
+  "env": [
+    {
+      "key": "NEW_CHANNEL_API_KEY",
+      "required": true,
+      "description": "新渠道 API Key；留空时兼容读取 OPENAI_API_KEY"
+    },
+    {
+      "key": "NEW_CHANNEL_BASE_URL",
+      "default": "http://ai.maxagent.top/v1",
+      "description": "新渠道 OpenAI 兼容接口地址，必须包含 /v1"
+    },
+    {
+      "key": "NEW_CHANNEL_IMAGE_MODEL",
+      "default": "gemini-3-pro-image-preview",
+      "description": "默认新渠道图像模型；每个节点也可以单独选择"
+    },
+    {
+      "key": "NEW_CHANNEL_ASYNC",
+      "default": "true",
+      "description": "文生图使用异步任务并自动轮询结果"
+    },
+    {
+      "key": "NEW_CHANNEL_EDIT_ASYNC",
+      "default": "false",
+      "description": "图生图异步开关；不支持 edits 任务查询时请保持关闭"
+    },
+    {
+      "key": "NEW_CHANNEL_IMAGE_SIZE",
+      "description": "可选固定尺寸；留空时按节点设置的比例与分辨率生成"
+    },
+    {
+      "key": "NEW_CHANNEL_TIMEOUT",
+      "default": "600",
+      "description": "生成和轮询超时秒数"
+    }
+  ]
+}

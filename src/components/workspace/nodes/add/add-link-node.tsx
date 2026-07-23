@@ -74,7 +74,8 @@ const AddLinkNode = ({ selected, data }: RfDataNodeProps<"addLinkNode">) => {
                 type="source"
                 position={Position.Right}
                 id="out:linkNode"
-                isConnectableStart={false}
+                isConnectableStart={true}
+                isConnectableEnd={false}
             />
             <div className="p-4 space-y-2">
                 {urls.length > 0 && (

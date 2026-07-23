@@ -427,7 +427,9 @@ export function useTaskSubscription(
                         // Toast on success; failures are surfaced globally by
                         // TaskFailureToaster (persistent error toast).
                         if (taskStatus === "COMPLETED") {
-                            toast.success(t("taskCompleted"));
+                            toast.success(t("taskCompleted"), {
+                                duration: 2000,
+                            });
                         }
 
                         // Frontend backup: persist terminal status without saving materials
@@ -735,7 +737,9 @@ export function useBatchTaskManager(
                                 routeTaskToNode(internalTask);
 
                                 if (taskStatus === "COMPLETED") {
-                                    toast.success(t("taskCompleted"));
+                                    toast.success(t("taskCompleted"), {
+                                        duration: 2000,
+                                    });
                                 } else if (taskStatus === "CANCELLED") {
                                     if (batchCancelTimeoutRef.current != null) {
                                         clearTimeout(

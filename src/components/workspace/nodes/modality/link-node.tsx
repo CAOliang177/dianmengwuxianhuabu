@@ -57,7 +57,8 @@ const LinkNode = ({ selected, data }: LinkNodeRfProps) => {
                 type="source"
                 position={Position.Right}
                 id="out:linkNode"
-                isConnectableStart={false}
+                isConnectableStart={true}
+                isConnectableEnd={false}
             />
             <NodeHeader>
                 <NodeHeaderIcon>

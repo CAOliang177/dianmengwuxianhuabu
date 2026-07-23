@@ -24,9 +24,9 @@ const execFileP = promisify(execFile);
 
 // Owner/repo must match the `publish` block in electron-builder.yml.
 const LATEST_RELEASE_API =
-    "https://api.github.com/repos/tong-io/tongflow/releases/latest";
+    "https://api.github.com/repos/CAOliang177/dianmengwuxianhuabu/releases/latest";
 const RELEASE_DOWNLOAD_BASE =
-    "https://github.com/tong-io/tongflow/releases/download";
+    "https://github.com/CAOliang177/dianmengwuxianhuabu/releases/download";
 
 const RECHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 

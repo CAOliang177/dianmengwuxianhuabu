@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: "TongFlow",
+    title: "dianmeng无限画布",
     description:
         "Open-source AI workflow editor — drag and drop to create AI workflows with an infinite canvas.",
     icons: {
@@ -34,8 +34,14 @@ const themeScript = `
   (function() {
     try {
       var theme = localStorage.getItem('theme');
-      if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      if (theme === 'deep-gray') {
+        document.documentElement.classList.add('dark', 'deep-gray');
+        document.documentElement.dataset.theme = 'deep-gray';
+      } else if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
+        document.documentElement.dataset.theme = 'dark';
+      } else {
+        document.documentElement.dataset.theme = 'light';
       }
     } catch (e) {}
   })();

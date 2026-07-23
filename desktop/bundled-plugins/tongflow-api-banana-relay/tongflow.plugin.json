@@ -1,0 +1,43 @@
+{
+	"plugin": {
+		"name": "Nano Banana 图像 API",
+		"description": "独立的 Nano Banana / Banana Pro 文生图、图生图和多图参考接口。",
+		"icon": "/plugins/tongflow-api-banana-relay.svg"
+	},
+	"env": [
+		{
+			"key": "BANANA_API_KEY",
+			"required": true,
+			"description": "Nano Banana 中转站 API Key；留空时兼容读取 OPENAI_API_KEY"
+		},
+		{
+			"key": "BANANA_BASE_URL",
+			"default": "http://ai.maxagent.top/v1",
+			"description": "Nano Banana 接口地址，必须包含 /v1"
+		},
+		{
+			"key": "BANANA_IMAGE_MODEL",
+			"default": "nano-banana2-1k",
+			"description": "默认 Banana 模型；每个节点也可以单独选择"
+		},
+		{
+			"key": "BANANA_ASYNC",
+			"default": "true",
+			"description": "文生图使用异步任务并自动轮询结果"
+		},
+		{
+			"key": "BANANA_EDIT_ASYNC",
+			"default": "false",
+			"description": "图生图异步模式；部分中转站建议保持 false"
+		},
+		{
+			"key": "BANANA_IMAGE_SIZE",
+			"description": "可选固定尺寸；留空时按节点比例与模型档位计算"
+		},
+		{
+			"key": "BANANA_TIMEOUT",
+			"default": "600",
+			"description": "生成和轮询超时秒数"
+		}
+	]
+}
