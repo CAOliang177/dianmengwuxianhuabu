@@ -5,24 +5,10 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useFileAsyncLoader } from "@/hooks/use-file-async-loader";
-import { ZoomableImageViewer } from "./zoomable-image-viewer";
-
-async function downloadImage(url: string) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("download failed");
-        const blobUrl = URL.createObjectURL(await response.blob());
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = `dianmeng-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(blobUrl);
-    } catch {
-        window.open(url, "_blank");
-    }
-}
+import {
+    downloadImageFile,
+    ZoomableImageViewer,
+} from "./zoomable-image-viewer";
 
 export function GeneratedImagePreview({ fileKey }: { fileKey: string }) {
     const { url } = useFileAsyncLoader(fileKey, { priority: "high" });
@@ -74,7 +60,7 @@ export function GeneratedImagePreview({ fileKey }: { fileKey: string }) {
                                 variant="secondary"
                                 className="h-9 w-9 bg-black/60 text-white hover:bg-black/75"
                                 title="下载图片"
-                                onClick={() => void downloadImage(url)}
+                                onClick={() => void downloadImageFile(url)}
                             >
                                 <Download className="h-4 w-4" />
                             </Button>
@@ -87,7 +73,7 @@ export function GeneratedImagePreview({ fileKey }: { fileKey: string }) {
                         <button
                             type="button"
                             className="flex items-center gap-1 hover:text-white"
-                            onClick={() => void downloadImage(url)}
+                            onClick={() => void downloadImageFile(url)}
                         >
                             <Download className="h-3.5 w-3.5" /> 下载
                         </button>
@@ -118,7 +104,7 @@ export function GeneratedImagePreview({ fileKey }: { fileKey: string }) {
                                 <Button
                                     type="button"
                                     variant="secondary"
-                                    onClick={() => void downloadImage(url)}
+                                    onClick={() => void downloadImageFile(url)}
                                 >
                                     <Download className="mr-2 h-4 w-4" />
                                     下载原图

@@ -10,6 +10,14 @@ contextBridge.exposeInMainWorld("tongflowDesktop", {
     getUpdateState: () => ipcRenderer.invoke("tongflow:update-get-state"),
     checkForUpdates: () => ipcRenderer.invoke("tongflow:update-check"),
     installUpdate: () => ipcRenderer.invoke("tongflow:update-install"),
+    getDownloadDirectory: () =>
+        ipcRenderer.invoke("tongflow:download-directory-get"),
+    chooseDownloadDirectory: () =>
+        ipcRenderer.invoke("tongflow:download-directory-choose"),
+    setDownloadDirectory: (directory: string | null) =>
+        ipcRenderer.invoke("tongflow:download-directory-set", directory),
+    saveImage: (request: { url: string; suggestedName?: string }) =>
+        ipcRenderer.invoke("tongflow:image-save", request),
     onUpdateState: (callback: (state: unknown) => void) => {
         const listener = (_event: unknown, state: unknown) => callback(state);
         ipcRenderer.on("tongflow:update-state", listener);

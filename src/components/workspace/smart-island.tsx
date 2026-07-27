@@ -12,6 +12,8 @@
 import { useReactFlow } from "@xyflow/react";
 import {
     Box,
+    Download,
+    Eye,
     FileText,
     Image,
     ImagePlus,
@@ -22,6 +24,7 @@ import {
     Trash2,
     Type,
     Video,
+    X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -39,12 +42,12 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { MediaThumbnail } from "@/components/workspace/nodes/base/media-thumbnail";
 import { ExecutionButton } from "@/components/workspace/execution-button";
 import { ExecutionStatusLine } from "@/components/workspace/execution-status-line";
 import { SaveExecuteDialog } from "@/components/workspace/save-execute-dialog";
 import type { FlowState, PossibleNode } from "@/hooks/use-flow";
 import { useFlow } from "@/hooks/use-flow";
+import { useFileAsyncLoader } from "@/hooks/use-file-async-loader";
 import { useNodeActions } from "@/hooks/use-node-actions";
 import { useTaskStore } from "@/hooks/use-task";
 import { useWorkflowExecution } from "@/hooks/use-workflow-execution";
@@ -55,6 +58,10 @@ import {
     withGenerationHistory,
 } from "@/lib/generation-history";
 import { cn } from "@/lib/utils";
+import {
+    downloadImageFile,
+    ZoomableImageViewer,
+} from "@/components/workspace/nodes/base/zoomable-image-viewer";
 
 interface IconButtonProps {
     icon: React.ComponentType<{ className?: string }>;
@@ -84,6 +91,94 @@ function IconButton({ icon: Icon, tooltip, onClick }: IconButtonProps) {
                 <p>{tooltip}</p>
             </TooltipContent>
         </Tooltip>
+    );
+}
+
+function HistoryImageCard({
+    fileKey,
+    label,
+    checked,
+    selectionMode,
+    onToggle,
+    onView,
+    onUse,
+}: {
+    fileKey: string;
+    label: string;
+    checked: boolean;
+    selectionMode: boolean;
+    onToggle: () => void;
+    onView: (url: string) => void;
+    onUse: () => void;
+}) {
+    const { url, isLoading } = useFileAsyncLoader(fileKey, {
+        priority: "high",
+    });
+
+    return (
+        <div
+            className={cn(
+                "group relative aspect-square overflow-hidden rounded-xl border bg-zinc-900/40",
+                "transition duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:shadow-xl",
+                checked && "border-blue-500 ring-2 ring-blue-500/40",
+            )}
+        >
+            {url ? (
+                <img
+                    src={url}
+                    alt={label}
+                    className="h-full w-full object-contain"
+                    loading="lazy"
+                />
+            ) : (
+                <div className="flex h-full items-center justify-center text-xs text-zinc-500">
+                    {isLoading ? "正在加载…" : "图片暂不可用"}
+                </div>
+            )}
+            {selectionMode ? (
+                <label className="absolute right-3 top-3 z-20 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/70 backdrop-blur">
+                    <input
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer accent-blue-500"
+                        checked={checked}
+                        aria-label={`选择${label}`}
+                        onChange={onToggle}
+                    />
+                </label>
+            ) : null}
+            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 opacity-0 transition duration-200 group-hover:bg-black/60 group-hover:opacity-100">
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={!url}
+                    className="h-8 rounded-full px-3 text-xs"
+                    onClick={() => url && onView(url)}
+                >
+                    <Eye className="mr-1 h-3.5 w-3.5" />
+                    查看
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 rounded-full bg-white px-3 text-xs text-black hover:bg-zinc-200"
+                    onClick={onUse}
+                >
+                    使用
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={!url}
+                    className="h-8 rounded-full px-3 text-xs"
+                    onClick={() => url && void downloadImageFile(url)}
+                >
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    下载
+                </Button>
+            </div>
+        </div>
     );
 }
 
@@ -127,6 +222,8 @@ export default function SmartIsland() {
     const reactFlow = useReactFlow();
     const { screenToFlowPosition } = reactFlow;
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [historySelectionMode, setHistorySelectionMode] = useState(false);
+    const [historyPreview, setHistoryPreview] = useState<string | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<Set<string>>(
         () => new Set(),
     );
@@ -235,24 +332,6 @@ export default function SmartIsland() {
         setSelectedHistory(new Set());
     }, [selectedHistory]);
 
-    const openHistoryImage = useCallback(
-        (nodeId: string, fileKey: string) => {
-            const state = useFlow.getState();
-            const node = state.nodes.find((item) => item.id === nodeId);
-            if (!node) return;
-            state.updates(nodeId, {
-                ...(node.data as Record<string, unknown>),
-                fileKeys: [fileKey],
-            });
-            reactFlow.setCenter(node.position.x, node.position.y, {
-                zoom: 0.8,
-                duration: 350,
-            });
-            setHistoryOpen(false);
-        },
-        [reactFlow],
-    );
-
     const workspaceMode = useTaskStore((state) => state.workspaceMode);
     const workflowExecutionStatus = useTaskStore(
         (state) => state.workflowExecutionStatus,
@@ -280,6 +359,17 @@ export default function SmartIsland() {
             );
         },
         [addNode, screenToFlowPosition],
+    );
+
+    const useHistoryImage = useCallback(
+        (fileKey: string) => {
+            addNodeAtViewportCenter({
+                type: "imageNode",
+                data: { fileKeys: [fileKey] },
+            });
+            setHistoryOpen(false);
+        },
+        [addNodeAtViewportCenter],
     );
 
     const {
@@ -333,126 +423,149 @@ export default function SmartIsland() {
     );
 
     const historyDialog = (
-        <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-            <DialogContent className="max-h-[82vh] max-w-4xl overflow-hidden p-0">
-                <DialogHeader className="border-b px-6 py-5">
-                    <DialogTitle className="flex items-center gap-2">
-                        <HistoryIcon className="h-5 w-5 text-blue-500" />
-                        生成历史
-                    </DialogTitle>
-                    <DialogDescription>
-                        自动保留当前画布近 7
-                        天生成的图片。点击图片可回到对应节点，也可以多选后批量删除历史记录。
-                    </DialogDescription>
-                </DialogHeader>
-                {generationHistory.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-6 py-3">
-                        <div className="text-sm text-muted-foreground">
-                            共 {generationHistory.length} 条 · 已选择{" "}
-                            {selectedHistory.size} 条
+        <>
+            <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+                <DialogContent className="max-h-[86vh] max-w-6xl overflow-hidden border-zinc-700 bg-zinc-950 p-0 text-zinc-100">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>图片历史</DialogTitle>
+                        <DialogDescription>
+                            查看、使用、下载或批量管理近 7 天生成的图片。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+                        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-zinc-900 p-1">
+                            <button
+                                type="button"
+                                className="rounded-md bg-zinc-700 px-3 py-1.5 text-sm font-medium"
+                            >
+                                图片历史
+                            </button>
+                            <span className="px-3 py-1.5 text-sm text-zinc-500">
+                                近 7 天
+                            </span>
                         </div>
                         <div className="flex items-center gap-2">
                             <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={selectAllHistory}
+                                className="border-zinc-700 bg-zinc-900 hover:bg-zinc-800"
+                                onClick={() => {
+                                    setHistorySelectionMode((value) => !value);
+                                    setSelectedHistory(new Set());
+                                }}
                             >
                                 <CheckSquare className="mr-1.5 h-4 w-4" />
-                                全选
+                                {historySelectionMode ? "完成" : "批量操作"}
                             </Button>
-                            {selectedHistory.size > 0 && (
+                            <button
+                                type="button"
+                                aria-label="关闭历史记录"
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-white"
+                                onClick={() => setHistoryOpen(false)}
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {historySelectionMode && generationHistory.length > 0 ? (
+                        <div className="flex items-center justify-between border-b border-white/10 bg-zinc-900/60 px-5 py-3">
+                            <span className="text-sm text-zinc-400">
+                                共 {generationHistory.length} 张，已选择{" "}
+                                {selectedHistory.size} 张
+                            </span>
+                            <div className="flex items-center gap-2">
                                 <Button
                                     type="button"
                                     size="sm"
                                     variant="outline"
-                                    onClick={() =>
-                                        setSelectedHistory(new Set())
-                                    }
+                                    className="border-zinc-700 bg-zinc-900"
+                                    onClick={selectAllHistory}
                                 >
-                                    取消选择
+                                    全选
                                 </Button>
-                            )}
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="destructive"
-                                disabled={selectedHistory.size === 0}
-                                onClick={deleteSelectedHistory}
-                            >
-                                <Trash2 className="mr-1.5 h-4 w-4" />
-                                批量删除
-                            </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="destructive"
+                                    disabled={selectedHistory.size === 0}
+                                    onClick={deleteSelectedHistory}
+                                >
+                                    <Trash2 className="mr-1.5 h-4 w-4" />
+                                    删除选中
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                )}
-                <div className="max-h-[62vh] overflow-y-auto p-6">
-                    {generationHistory.length === 0 ? (
-                        <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">
-                            当前画布还没有生成记录
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                            {generationHistory.map((item, index) => {
-                                const selectionKey = `${item.nodeId}:${item.fileKey}`;
-                                const checked =
-                                    selectedHistory.has(selectionKey);
-                                return (
-                                    <div
-                                        key={selectionKey}
-                                        className={`relative overflow-hidden rounded-xl border bg-muted/20 p-2 transition hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-md ${checked ? "border-blue-500 ring-2 ring-blue-500/30" : ""}`}
-                                    >
-                                        <label className="absolute right-3 top-3 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border bg-background/90 shadow backdrop-blur">
-                                            <input
-                                                type="checkbox"
-                                                className="h-4 w-4 cursor-pointer accent-blue-600"
-                                                checked={checked}
-                                                aria-label={`选择历史图片 ${index + 1}`}
-                                                onChange={() =>
+                    ) : null}
+
+                    <div className="max-h-[72vh] overflow-y-auto p-5">
+                        {generationHistory.length === 0 ? (
+                            <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-zinc-700 text-sm text-zinc-500">
+                                当前画布还没有生成记录
+                            </div>
+                        ) : (
+                            <>
+                                <div className="mb-3 text-sm text-zinc-400">
+                                    最近生成
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                                    {generationHistory.map((item, index) => {
+                                        const selectionKey = `${item.nodeId}:${item.fileKey}`;
+                                        return (
+                                            <HistoryImageCard
+                                                key={selectionKey}
+                                                fileKey={item.fileKey}
+                                                label={`历史图片 ${index + 1}`}
+                                                checked={selectedHistory.has(
+                                                    selectionKey,
+                                                )}
+                                                selectionMode={
+                                                    historySelectionMode
+                                                }
+                                                onToggle={() =>
                                                     toggleHistorySelection(
                                                         selectionKey,
                                                     )
                                                 }
+                                                onView={setHistoryPreview}
+                                                onUse={() =>
+                                                    useHistoryImage(
+                                                        item.fileKey,
+                                                    )
+                                                }
                                             />
-                                        </label>
-                                        <button
-                                            type="button"
-                                            className="block w-full text-left"
-                                            onClick={() =>
-                                                openHistoryImage(
-                                                    item.nodeId,
-                                                    item.fileKey,
-                                                )
-                                            }
-                                        >
-                                            <MediaThumbnail
-                                                fileKey={item.fileKey}
-                                                label={`历史图片 ${index + 1}`}
-                                                type="image"
-                                            />
-                                            <div className="mt-2 truncate px-1 text-xs font-medium">
-                                                图片 {index + 1}
-                                            </div>
-                                            <div className="truncate px-1 text-[11px] text-muted-foreground">
-                                                {new Intl.DateTimeFormat(
-                                                    "zh-CN",
-                                                    {
-                                                        month: "2-digit",
-                                                        day: "2-digit",
-                                                        hour: "2-digit",
-                                                        minute: "2-digit",
-                                                    },
-                                                ).format(item.createdAt)}
-                                            </div>
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            </DialogContent>
-        </Dialog>
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={Boolean(historyPreview)}
+                onOpenChange={(open) => {
+                    if (!open) setHistoryPreview(null);
+                }}
+            >
+                <DialogContent className="h-[90vh] max-w-[94vw] overflow-hidden border-zinc-700 bg-zinc-950 p-3 text-white">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>查看历史图片</DialogTitle>
+                        <DialogDescription>
+                            可缩放查看并下载原图。
+                        </DialogDescription>
+                    </DialogHeader>
+                    {historyPreview ? (
+                        <ZoomableImageViewer
+                            src={historyPreview}
+                            alt="历史图片预览"
+                        />
+                    ) : null}
+                </DialogContent>
+            </Dialog>
+        </>
     );
 
     // Execute mode: always show play/running button regardless of node selection

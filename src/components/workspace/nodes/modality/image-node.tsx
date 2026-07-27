@@ -29,7 +29,10 @@ import {
 	NodeHeaderMenuAction,
 	NodeHeaderTitle,
 } from "../base/node-header";
-import { ZoomableImageViewer } from "../base/zoomable-image-viewer";
+import {
+	downloadImageFile,
+	ZoomableImageViewer,
+} from "../base/zoomable-image-viewer";
 import {
 	normalizedImageAspectRatio,
 	normalizedImageNodeWidthPx,
@@ -402,15 +405,17 @@ const ImageNode = ({ id, selected, data }: ImageNodeRfProps) => {
 							</Button>
 						)}
 						{isSingle && singleImageUrl && (
-							<a
-								href={singleImageUrl}
-								download={`dianmeng-${Date.now()}.png`}
+							<button
+								type="button"
 								className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent"
 								title="下载图片"
-								onClick={(event) => event.stopPropagation()}
+								onClick={(event) => {
+									event.stopPropagation();
+									void downloadImageFile(singleImageUrl);
+								}}
 							>
 								<Download className="h-4 w-4" />
-							</a>
+							</button>
 						)}
 						{isSingle && (
 							<Button

@@ -46,6 +46,13 @@ interface TongflowDesktopBridge {
     getUpdateState: () => Promise<DesktopUpdateState>;
     checkForUpdates: () => Promise<void>;
     installUpdate: () => Promise<void>;
+    getDownloadDirectory: () => Promise<string | null>;
+    chooseDownloadDirectory: () => Promise<string | null>;
+    setDownloadDirectory: (directory: string | null) => Promise<string | null>;
+    saveImage: (request: {
+        url: string;
+        suggestedName?: string;
+    }) => Promise<{ saved: boolean; path: string | null }>;
     onUpdateState: (
         callback: (state: DesktopUpdateState) => void,
     ) => () => void;

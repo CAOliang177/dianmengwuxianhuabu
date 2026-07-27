@@ -144,14 +144,41 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 			)
 			.map((edge) => nodeLookup.get(edge.source))
 			.filter((node) => Boolean(node));
-		const previews = sources.flatMap(
+		const connectedPreviews = sources.flatMap(
 			(node) => coerceBaseNodeData(node?.data).fileKeys ?? [],
 		);
+		const bootstrapPreviews = Array.isArray(
+			(data as Record<string, unknown>).referenceBootstrapFileKeys,
+		)
+			? ((data as Record<string, unknown>)
+					.referenceBootstrapFileKeys as string[]).filter(Boolean)
+			: [];
+		const previews =
+			connectedPreviews.length > 0 ? connectedPreviews : bootstrapPreviews;
 		return {
 			referenceCount: previews.length,
 			referenceImages: previews,
 		};
-	}, [nodeId, edges, nodeLookup]);
+	}, [nodeId, edges, nodeLookup, data]);
+
+	useEffect(() => {
+		if (!nodeId || referenceImages.length === 0) return;
+		const current = useFlow
+			.getState()
+			.nodes.find((node) => node.id === nodeId);
+		const currentData = (current?.data ?? {}) as Record<string, unknown>;
+		if (!("referenceBootstrapFileKeys" in currentData)) return;
+		const hasConnectedReference = useFlow
+			.getState()
+			.edges.some(
+				(edge) =>
+					edge.target === nodeId && edge.targetHandle === "in:images",
+			);
+		if (!hasConnectedReference) return;
+		const nextData = { ...currentData };
+		delete nextData.referenceBootstrapFileKeys;
+		useFlow.getState().updates(nodeId, nextData);
+	}, [nodeId, referenceImages]);
 
 	const { url: firstReferenceUrl } = useFileAsyncLoader(referenceImages[0], {
 		priority: "high",

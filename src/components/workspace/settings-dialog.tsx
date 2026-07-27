@@ -6,6 +6,7 @@ import {
     ExternalLink,
     Eye,
     EyeOff,
+    FolderOpen,
     Loader2,
     Plus,
     Settings,
@@ -316,6 +317,11 @@ export function SettingsDialog() {
     const [customRows, setCustomRows] = useState<Row[]>([]);
     // Keyed by env key for declared rows, `custom:${index}` for custom rows.
     const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+    const [downloadDirectory, setDownloadDirectory] = useState<string | null>(
+        null,
+    );
+    const [choosingDirectory, setChoosingDirectory] = useState(false);
+    const [desktopAvailable, setDesktopAvailable] = useState(false);
 
     const groups = useMemo(
         () => buildEnvCardGroups(decls, t("sharedSectionTitle")),
@@ -354,8 +360,37 @@ export function SettingsDialog() {
     }, [applyEnv]);
 
     useEffect(() => {
-        if (open) void fetchEnv();
+        setDesktopAvailable(Boolean(window.tongflowDesktop));
+    }, []);
+
+    useEffect(() => {
+        if (!open) return;
+        void fetchEnv();
+        void window.tongflowDesktop
+            ?.getDownloadDirectory()
+            .then(setDownloadDirectory);
     }, [open, fetchEnv]);
+
+    const chooseDownloadDirectory = useCallback(async () => {
+        const bridge = window.tongflowDesktop;
+        if (!bridge) return;
+        setChoosingDirectory(true);
+        try {
+            const directory = await bridge.chooseDownloadDirectory();
+            if (directory) {
+                setDownloadDirectory(directory);
+                toast.success("默认图片保存位置已设置");
+            }
+        } finally {
+            setChoosingDirectory(false);
+        }
+    }, []);
+
+    const clearDownloadDirectory = useCallback(async () => {
+        await window.tongflowDesktop?.setDownloadDirectory(null);
+        setDownloadDirectory(null);
+        toast.success("已恢复为下载时选择保存位置");
+    }, []);
 
     const updateCustomRow = (index: number, patch: Partial<Row>) => {
         setCustomRows((prev) =>
@@ -429,6 +464,53 @@ export function SettingsDialog() {
                     </div>
                 ) : (
                     <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
+                        {desktopAvailable ? (
+                            <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                                <div>
+                                    <h3 className="text-sm font-medium">
+                                        图片默认保存位置
+                                    </h3>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        设置后，画布和历史记录下载的图片会直接保存到这个文件夹。
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div
+                                        className="min-w-0 flex-1 truncate rounded-lg border bg-background px-3 py-2 text-xs text-muted-foreground"
+                                        title={downloadDirectory ?? undefined}
+                                    >
+                                        {downloadDirectory ??
+                                            "未设置，下载时会询问保存位置"}
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={choosingDirectory}
+                                        onClick={() =>
+                                            void chooseDownloadDirectory()
+                                        }
+                                    >
+                                        {choosingDirectory ? (
+                                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <FolderOpen className="mr-1.5 h-4 w-4" />
+                                        )}
+                                        选择文件夹
+                                    </Button>
+                                    {downloadDirectory ? (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            onClick={() =>
+                                                void clearDownloadDirectory()
+                                            }
+                                        >
+                                            清除
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            </div>
+                        ) : null}
                         {groups.map((group) => (
                             <PluginEnvCard
                                 key={group.id}

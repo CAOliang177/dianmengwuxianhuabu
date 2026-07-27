@@ -356,6 +356,7 @@ function WorkspaceInner({
 				.nodes.find((node) => node.id === sourceId);
 			const fileKeys = ((source?.data as Record<string, unknown>)?.fileKeys ??
 				[]) as string[];
+			if (!source || fileKeys.length === 0) return;
 			const point = "changedTouches" in event ? event.changedTouches[0] : event;
 			if (!point) return;
 			const menuWidth = 288;
@@ -387,16 +388,25 @@ function WorkspaceInner({
 						: "imageGenTextNode";
 			const data: Record<string, unknown> =
 				type === "image"
-					? { pluginId: "tongflow-api-banana-relay" }
+					? {
+							pluginId: "tongflow-api-banana-relay",
+							referenceBootstrapFileKeys: referenceMenu.fileKeys,
+						}
 					: type === "text"
 						? { fileKeys: referenceMenu.fileKeys }
 						: {};
 			const targetId = useFlow
 				.getState()
 				.addNode({ type: targetType, data }, referenceMenu.position);
+			const source = useFlow
+				.getState()
+				.nodes.find((node) => node.id === referenceMenu.sourceId);
+			const resolvedSourceHandle =
+				referenceMenu.sourceHandle ??
+				(source?.type === "imageNode" ? "out:imageNode" : null);
 			useFlow.getState().onConnect({
 				source: referenceMenu.sourceId,
-				sourceHandle: referenceMenu.sourceHandle,
+				sourceHandle: resolvedSourceHandle,
 				target: targetId,
 				targetHandle: type === "image" ? "in:images" : "in:image",
 			});

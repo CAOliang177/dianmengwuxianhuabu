@@ -38,9 +38,18 @@ export async function downloadImageFile(src: string) {
         const normalizedSrc = src.replace(/\\/g, "/");
         const resolvedUrl = new URL(normalizedSrc, window.location.href);
         const extension = resolvedUrl.pathname.match(/\.([a-zA-Z0-9]+)$/)?.[1] ?? "png";
+        const suggestedName = `dianmeng-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`;
+        if (window.tongflowDesktop?.saveImage) {
+            const result = await window.tongflowDesktop.saveImage({
+                url: resolvedUrl.toString(),
+                suggestedName,
+            });
+            if (result.saved) toast.success(`图片已保存到 ${result.path}`);
+            return;
+        }
         const link = document.createElement("a");
         link.href = resolvedUrl.toString();
-        link.download = `dianmeng-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`;
+        link.download = suggestedName;
         document.body.appendChild(link);
         link.click();
         link.remove();
