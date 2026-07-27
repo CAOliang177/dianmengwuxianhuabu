@@ -29,9 +29,13 @@ export interface UsageEventInput {
     occurredAt: number;
 }
 
-const APP_VERSION = "0.1.25";
+const APP_VERSION = "0.1.26";
 const DEFAULT_ENDPOINT =
-    "https://dianmeng-usage-console.sappy-plum-7138.chatgpt.site";
+    "https://dianmeng-d4g0o715e8e8e422a.service.tcloudbase.com";
+const LEGACY_ENDPOINTS = new Set([
+    "https://dianmeng-usage-console.sappy-plum-7138.chatgpt.site",
+    "https://dianmeng-usage-admin.dianmeng-canvas.workers.dev",
+]);
 const DEFAULT_INGEST_TOKEN = "dm_ingest_4bJ9uC3nZ8qP2aV7xK5mF1rD";
 const SETTINGS_FILE = "usage-reporting.json";
 const QUEUE_FILE = "usage-reporting-queue.json";
@@ -61,14 +65,18 @@ function clean(value: unknown, max: number, fallback = "") {
 
 export function loadUsageSettings(): UsageReportingSettings {
     const stored = readJson<Partial<UsageReportingSettings>>(SETTINGS_FILE, {});
+    const storedEndpoint = clean(stored.endpoint, 500, DEFAULT_ENDPOINT).replace(/\/+$/, "");
+    const migrateEndpoint = !stored.endpoint || LEGACY_ENDPOINTS.has(storedEndpoint);
     const settings: UsageReportingSettings = {
         enabled: stored.enabled ?? true,
-        endpoint: clean(stored.endpoint, 500, DEFAULT_ENDPOINT),
+        endpoint: migrateEndpoint ? DEFAULT_ENDPOINT : storedEndpoint,
         token: clean(stored.token, 500, DEFAULT_INGEST_TOKEN),
         clientId: clean(stored.clientId, 96) || randomUUID(),
         clientName: clean(stored.clientName, 120, "我的电脑"),
     };
-    if (!stored.clientId) writeJson(SETTINGS_FILE, settings);
+    if (!stored.clientId || migrateEndpoint || !stored.token) {
+        writeJson(SETTINGS_FILE, settings);
+    }
     return settings;
 }
 
