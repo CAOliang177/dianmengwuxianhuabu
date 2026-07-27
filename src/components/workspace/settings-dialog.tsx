@@ -48,6 +48,13 @@ interface EnvResponse {
     pluginEnv?: PluginEnvDecl[];
 }
 
+interface UsageSettingsResponse {
+    enabled: boolean;
+    clientId: string;
+    clientName: string;
+    queueSize: number;
+}
+
 interface Row {
     key: string;
     value: string;
@@ -322,6 +329,8 @@ export function SettingsDialog() {
     );
     const [choosingDirectory, setChoosingDirectory] = useState(false);
     const [desktopAvailable, setDesktopAvailable] = useState(false);
+    const [usageSettings, setUsageSettings] =
+        useState<UsageSettingsResponse | null>(null);
 
     const groups = useMemo(
         () => buildEnvCardGroups(decls, t("sharedSectionTitle")),
@@ -350,8 +359,12 @@ export function SettingsDialog() {
     const fetchEnv = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await apiGet<EnvResponse>("/api/settings/env");
+            const [data, usage] = await Promise.all([
+                apiGet<EnvResponse>("/api/settings/env"),
+                apiGet<UsageSettingsResponse>("/api/settings/usage"),
+            ]);
             applyEnv(data.env ?? {}, data.pluginEnv ?? []);
+            setUsageSettings(usage);
         } catch (error) {
             logger.error("Failed to load settings:", error);
         } finally {
@@ -421,17 +434,24 @@ export function SettingsDialog() {
         }
         setSaving(true);
         try {
-            const data = await apiPut<EnvResponse>("/api/settings/env", {
-                env,
-            });
+            const [data, usage] = await Promise.all([
+                apiPut<EnvResponse>("/api/settings/env", { env }),
+                usageSettings
+                    ? apiPut<UsageSettingsResponse>("/api/settings/usage", {
+                          enabled: usageSettings.enabled,
+                          clientName: usageSettings.clientName,
+                      })
+                    : Promise.resolve(null),
+            ]);
             applyEnv(data.env ?? {}, decls);
+            if (usage) setUsageSettings(usage);
             toast.success(t("saved"));
         } catch (error) {
             logger.error("Failed to save settings:", error);
         } finally {
             setSaving(false);
         }
-    }, [customRows, values, decls, applyEnv, t]);
+    }, [customRows, values, decls, applyEnv, t, usageSettings]);
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -464,6 +484,62 @@ export function SettingsDialog() {
                     </div>
                 ) : (
                     <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
+                        {usageSettings ? (
+                            <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-900/70 dark:bg-indigo-950/20">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <h3 className="text-sm font-medium">
+                                            用量统计
+                                        </h3>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            只统计渠道、模型、成功或失败次数，不上传提示词、图片和 API Key。
+                                        </p>
+                                    </div>
+                                    <label className="flex shrink-0 items-center gap-2 text-xs">
+                                        <input
+                                            type="checkbox"
+                                            checked={usageSettings.enabled}
+                                            onChange={(event) =>
+                                                setUsageSettings((current) =>
+                                                    current
+                                                        ? {
+                                                              ...current,
+                                                              enabled:
+                                                                  event.target
+                                                                      .checked,
+                                                          }
+                                                        : current,
+                                                )
+                                            }
+                                        />
+                                        允许统计
+                                    </label>
+                                </div>
+                                <label className="block space-y-1 text-xs text-muted-foreground">
+                                    <span>这台电脑的名称</span>
+                                    <Input
+                                        value={usageSettings.clientName}
+                                        placeholder="例如：设计部电脑"
+                                        onChange={(event) =>
+                                            setUsageSettings((current) =>
+                                                current
+                                                    ? {
+                                                          ...current,
+                                                          clientName:
+                                                              event.target.value,
+                                                      }
+                                                    : current,
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <p className="text-[11px] text-muted-foreground">
+                                    {usageSettings.queueSize > 0
+                                        ? `有 ${usageSettings.queueSize} 条离线记录，联网后会自动补传。`
+                                        : "离线上报队列为空。"}
+                                </p>
+                            </div>
+                        ) : null}
                         {desktopAvailable ? (
                             <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
                                 <div>

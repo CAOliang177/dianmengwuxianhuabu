@@ -21,6 +21,11 @@ import {
     emitSSETaskMessage,
     TASK_CANCEL_REQUEST_EVENT,
 } from "@/lib/task/sse-events";
+import {
+    reportUsageCreateFailure,
+    reportUsageTask,
+    trackUsageTask,
+} from "@/lib/usage/usage-telemetry";
 import type { SSEMessage } from "@/types/sse";
 
 // SSE message shape for the `/api/task/wait` stream
@@ -434,6 +439,7 @@ export function useTaskSubscription(
 
                         // Frontend backup: persist terminal status without saving materials
                         if (isTerminalStatus(message.status)) {
+                            reportUsageTask(internalTask);
                             updateTaskStatus({
                                 taskId: message.id,
                                 status: message.status,
@@ -591,6 +597,7 @@ export function useCreateTask(options?: TaskSubscriptionOptions) {
 
             try {
                 const { taskId } = await apiCreateTask(config);
+                trackUsageTask(taskId, config);
 
                 // Persisted id kicks off SSE subscription
                 setCreatedTaskId(taskId);
@@ -617,6 +624,7 @@ export function useCreateTask(options?: TaskSubscriptionOptions) {
                     err instanceof Error
                         ? err
                         : new Error("Failed to create task");
+                reportUsageCreateFailure(config, error);
                 setError(error);
                 throw error;
             } finally {
@@ -674,7 +682,14 @@ export function useBatchTaskManager(
                 const taskIds: string[] = [];
 
                 const createPromises = taskConfigs.map(async (taskConfig) => {
-                    const { taskId } = await apiCreateTask(taskConfig);
+                    let taskId: string;
+                    try {
+                        ({ taskId } = await apiCreateTask(taskConfig));
+                    } catch (error) {
+                        reportUsageCreateFailure(taskConfig, error);
+                        throw error;
+                    }
+                    trackUsageTask(taskId, taskConfig);
                     taskIds.push(taskId);
 
                     setTask(taskId, {
@@ -750,6 +765,7 @@ export function useBatchTaskManager(
                                 }
 
                                 if (isTerminalStatus(message.status)) {
+                                    reportUsageTask(internalTask);
                                     updateTaskStatus({
                                         taskId: message.id,
                                         status: message.status,
