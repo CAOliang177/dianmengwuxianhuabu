@@ -17,11 +17,16 @@ export interface ResolutionTier {
 }
 
 export const IMAGE_ASPECT_RATIOS: AspectRatio[] = [
-    { value: "9:16", label: "portrait", width: 720, height: 1280 },
-    { value: "16:9", label: "landscape", width: 1280, height: 720 },
     { value: "1:1", label: "square", width: 1024, height: 1024 },
+    { value: "16:9", label: "landscape", width: 1280, height: 720 },
+    { value: "9:16", label: "portrait", width: 720, height: 1280 },
     { value: "4:3", label: "standard", width: 1024, height: 768 },
     { value: "3:4", label: "verticalStandard", width: 768, height: 1024 },
+    { value: "3:2", label: "threeTwo", width: 1152, height: 768 },
+    { value: "2:3", label: "twoThree", width: 768, height: 1152 },
+    { value: "5:4", label: "fiveFour", width: 1280, height: 1024 },
+    { value: "4:5", label: "fourFive", width: 1024, height: 1280 },
+    { value: "21:9", label: "cinemaWide", width: 1344, height: 576 },
 ];
 
 // Resolution tiers scale an aspect ratio's base (1K) dimensions. The picked
@@ -74,6 +79,16 @@ export function getAspectRatioIconSize(ratio: string): {
             return { width: "14px", height: "10px" };
         case "3:4":
             return { width: "10px", height: "13px" };
+        case "3:2":
+            return { width: "15px", height: "10px" };
+        case "2:3":
+            return { width: "10px", height: "15px" };
+        case "5:4":
+            return { width: "15px", height: "12px" };
+        case "4:5":
+            return { width: "12px", height: "15px" };
+        case "21:9":
+            return { width: "18px", height: "8px" };
         default:
             return { width: "12px", height: "12px" };
     }

@@ -14,6 +14,11 @@ interface AspectRatioPickerProps {
     value: AspectRatio;
     onChange: (ratio: AspectRatio) => void;
     showSize?: boolean;
+    autoOption?: {
+        active: boolean;
+        disabled?: boolean;
+        onSelect: () => void;
+    };
 }
 
 export function AspectRatioPicker({
@@ -21,6 +26,7 @@ export function AspectRatioPicker({
     value,
     onChange,
     showSize = true,
+    autoOption,
 }: AspectRatioPickerProps) {
     const t = useTranslations("Workspace.nodes");
 
@@ -32,8 +38,39 @@ export function AspectRatioPicker({
                     {t("common.aspectRatio")}
                 </Label>
                 <div className="grid grid-cols-5 gap-2">
+                    {autoOption ? (
+                        <Button
+                            type="button"
+                            variant={autoOption.active ? "default" : "outline"}
+                            size="sm"
+                            disabled={autoOption.disabled}
+                            onClick={autoOption.onSelect}
+                            className={cn(
+                                "h-auto min-w-0 flex-col gap-1 px-1 py-2 text-xs transition-all",
+                                autoOption.active
+                                    ? "bg-primary text-primary-foreground shadow-md"
+                                    : "hover:bg-accent hover:text-accent-foreground",
+                            )}
+                            title={
+                                autoOption.disabled
+                                    ? "连接参考图后可使用自适应比例"
+                                    : "跟随第一张参考图的比例"
+                            }
+                        >
+                            <div
+                                className={cn(
+                                    "h-4 w-5 rounded border border-dashed",
+                                    autoOption.active
+                                        ? "border-primary-foreground bg-primary-foreground/20"
+                                        : "border-muted-foreground/50",
+                                )}
+                            />
+                            <span>自适应</span>
+                        </Button>
+                    ) : null}
                     {ratios.map((ratio) => {
-                        const isSelected = value.value === ratio.value;
+                        const isSelected =
+                            !autoOption?.active && value.value === ratio.value;
                         const iconSize = getAspectRatioIconSize(ratio.value);
                         return (
                             <Button
@@ -42,7 +79,7 @@ export function AspectRatioPicker({
                                 size="sm"
                                 onClick={() => onChange(ratio)}
                                 className={cn(
-                                    "h-auto min-w-0 py-2 px-1 flex flex-row items-center gap-1 text-xs whitespace-normal transition-all",
+                                    "h-auto min-w-0 py-2 px-1 flex flex-col items-center gap-1 text-xs whitespace-normal transition-all",
                                     isSelected
                                         ? "bg-primary text-primary-foreground shadow-md"
                                         : "hover:bg-accent hover:text-accent-foreground",
@@ -57,14 +94,9 @@ export function AspectRatioPicker({
                                     )}
                                     style={iconSize}
                                 />
-                                <div className="flex flex-col items-start min-w-0">
-                                    <span className="text-xs font-medium leading-tight wrap-break-word text-left">
-                                        {t(`options.${ratio.label}`)}
-                                    </span>
-                                    <span className="text-xs opacity-70 leading-tight">
-                                        {ratio.value}
-                                    </span>
-                                </div>
+                                <span className="text-xs font-medium leading-tight">
+                                    {ratio.value}
+                                </span>
                             </Button>
                         );
                     })}

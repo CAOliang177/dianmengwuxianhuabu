@@ -14,7 +14,6 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import {
 	type AspectRatio,
 	IMAGE_ASPECT_RATIOS,
@@ -100,6 +99,8 @@ const CANONICAL_PREVIEW_RATIOS = [
 	{ width: 3, height: 4 },
 	{ width: 3, height: 2 },
 	{ width: 2, height: 3 },
+	{ width: 5, height: 4 },
+	{ width: 4, height: 5 },
 	{ width: 21, height: 9 },
 ] as const;
 
@@ -529,21 +530,20 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 
 							{advancedSettingsOpen && (
 								<div className="mt-2 space-y-3 rounded-xl border border-border bg-muted/25 p-3 text-foreground">
-										<div className="rounded-xl border bg-card p-3">
-											<div className="flex items-center justify-between gap-4">
-												<div><div className="text-sm font-medium">跟随参考图比例</div>
-													<div className="mt-0.5 text-xs text-muted-foreground">
-														{referenceDimensions ? `参考图 ${referenceDimensions.width} × ${referenceDimensions.height}，输出 ${width} × ${height}` : "连接参考图后可自动生成相同比例"}
-													</div>
-												</div>
-												<Switch checked={followReferenceRatio && referenceCount > 0} disabled={referenceCount === 0}
-													onCheckedChange={toggleFollowReferenceRatio} aria-label="跟随参考图比例" />
-											</div>
-										</div>
-										{(!followReferenceRatio || referenceCount === 0) && (
-											<AspectRatioPicker ratios={IMAGE_ASPECT_RATIOS} value={{ ...currentRatio, width, height }}
-												onChange={(ratio) => applySize(ratio, currentTier)} showSize />
-										)}
+										<AspectRatioPicker
+											ratios={IMAGE_ASPECT_RATIOS}
+											value={{ ...currentRatio, width, height }}
+											onChange={(ratio) => applySize(ratio, currentTier)}
+											showSize
+											autoOption={{
+												active:
+													followReferenceRatio &&
+													referenceCount > 0,
+												disabled: referenceCount === 0,
+												onSelect: () =>
+													toggleFollowReferenceRatio(true),
+											}}
+										/>
 										<ResolutionPicker tiers={IMAGE_RESOLUTION_TIERS} value={currentTier.value} onChange={changeResolutionTier} />
 								</div>
 							)}

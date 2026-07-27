@@ -12,6 +12,7 @@
 import { useReactFlow } from "@xyflow/react";
 import {
     Box,
+    Clapperboard,
     Download,
     Eye,
     FileText,
@@ -62,6 +63,7 @@ import {
     downloadImageFile,
     ZoomableImageViewer,
 } from "@/components/workspace/nodes/base/zoomable-image-viewer";
+import { CinematicPromptTool } from "@/components/workspace/cinematic-prompt-tool";
 
 interface IconButtonProps {
     icon: React.ComponentType<{ className?: string }>;
@@ -222,6 +224,7 @@ export default function SmartIsland() {
     const reactFlow = useReactFlow();
     const { screenToFlowPosition } = reactFlow;
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [cinematicToolOpen, setCinematicToolOpen] = useState(false);
     const [historySelectionMode, setHistorySelectionMode] = useState(false);
     const [historyPreview, setHistoryPreview] = useState<string | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<Set<string>>(
@@ -422,6 +425,16 @@ export default function SmartIsland() {
         </div>
     );
 
+    const cinematicControl = (
+        <div className="flex h-12 items-center rounded-2xl border border-amber-300/50 bg-white p-1 shadow-sm backdrop-blur-md dark:border-amber-700/60 dark:bg-zinc-800/90">
+            <IconButton
+                icon={Clapperboard}
+                tooltip="电影感提示词"
+                onClick={() => setCinematicToolOpen(true)}
+            />
+        </div>
+    );
+
     const historyDialog = (
         <>
             <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
@@ -571,11 +584,25 @@ export default function SmartIsland() {
         </>
     );
 
+    const cinematicDialog = (
+        <CinematicPromptTool
+            open={cinematicToolOpen}
+            onOpenChange={setCinematicToolOpen}
+            onCreateNode={(data) =>
+                addNodeAtViewportCenter({
+                    type: "textGenImageNode",
+                    data,
+                })
+            }
+        />
+    );
+
     // Execute mode: always show play/running button regardless of node selection
     if (isExecuteMode) {
         return (
             <>
                 {historyDialog}
+                {cinematicDialog}
                 <SaveExecuteDialog
                     open={showSaveDialog}
                     onOpenChange={setShowSaveDialog}
@@ -597,6 +624,7 @@ export default function SmartIsland() {
                         />
                     </div>
                     {historyControl}
+                    {cinematicControl}
                 </div>
             </>
         );
@@ -687,9 +715,11 @@ export default function SmartIsland() {
         return (
             <>
                 {historyDialog}
+                {cinematicDialog}
                 <div className="flex items-center gap-3">
                     {addToolbar}
                     {historyControl}
+                    {cinematicControl}
                 </div>
             </>
         );
@@ -702,9 +732,11 @@ export default function SmartIsland() {
         return (
             <>
                 {historyDialog}
+                {cinematicDialog}
                 <div className="flex items-center gap-3">
                     {addToolbar}
                     {historyControl}
+                    {cinematicControl}
                 </div>
             </>
         );
@@ -713,9 +745,11 @@ export default function SmartIsland() {
     return (
         <>
             {historyDialog}
+            {cinematicDialog}
             <div className="flex items-center justify-center gap-3">
                 <div>{actions}</div>
                 {historyControl}
+                {cinematicControl}
             </div>
         </>
     );
