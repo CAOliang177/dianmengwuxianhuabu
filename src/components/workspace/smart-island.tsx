@@ -118,7 +118,7 @@ function HistoryImageCard({
     return (
         <div
             className={cn(
-                "group relative aspect-square overflow-hidden rounded-xl border bg-zinc-900/40",
+                "group relative min-h-[220px] overflow-hidden rounded-2xl border bg-zinc-900/40",
                 "transition duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:shadow-xl",
                 checked && "border-blue-500 ring-2 ring-blue-500/40",
             )}
@@ -146,13 +146,13 @@ function HistoryImageCard({
                     />
                 </label>
             ) : null}
-            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 opacity-0 transition duration-200 group-hover:bg-black/60 group-hover:opacity-100">
+            <div className="absolute inset-0 flex items-center justify-center gap-2.5 bg-black/0 px-4 opacity-0 transition duration-200 group-hover:bg-black/60 group-hover:opacity-100">
                 <Button
                     type="button"
                     size="sm"
                     variant="secondary"
                     disabled={!url}
-                    className="h-8 rounded-full px-3 text-xs"
+                    className="h-9 min-w-16 rounded-full px-4 text-xs"
                     onClick={() => url && onView(url)}
                 >
                     <Eye className="mr-1 h-3.5 w-3.5" />
@@ -161,7 +161,7 @@ function HistoryImageCard({
                 <Button
                     type="button"
                     size="sm"
-                    className="h-8 rounded-full bg-white px-3 text-xs text-black hover:bg-zinc-200"
+                    className="h-9 min-w-16 rounded-full bg-white px-4 text-xs text-black hover:bg-zinc-200"
                     onClick={onUse}
                 >
                     使用
@@ -171,7 +171,7 @@ function HistoryImageCard({
                     size="sm"
                     variant="secondary"
                     disabled={!url}
-                    className="h-8 rounded-full px-3 text-xs"
+                    className="h-9 min-w-16 rounded-full px-4 text-xs"
                     onClick={() => url && void downloadImageFile(url)}
                 >
                     <Download className="mr-1 h-3.5 w-3.5" />
@@ -425,7 +425,10 @@ export default function SmartIsland() {
     const historyDialog = (
         <>
             <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-                <DialogContent className="max-h-[86vh] max-w-6xl overflow-hidden border-zinc-700 bg-zinc-950 p-0 text-zinc-100">
+                <DialogContent
+                    showCloseButton={false}
+                    className="flex h-[88vh] w-[94vw] max-w-[94vw] flex-col gap-0 overflow-hidden border-zinc-700 bg-zinc-950 p-0 text-zinc-100 sm:!max-w-[1280px]"
+                >
                     <DialogHeader className="sr-only">
                         <DialogTitle>图片历史</DialogTitle>
                         <DialogDescription>
@@ -499,7 +502,7 @@ export default function SmartIsland() {
                         </div>
                     ) : null}
 
-                    <div className="max-h-[72vh] overflow-y-auto p-5">
+                    <div className="min-h-0 flex-1 overflow-y-auto p-6">
                         {generationHistory.length === 0 ? (
                             <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-zinc-700 text-sm text-zinc-500">
                                 当前画布还没有生成记录
@@ -509,7 +512,7 @@ export default function SmartIsland() {
                                 <div className="mb-3 text-sm text-zinc-400">
                                     最近生成
                                 </div>
-                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                                     {generationHistory.map((item, index) => {
                                         const selectionKey = `${item.nodeId}:${item.fileKey}`;
                                         return (
