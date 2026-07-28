@@ -101,6 +101,20 @@ describe("resolve — collectHandleValues + buildPrompts", () => {
         expect(values.text).toBeUndefined();
     });
 
+    it("recovers a missing targetHandle when there is one compatible image input", () => {
+        const spec = resolveSpec("image-fusion", {
+            images: batchOn({ nodeType: "imageNode", path: "fileKeys" }),
+            text: configField(),
+        });
+        const nodes = [
+            makeNode("u1", "imageNode", { fileKeys: ["reference.png"] }),
+            makeNode("n", "textGenImageNode", {}),
+        ];
+        const edges = [makeEdge("e1", "u1", "n")];
+        const values = collectHandleValues("n", spec, nodes, edges);
+        expect(values.images).toEqual(["reference.png"]);
+    });
+
     it("batchOn collects array values across multiple matching edges", () => {
         const spec = resolveSpec("image-gen-text", { image: batchOn() });
         const nodes = [

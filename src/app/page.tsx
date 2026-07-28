@@ -21,6 +21,8 @@ import {
 import { UpdateButton } from "@/components/workspace/update-button";
 
 const LETTER_COLORS = ["#72a7ff", "#9d8cff", "#63e6be", "#ffd38a", "#ff8fb3", "#89ddff"];
+const RELEASE_VERSION = "0.1.27";
+const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
     return (
@@ -44,6 +46,7 @@ export default function Home() {
     const [history, setHistory] = useState<CanvasHistoryItem[]>([]);
     const [renameTarget, setRenameTarget] = useState<CanvasHistoryItem | null>(null);
     const [renameValue, setRenameValue] = useState("");
+    const [releaseNoticeOpen, setReleaseNoticeOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -55,6 +58,17 @@ export default function Home() {
             cancelled = true;
         };
     }, []);
+
+    useEffect(() => {
+        if (window.localStorage.getItem(RELEASE_NOTICE_KEY) !== "seen") {
+            setReleaseNoticeOpen(true);
+        }
+    }, []);
+
+    const closeReleaseNotice = () => {
+        window.localStorage.setItem(RELEASE_NOTICE_KEY, "seen");
+        setReleaseNoticeOpen(false);
+    };
 
     const openCanvas = (id: string) => {
         setActiveCanvasId(id);
@@ -200,6 +214,55 @@ export default function Home() {
                     )}
                 </section>
             </div>
+
+            <Dialog
+                open={releaseNoticeOpen}
+                onOpenChange={(open) => {
+                    if (!open) closeReleaseNotice();
+                }}
+            >
+                <DialogContent className="overflow-hidden border-white/15 bg-[#0c1325] p-0 text-white sm:max-w-xl">
+                    <div className="relative border-b border-white/10 bg-[radial-gradient(circle_at_12%_0%,rgba(59,130,246,.28),transparent_40%),radial-gradient(circle_at_88%_10%,rgba(245,158,11,.15),transparent_36%)] px-7 pb-6 pt-7">
+                        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-blue-400/10 px-3 py-1 text-xs font-medium text-blue-100">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            dianmeng 无限画布 v{RELEASE_VERSION}
+                        </div>
+                        <DialogHeader>
+                            <DialogTitle className="text-2xl font-semibold text-white">
+                                新版本已准备好，创作操作更顺手
+                            </DialogTitle>
+                            <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
+                                本次重点解决画布操作冲突，并提升图片引用和生成结果的稳定性。
+                            </DialogDescription>
+                        </DialogHeader>
+                    </div>
+                    <div className="space-y-3 px-7 py-6 text-sm text-slate-200">
+                        {[
+                            "新增选取模式：开启后左键框选，关闭后左键拖动画布，右键专门新建节点。",
+                            "支持 Alt 拖动复制节点、Ctrl+Z 撤回和 Ctrl+Shift+Z 重做。",
+                            "支持直接粘贴截图，裁切新增多种固定比例，@图片引用增加颜色区分。",
+                            "修复连接参考图偶发未参与图生图，以及任务完成后没有图片却不报错的问题。",
+                        ].map((item, index) => (
+                            <div
+                                key={item}
+                                className="flex gap-3 rounded-xl border border-white/[.07] bg-white/[.035] px-4 py-3"
+                            >
+                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-xs font-semibold text-blue-200">
+                                    {index + 1}
+                                </span>
+                                <span className="leading-6">{item}</span>
+                            </div>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={closeReleaseNotice}
+                            className="mt-2 w-full rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-3 font-medium text-white shadow-lg shadow-blue-950/30 transition hover:brightness-110"
+                        >
+                            我知道了，开始创作
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null); }}>
                 <DialogContent className="border-white/15 bg-[#11182a] text-white sm:max-w-md">

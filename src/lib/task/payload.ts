@@ -200,20 +200,31 @@ export function applyResolvedOutputRoutes(
 /** SSE data is sometimes a JSON string; Modal may wrap content in markdown or nested result. */
 export function normalizeTaskPayloadData(
     data: unknown,
+    depth = 0,
 ): Record<string, unknown> | undefined {
-    if (data == null) return undefined;
-    if (typeof data === "object" && !Array.isArray(data)) {
-        return data as Record<string, unknown>;
-    }
+    if (data == null || depth > 5) return undefined;
     if (typeof data === "string") {
+        const normalized = data
+            .trim()
+            .replace(/^```(?:json)?\s*/i, "")
+            .replace(/\s*```$/, "");
         try {
-            const p = JSON.parse(data) as unknown;
-            if (typeof p === "object" && p !== null && !Array.isArray(p)) {
-                return p as Record<string, unknown>;
-            }
+            return normalizeTaskPayloadData(
+                JSON.parse(normalized) as unknown,
+                depth + 1,
+            );
         } catch {
             return undefined;
         }
+    }
+    if (typeof data === "object" && !Array.isArray(data)) {
+        const record = data as Record<string, unknown>;
+        const nested: Record<string, unknown> = {};
+        for (const key of ["payload", "output", "result", "data"]) {
+            const value = normalizeTaskPayloadData(record[key], depth + 1);
+            if (value) Object.assign(nested, value);
+        }
+        return { ...nested, ...record };
     }
     return undefined;
 }

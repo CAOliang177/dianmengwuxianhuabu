@@ -61,6 +61,15 @@ export async function downloadImageFile(src: string) {
 type Point = { x: number; y: number };
 type Rect = Point & { width: number; height: number };
 type DrawTool = "pen" | "arrow" | "circle";
+type CropRatio = "free" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
+const CROP_RATIOS: Array<{ value: CropRatio; label: string; ratio?: number }> = [
+    { value: "free", label: "自由" },
+    { value: "1:1", label: "1:1", ratio: 1 },
+    { value: "16:9", label: "16:9", ratio: 16 / 9 },
+    { value: "9:16", label: "9:16", ratio: 9 / 16 },
+    { value: "4:3", label: "4:3", ratio: 4 / 3 },
+    { value: "3:4", label: "3:4", ratio: 3 / 4 },
+];
 type DrawStroke = {
     tool: DrawTool;
     color: string;
@@ -171,6 +180,7 @@ export function ZoomableImageViewer({
     const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
     const [cropMode, setCropMode] = useState(false);
+    const [cropRatio, setCropRatio] = useState<CropRatio>("free");
     const [drawMode, setDrawMode] = useState(false);
     const [drawTool, setDrawTool] = useState<DrawTool>("pen");
     const [drawColor, setDrawColor] = useState("#ff3b30");
@@ -343,11 +353,43 @@ export function ZoomableImageViewer({
                     Math.max(imageRect.y, event.clientY - viewport.top),
                 ),
             };
+            const ratio = CROP_RATIOS.find(
+                (option) => option.value === cropRatio,
+            )?.ratio;
+            if (!ratio) {
+                setCropRect({
+                    x: Math.min(start.x, end.x),
+                    y: Math.min(start.y, end.y),
+                    width: Math.abs(end.x - start.x),
+                    height: Math.abs(end.y - start.y),
+                });
+                return;
+            }
+
+            const directionX = end.x < start.x ? -1 : 1;
+            const directionY = end.y < start.y ? -1 : 1;
+            const rawWidth = Math.abs(end.x - start.x);
+            const rawHeight = Math.abs(end.y - start.y);
+            let width = rawWidth / Math.max(rawHeight, 0.001) > ratio
+                ? rawWidth
+                : rawHeight * ratio;
+            let height = width / ratio;
+            const maxWidth =
+                directionX > 0
+                    ? imageRect.x + imageRect.width - start.x
+                    : start.x - imageRect.x;
+            const maxHeight =
+                directionY > 0
+                    ? imageRect.y + imageRect.height - start.y
+                    : start.y - imageRect.y;
+            const fit = Math.min(1, maxWidth / width, maxHeight / height);
+            width *= fit;
+            height *= fit;
             setCropRect({
-                x: Math.min(start.x, end.x),
-                y: Math.min(start.y, end.y),
-                width: Math.abs(end.x - start.x),
-                height: Math.abs(end.y - start.y),
+                x: directionX > 0 ? start.x : start.x - width,
+                y: directionY > 0 ? start.y : start.y - height,
+                width,
+                height,
             });
             return;
         }
@@ -642,6 +684,24 @@ export function ZoomableImageViewer({
                         >
                             <X className="h-4 w-4" /> 取消
                         </button>
+                        <select
+                            value={cropRatio}
+                            onChange={(event) =>
+                                setCropRatio(event.target.value as CropRatio)
+                            }
+                            className="nodrag h-9 rounded-full border border-white/15 bg-white/10 px-3 text-xs text-white outline-none hover:bg-white/15"
+                            title="裁切比例"
+                        >
+                            {CROP_RATIOS.map((option) => (
+                                <option
+                                    key={option.value}
+                                    value={option.value}
+                                    className="bg-zinc-900 text-white"
+                                >
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
                         <button
                             type="button"
                             className="flex h-9 items-center gap-1.5 rounded-full bg-emerald-500 px-3 text-xs font-medium hover:bg-emerald-400 disabled:opacity-50"

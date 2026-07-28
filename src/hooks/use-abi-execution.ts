@@ -319,7 +319,10 @@ export function useAbiExecution<F extends NodeSlot>(
 
             if (task?.status === "COMPLETED") {
                 const payload =
-                    normalizeTaskPayloadData(task?.data) ??
+                    normalizeTaskPayloadData({
+                        data: task?.data,
+                        result: task?.result,
+                    }) ??
                     (task?.data as Record<string, unknown> | undefined);
 
                 const abiNode = getAbiNodeBySlot(feature);

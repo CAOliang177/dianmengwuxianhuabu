@@ -19,6 +19,7 @@ import {
 	Panel,
 	ReactFlow,
 	ReactFlowProvider,
+	SelectionMode,
 	reconnectEdge,
 	useReactFlow,
 } from "@xyflow/react";
@@ -84,6 +85,7 @@ function WorkspaceInner({
 	const tNodes = useTranslations("Workspace.nodes");
 	const locale = useLocale();
 	const [colorMode, setColorMode] = useState<"light" | "dark">("light");
+	const [selectionModeActive, setSelectionModeActive] = useState(false);
 	const [paneContextMenu, setPaneContextMenu] = useState<{
 		left: number;
 		top: number;
@@ -121,6 +123,8 @@ function WorkspaceInner({
 	const [isUploadingDroppedImages, setIsUploadingDroppedImages] =
 		useState(false);
 	const imageDragDepthRef = useRef(0);
+	const nodeDragHistoryRef = useRef(false);
+	const altDragDuplicatedRef = useRef(false);
 
 	// Separate data and functions to avoid re-renders caused by function reference changes
 	const { nodes, edges } = useFlow(useShallow(selector));
@@ -333,8 +337,56 @@ function WorkspaceInner({
 
 	const deleteEdge = useCallback((edgeId: string) => {
 		const state = useFlow.getState();
+		state.pushHistory();
 		state.setEdges(state.edges.filter((edge) => edge.id !== edgeId));
 		setEdgeContextMenu(null);
+	}, []);
+
+	const handleNodeDragStart = useCallback(
+		(event: React.MouseEvent, draggedNode: Node) => {
+			const state = useFlow.getState();
+			if (!nodeDragHistoryRef.current) {
+				state.pushHistory();
+				nodeDragHistoryRef.current = true;
+			}
+			if (!event.altKey || altDragDuplicatedRef.current) return;
+			altDragDuplicatedRef.current = true;
+
+			const moving = draggedNode.selected
+				? state.nodes.filter((node) => node.selected)
+				: state.nodes.filter((node) => node.id === draggedNode.id);
+			const movingIds = new Set(moving.map((node) => node.id));
+			const idMap = new Map<string, string>();
+			const stationaryCopies = moving.map((node) => {
+				const id = crypto.randomUUID();
+				idMap.set(node.id, id);
+				return {
+					...structuredClone(node),
+					id,
+					selected: false,
+				};
+			});
+			const copiedEdges = state.edges
+				.filter(
+					(edge) =>
+						movingIds.has(edge.source) && movingIds.has(edge.target),
+				)
+				.map((edge) => ({
+					...structuredClone(edge),
+					id: crypto.randomUUID(),
+					source: idMap.get(edge.source) ?? edge.source,
+					target: idMap.get(edge.target) ?? edge.target,
+					selected: false,
+				}));
+			state.setNodes([...state.nodes, ...stationaryCopies]);
+			state.setEdges([...state.edges, ...copiedEdges]);
+		},
+		[],
+	);
+
+	const handleNodeDragStop = useCallback(() => {
+		nodeDragHistoryRef.current = false;
+		altDragDuplicatedRef.current = false;
 	}, []);
 
 	const handleConnectEnd = useCallback(
@@ -567,6 +619,18 @@ function WorkspaceInner({
 			);
 			const command = e.ctrlKey || e.metaKey;
 
+			if (
+				command &&
+				!editingText &&
+				e.key.toLowerCase() === "z"
+			) {
+				const changed = e.shiftKey
+					? useFlow.getState().redo()
+					: useFlow.getState().undo();
+				if (changed) e.preventDefault();
+				return;
+			}
+
 			if (command && !editingText && e.key.toLowerCase() === "c") {
 				const state = useFlow.getState();
 				const selected = state.nodes.filter((node) => node.selected);
@@ -591,6 +655,7 @@ function WorkspaceInner({
 				const clipboard = nodeClipboardRef.current;
 				if (clipboard?.nodes.length) {
 					const state = useFlow.getState();
+					state.pushHistory();
 					const idMap = new Map<string, string>();
 					pasteOffsetRef.current += 40;
 					const offset = pasteOffsetRef.current;
@@ -657,6 +722,60 @@ function WorkspaceInner({
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, []);
+
+	// Paste a screenshot or copied image directly onto the canvas. Node
+	// clipboard paste keeps priority because its keydown handler prevents the
+	// native paste event before this listener runs.
+	useEffect(() => {
+		const handlePaste = async (event: ClipboardEvent) => {
+			const target = event.target as HTMLElement | null;
+			if (target?.closest("input, textarea, [contenteditable='true']")) return;
+			const imageFiles = Array.from(event.clipboardData?.items ?? [])
+				.filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+				.map((item) => item.getAsFile())
+				.filter((file): file is File => file !== null);
+			if (imageFiles.length === 0) return;
+			event.preventDefault();
+			setIsUploadingDroppedImages(true);
+			try {
+				const uploads = await Promise.allSettled(
+					imageFiles.map((file) => getPresignedUploadUrl(file)),
+				);
+				const fileKeys = uploads.flatMap((upload) =>
+					upload.status === "fulfilled" ? [upload.value.fileKey] : [],
+				);
+				if (fileKeys.length === 0) {
+					showErrorToast({ message: "粘贴图片失败，请重试" });
+					return;
+				}
+				const position = reactFlowInstance.screenToFlowPosition({
+					x: window.innerWidth / 2,
+					y: window.innerHeight / 2,
+				});
+				useFlow.getState().addNode(
+					{
+						type: "imageNode",
+						data: {
+							fileKeys,
+							isUploadGroup: fileKeys.length > 1,
+							groupLabel: fileKeys.length > 1 ? "粘贴组" : undefined,
+						},
+					},
+					position,
+				);
+				const failed = imageFiles.length - fileKeys.length;
+				if (failed > 0) {
+					showErrorToast({
+						message: `已粘贴 ${fileKeys.length} 张图片，另有 ${failed} 张失败`,
+					});
+				}
+			} finally {
+				setIsUploadingDroppedImages(false);
+			}
+		};
+		window.addEventListener("paste", handlePaste);
+		return () => window.removeEventListener("paste", handlePaste);
+	}, [reactFlowInstance]);
 
 	// Restore nodes, edges, and workflow metadata from port-independent disk
 	// storage, with localStorage retained as a fast per-session cache.
@@ -765,13 +884,18 @@ function WorkspaceInner({
 				}}
 				onSelectionChange={onSelectionChange}
 				onNodeDoubleClick={handleNodeDoubleClick}
+				onNodeDragStart={handleNodeDragStart}
+				onNodeDragStop={handleNodeDragStop}
 				onPaneClick={handlePaneClick}
 				onPaneContextMenu={handlePaneContextMenu}
 				onEdgeContextMenu={handleEdgeContextMenu}
 				nodeOrigin={[0.5, 0.5]}
 				onlyRenderVisibleElements
 				elevateNodesOnSelect={false}
-				selectNodesOnDrag={false}
+				selectNodesOnDrag={selectionModeActive}
+				selectionOnDrag={selectionModeActive}
+				selectionMode={SelectionMode.Partial}
+				panOnDrag={selectionModeActive ? [1] : [0, 1]}
 				fitView
 				minZoom={0.02}
 				maxZoom={8}
@@ -786,7 +910,10 @@ function WorkspaceInner({
 				<Background style={{ pointerEvents: "none" }} />
 				<Controls />
 				<Panel position="bottom-center" className="!mb-5 z-10">
-					<SmartIsland />
+					<SmartIsland
+						selectionMode={selectionModeActive}
+						onSelectionModeChange={setSelectionModeActive}
+					/>
 				</Panel>
 			</ReactFlow>
 

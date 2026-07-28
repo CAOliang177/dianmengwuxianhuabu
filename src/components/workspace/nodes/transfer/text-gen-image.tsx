@@ -14,6 +14,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { showErrorToast } from "@/components/ui/error-toast";
 import {
 	type AspectRatio,
 	IMAGE_ASPECT_RATIOS,
@@ -30,6 +31,7 @@ import {
 	readGenerationHistory,
 	withGenerationHistory,
 } from "@/lib/generation-history";
+import { logger } from "@/lib/logger";
 import {
 	getAbiNodeBySlot,
 	resolveAbiOutputMappings,
@@ -70,6 +72,13 @@ const DEFAULT_RATIO =
 	IMAGE_ASPECT_RATIOS.find((ratio) => ratio.value === "1:1") ??
 	IMAGE_ASPECT_RATIOS[0];
 const DEFAULT_TIER = IMAGE_RESOLUTION_TIERS[0];
+const REFERENCE_STYLES = [
+	"border-cyan-400/80 bg-cyan-500/15 text-cyan-600 dark:text-cyan-300",
+	"border-fuchsia-400/80 bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-300",
+	"border-amber-400/80 bg-amber-500/15 text-amber-700 dark:text-amber-300",
+	"border-emerald-400/80 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+	"border-violet-400/80 bg-violet-500/15 text-violet-600 dark:text-violet-300",
+] as const;
 
 function fitDimensionsToTier(
 	dimensions: { width: number; height: number },
@@ -141,7 +150,9 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 		if (!nodeId) return { referenceCount: 0, referenceImages: [] };
 		const sources = edges
 			.filter(
-				(edge) => edge.target === nodeId && edge.targetHandle === "in:images",
+				(edge) =>
+					edge.target === nodeId &&
+					nodeLookup.get(edge.source)?.type === "imageNode",
 			)
 			.map((edge) => nodeLookup.get(edge.source))
 			.filter((node) => Boolean(node));
@@ -154,8 +165,13 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 			? ((data as Record<string, unknown>)
 					.referenceBootstrapFileKeys as string[]).filter(Boolean)
 			: [];
-		const previews =
-			connectedPreviews.length > 0 ? connectedPreviews : bootstrapPreviews;
+		const previews = [
+			...new Set(
+				connectedPreviews.length > 0
+					? connectedPreviews
+					: bootstrapPreviews,
+			),
+		];
 		return {
 			referenceCount: previews.length,
 			referenceImages: previews,
@@ -173,7 +189,11 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 			.getState()
 			.edges.some(
 				(edge) =>
-					edge.target === nodeId && edge.targetHandle === "in:images",
+					edge.target === nodeId &&
+					useFlow
+						.getState()
+						.nodes.find((node) => node.id === edge.source)?.type ===
+						"imageNode",
 			);
 		if (!hasConnectedReference) return;
 		const nextData = { ...currentData };
@@ -215,7 +235,7 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 
 	const insertReferenceToken = useCallback(
 		(index: number) => {
-			const token = `图片${index + 1}`;
+			const token = `@图片${index + 1}`;
 			const textarea = promptRef.current;
 			const currentValue = textarea?.value ?? localText;
 			const start = textarea?.selectionStart ?? currentValue.length;
@@ -359,13 +379,26 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 	const handleTaskUpdate = useCallback(
 		(task: Task) => {
 			if (!nodeId || task.status !== "COMPLETED") return false;
-			const payload = normalizeTaskPayloadData(task.data);
+			const payload = normalizeTaskPayloadData({
+				data: task.data,
+				result: task.result,
+			});
 			const abiNode = getAbiNodeBySlot("image-fusion");
 			const routes = abiNode ? resolveAbiOutputMappings(abiNode) : [];
 			const output = Object.values(computeOutputView(routes, payload)).find(
 				(channel) => channel.nodeType === "imageNode",
 			);
-			if (!output?.values.length) return false;
+			if (!output?.values.length) {
+				logger.error(
+					"[TextGenImageNode] Task completed without a usable image output",
+					{ task, payload, routes },
+				);
+				showErrorToast({
+					message:
+						"任务已完成，但接口没有返回可用图片。请检查该模型的返回格式或稍后重试。",
+				});
+				return true;
+			}
 			const current = useFlow
 				.getState()
 				.nodes.find((node) => node.id === nodeId);
@@ -511,7 +544,7 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 							<div className="mb-2 flex min-h-16 flex-wrap items-start gap-2">
 								{referenceImages.length > 0 ? referenceImages.map((fileKey, index) => (
 									<button key={`${fileKey}:${index}`} type="button"
-										className={`nodrag relative rounded-xl border border-border/70 bg-muted/50 p-0.5 text-left transition hover:-translate-y-0.5 hover:ring-2 hover:ring-primary/60 ${activeReference === index ? "scale-105 ring-2 ring-primary" : ""}`}
+										className={`nodrag relative rounded-xl border bg-muted/50 p-0.5 text-left transition hover:-translate-y-0.5 hover:ring-2 ${REFERENCE_STYLES[index % REFERENCE_STYLES.length]} ${activeReference === index ? "scale-105 ring-2 ring-current" : ""}`}
 										title={`点击引用图片${index + 1}`} onClick={() => insertReferenceToken(index)}>
 										<MediaThumbnail fileKey={fileKey} label={`图片${index + 1}`} type="image" />
 									</button>
@@ -523,6 +556,20 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 							</div>
 
 							<div className="rounded-xl bg-muted/35 px-3 py-1">
+								{referenceImages.length > 0 && (
+									<div className="flex flex-wrap gap-1.5 pt-2">
+										{referenceImages.map((fileKey, index) => (
+											<button
+												key={`reference-token:${fileKey}:${index}`}
+												type="button"
+												className={`nodrag nopan rounded-md border px-2 py-0.5 text-xs font-medium transition hover:brightness-110 ${REFERENCE_STYLES[index % REFERENCE_STYLES.length]}`}
+												onClick={() => insertReferenceToken(index)}
+											>
+												@图片{index + 1}
+											</button>
+										))}
+									</div>
+								)}
 								<NodeTextarea ref={promptRef} rows={2} showCard={false} enableVoiceInput={false}
 									enableFullscreen placeholder="描述想生成或修改的画面，点击参考图可插入图片编号…"
 									className="nodrag nopan nowheel min-h-12 resize-none select-text border-0 bg-transparent px-0 py-2 text-sm shadow-none focus-visible:ring-0" {...form.bind("text")} />

@@ -220,6 +220,33 @@ export function collectHandleValues(
             ? nodes
             : new Map(nodes.map((n) => [n.id, n] as const));
 
+    const edgeMatchesField = (
+        edge: Edge,
+        field: string,
+        resolved: Extract<ResolvedField, { kind: "handle" }>,
+    ) => {
+        const parsed = parseTargetHandleId(edge.targetHandle);
+        if (parsed === field) return true;
+        // An explicitly named different handle must never be reassigned,
+        // whether it is a current field or an invalid/stale identifier.
+        if (parsed) return false;
+
+        // Old/restored edges and a just-dropped edge may have no targetHandle.
+        // If the source modality has exactly one compatible field on this node,
+        // route it deterministically instead of silently losing the reference.
+        const sourceType = lookup.get(edge.source)?.type;
+        if (!sourceType || sourceType !== resolved.nodeType) return false;
+        const compatibleFields = Object.entries(spec.fields).filter(
+            ([, candidate]) =>
+                candidate.kind === "handle" &&
+                candidate.nodeType === sourceType,
+        );
+        return (
+            compatibleFields.length === 1 &&
+            compatibleFields[0]?.[0] === field
+        );
+    };
+
     for (const [field, resolved] of Object.entries(spec.fields)) {
         if (resolved.kind !== "handle") continue;
 
@@ -228,7 +255,7 @@ export function collectHandleValues(
             const values: unknown[] = [];
             for (const edge of edges) {
                 if (edge.target !== targetNodeId) continue;
-                if (parseTargetHandleId(edge.targetHandle) !== field) continue;
+                if (!edgeMatchesField(edge, field, resolved)) continue;
                 const src = lookup.get(edge.source);
                 if (!src) continue;
                 const v = getValueByPath(
@@ -247,7 +274,7 @@ export function collectHandleValues(
         let value: unknown;
         for (const edge of edges) {
             if (edge.target !== targetNodeId) continue;
-            if (parseTargetHandleId(edge.targetHandle) !== field) continue;
+            if (!edgeMatchesField(edge, field, resolved)) continue;
             const src = lookup.get(edge.source);
             if (!src) continue;
             value = getValueByPath(

@@ -21,6 +21,7 @@ import {
     History as HistoryIcon,
     CheckSquare,
     Link,
+    MousePointer2,
     Music,
     Trash2,
     Type,
@@ -69,9 +70,15 @@ interface IconButtonProps {
     icon: React.ComponentType<{ className?: string }>;
     tooltip: string;
     onClick?: () => void;
+    active?: boolean;
 }
 
-function IconButton({ icon: Icon, tooltip, onClick }: IconButtonProps) {
+function IconButton({
+    icon: Icon,
+    tooltip,
+    onClick,
+    active = false,
+}: IconButtonProps) {
     return (
         <Tooltip>
             <TooltipTrigger asChild>
@@ -79,12 +86,15 @@ function IconButton({ icon: Icon, tooltip, onClick }: IconButtonProps) {
                     type="button"
                     className={cn(
                         "w-10 h-10 flex items-center justify-center cursor-pointer rounded-full",
-                        "bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700/50",
+                        active
+                            ? "bg-blue-600 text-white shadow-md hover:bg-blue-500"
+                            : "bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700/50",
                         "transition-colors duration-200",
                         "active:scale-95",
-                        "text-gray-600 dark:text-gray-200",
+                        !active && "text-gray-600 dark:text-gray-200",
                     )}
                     onClick={onClick}
+                    aria-pressed={active}
                 >
                     <Icon className="w-5 h-5" />
                 </button>
@@ -201,7 +211,13 @@ const selector = (state: FlowState) => ({
     setWorkflowDescription: state.setWorkflowDescription,
 });
 
-export default function SmartIsland() {
+export default function SmartIsland({
+    selectionMode,
+    onSelectionModeChange,
+}: {
+    selectionMode: boolean;
+    onSelectionModeChange: (active: boolean) => void;
+}) {
     const {
         nodes,
         edges,
@@ -435,6 +451,21 @@ export default function SmartIsland() {
         </div>
     );
 
+    const selectionControl = (
+        <div className="flex h-12 items-center rounded-2xl border border-gray-200/50 bg-white p-1 shadow-sm backdrop-blur-md dark:border-gray-500/60 dark:bg-zinc-800/90">
+            <IconButton
+                icon={MousePointer2}
+                tooltip={
+                    selectionMode
+                        ? "选取模式：左键拖动框选"
+                        : "开启选取模式"
+                }
+                active={selectionMode}
+                onClick={() => onSelectionModeChange(!selectionMode)}
+            />
+        </div>
+    );
+
     const historyDialog = (
         <>
             <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
@@ -623,6 +654,7 @@ export default function SmartIsland() {
                             onCancel={() => emitTaskCancelRequest(null)}
                         />
                     </div>
+                    {selectionControl}
                     {historyControl}
                     {cinematicControl}
                 </div>
@@ -717,6 +749,7 @@ export default function SmartIsland() {
                 {historyDialog}
                 {cinematicDialog}
                 <div className="flex items-center gap-3">
+                    {selectionControl}
                     {addToolbar}
                     {historyControl}
                     {cinematicControl}
@@ -734,6 +767,7 @@ export default function SmartIsland() {
                 {historyDialog}
                 {cinematicDialog}
                 <div className="flex items-center gap-3">
+                    {selectionControl}
                     {addToolbar}
                     {historyControl}
                     {cinematicControl}
@@ -747,6 +781,7 @@ export default function SmartIsland() {
             {historyDialog}
             {cinematicDialog}
             <div className="flex items-center justify-center gap-3">
+                {selectionControl}
                 <div>{actions}</div>
                 {historyControl}
                 {cinematicControl}

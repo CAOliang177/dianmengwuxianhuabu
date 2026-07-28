@@ -73,6 +73,20 @@ export interface PossibleNode {
     data?: Record<string, unknown>;
 }
 
+interface FlowSnapshot {
+    nodes: Node[];
+    edges: Edge[];
+}
+
+const HISTORY_LIMIT = 50;
+
+function cloneSnapshot(nodes: Node[], edges: Edge[]): FlowSnapshot {
+    return {
+        nodes: structuredClone(nodes),
+        edges: structuredClone(edges),
+    };
+}
+
 export interface FlowState {
     currFlow: { nodes: Node[]; edges: Edge[] };
     nodes: Node[];
@@ -80,6 +94,11 @@ export interface FlowState {
     workflowName: string;
     workflowId: number | null;
     workflowDescription: string;
+    historyPast: FlowSnapshot[];
+    historyFuture: FlowSnapshot[];
+    pushHistory: () => void;
+    undo: () => boolean;
+    redo: () => boolean;
 
     selectedNodes: Node[];
     comboMode: boolean;
@@ -131,10 +150,60 @@ export const useFlow = create<FlowState>((set, get) => ({
     workflowName: "",
     workflowId: null,
     workflowDescription: "",
+    historyPast: [],
+    historyFuture: [],
     // Multi-select compose mode tracking
     comboMode: false,
     comboSelectedIds: new Set<string>(),
     reconnectingEdgeId: null,
+
+    pushHistory: () => {
+        const state = get();
+        const next = [
+            ...state.historyPast,
+            cloneSnapshot(state.nodes, state.edges),
+        ].slice(-HISTORY_LIMIT);
+        set({ historyPast: next, historyFuture: [] });
+    },
+    undo: () => {
+        const state = get();
+        const previous = state.historyPast.at(-1);
+        if (!previous) return false;
+        const current = cloneSnapshot(state.nodes, state.edges);
+        const nodes = structuredClone(previous.nodes);
+        const edges = structuredClone(previous.edges);
+        set({
+            nodes,
+            edges,
+            selectedNodes: [],
+            historyPast: state.historyPast.slice(0, -1),
+            historyFuture: [current, ...state.historyFuture].slice(
+                0,
+                HISTORY_LIMIT,
+            ),
+        });
+        saveCanvasNodes(nodes);
+        saveCanvasEdges(edges);
+        return true;
+    },
+    redo: () => {
+        const state = get();
+        const next = state.historyFuture[0];
+        if (!next) return false;
+        const current = cloneSnapshot(state.nodes, state.edges);
+        const nodes = structuredClone(next.nodes);
+        const edges = structuredClone(next.edges);
+        set({
+            nodes,
+            edges,
+            selectedNodes: [],
+            historyPast: [...state.historyPast, current].slice(-HISTORY_LIMIT),
+            historyFuture: state.historyFuture.slice(1),
+        });
+        saveCanvasNodes(nodes);
+        saveCanvasEdges(edges);
+        return true;
+    },
 
     nodeCreatedCallbacks: new Set(),
     onNodeCreated: (callback) => {
@@ -160,6 +229,16 @@ export const useFlow = create<FlowState>((set, get) => ({
         });
     },
     onNodesChange: (changes) => {
+        if (
+            changes.some(
+                (change) =>
+                    change.type === "add" ||
+                    change.type === "remove" ||
+                    change.type === "replace",
+            )
+        ) {
+            get().pushHistory();
+        }
         const nodes = applyNodeChanges(changes, get().nodes);
         let edges = get().edges;
         const removedIds: string[] = [];
@@ -192,6 +271,9 @@ export const useFlow = create<FlowState>((set, get) => ({
         if (removedIds.length > 0) debouncedSaveEdges(edges);
     },
     onEdgesChange: (changes) => {
+        if (changes.some((change) => change.type !== "select")) {
+            get().pushHistory();
+        }
         const edges = applyEdgeChanges(changes, get().edges);
         set({
             edges: edges,
@@ -202,6 +284,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         }
     },
     onConnect: (connection) => {
+        get().pushHistory();
         const edges = addEdge(
             { ...connection, type: "custom-edge" },
             get().edges,
@@ -236,6 +319,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         debouncedSaveNodes(newNodes);
     },
     addNode: (node: PossibleNode, position?: { x: number; y: number }) => {
+        get().pushHistory();
         const { nodes } = get();
 
         let defaultX = 100;
@@ -280,6 +364,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         return nodeId;
     },
     removeNode: (nodeId: string) => {
+        get().pushHistory();
         const { nodes, edges } = get();
         const newNodes = nodes.filter((node) => node.id !== nodeId);
         const newEdges = edges.filter(
@@ -301,6 +386,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         if (!group || group.type !== "imageNode" || fileKeys.length < 2) {
             return [];
         }
+        get().pushHistory();
 
         const columns = Math.min(3, Math.ceil(Math.sqrt(fileKeys.length)));
         const rows = Math.ceil(fileKeys.length / columns);
@@ -358,6 +444,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         if (!currNode) {
             return [];
         }
+        get().pushHistory();
 
         // Track whether upstream node emits persistent artifacts
         const sourceIsDataNode = isDataNode(currNode.type ?? "");
@@ -491,6 +578,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         return ids;
     },
     compose: ({ type, data }: { type: string; data: unknown }) => {
+        get().pushHistory();
         const { comboSelectedIds, nodes, edges } = get();
         const nodeId = v4();
 

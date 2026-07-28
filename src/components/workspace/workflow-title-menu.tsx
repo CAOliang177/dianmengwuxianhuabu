@@ -1,6 +1,13 @@
 "use client";
 
-import { ChevronDown, FilePlus2, Loader2, Save, Trash2 } from "lucide-react";
+import {
+	ChevronDown,
+	FilePlus2,
+	Loader2,
+	Pencil,
+	Save,
+	Trash2,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
@@ -76,6 +83,9 @@ export function WorkflowTitleMenu() {
 	);
 	const [saving, setSaving] = useState(false);
 	const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+	const [isInlineRenaming, setIsInlineRenaming] = useState(false);
+	const [inlineName, setInlineName] = useState(workflowName);
+	const inlineInputRef = useRef<HTMLInputElement>(null);
 
 	// Dropdown menu hover state
 	const [menuOpen, setMenuOpen] = useState(false);
@@ -100,7 +110,16 @@ export function WorkflowTitleMenu() {
 	// Sync name
 	useEffect(() => {
 		setTempName(workflowName);
-	}, [workflowName]);
+		if (!isInlineRenaming) setInlineName(workflowName);
+	}, [workflowName, isInlineRenaming]);
+
+	useEffect(() => {
+		if (!isInlineRenaming) return;
+		requestAnimationFrame(() => {
+			inlineInputRef.current?.focus();
+			inlineInputRef.current?.select();
+		});
+	}, [isInlineRenaming]);
 
 	useEffect(() => {
 		setTempDescription(workflowDescription || "");
@@ -175,6 +194,7 @@ export function WorkflowTitleMenu() {
 	};
 
 	const confirmClear = () => {
+		useFlow.getState().pushHistory();
 		setNodes([]);
 		setEdges([]);
 		setWorkflowName(tIndex("title"));
@@ -184,6 +204,19 @@ export function WorkflowTitleMenu() {
 		toast.success(t("cleared"));
 	};
 
+	const startInlineRename = () => {
+		setInlineName(workflowName);
+		setMenuOpen(false);
+		setIsInlineRenaming(true);
+	};
+
+	const finishInlineRename = () => {
+		const name = inlineName.trim();
+		if (name && name !== workflowName) setWorkflowName(name);
+		setInlineName(name || workflowName);
+		setIsInlineRenaming(false);
+	};
+
 	return (
 		<>
 			<div
@@ -191,18 +224,48 @@ export function WorkflowTitleMenu() {
 				onMouseEnter={handleMenuMouseEnter}
 				onMouseLeave={handleMenuMouseLeave}
 			>
-				<Button
-					variant="ghost"
-					size="sm"
-					className="gap-2 px-4 h-10 rounded-xl bg-white border border-gray-100 hover:bg-gray-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-all duration-200"
-				>
-					<span className="max-w-[200px] truncate font-medium text-gray-700 dark:text-gray-200">
-						{workflowName}
-					</span>
-					<ChevronDown className="size-4 text-gray-500" />
-				</Button>
+				{isInlineRenaming ? (
+					<div className="flex h-10 items-center gap-1 rounded-xl border border-blue-400/70 bg-white px-2 shadow-lg dark:bg-zinc-800">
+						<Pencil className="h-3.5 w-3.5 text-blue-500" />
+						<Input
+							ref={inlineInputRef}
+							value={inlineName}
+							maxLength={80}
+							onChange={(event) => setInlineName(event.target.value)}
+							onBlur={finishInlineRename}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") finishInlineRename();
+								if (event.key === "Escape") {
+									setInlineName(workflowName);
+									setIsInlineRenaming(false);
+								}
+							}}
+							className="h-7 w-[210px] border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
+							aria-label="画布名称"
+						/>
+					</div>
+				) : (
+					<Button
+						variant="ghost"
+						size="sm"
+						className="gap-2 px-4 h-10 rounded-xl bg-white border border-gray-100 hover:bg-gray-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-all duration-200"
+					>
+						<span
+							className="max-w-[200px] truncate font-medium text-gray-700 hover:text-blue-600 dark:text-gray-200 dark:hover:text-blue-300"
+							title="点击修改画布名称"
+							onClick={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								startInlineRename();
+							}}
+						>
+							{workflowName}
+						</span>
+						<ChevronDown className="size-4 text-gray-500" />
+					</Button>
+				)}
 
-				{menuOpen && (
+				{menuOpen && !isInlineRenaming && (
 					<div className="absolute top-full left-0 mt-1 z-50 w-48 bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-700 overflow-hidden py-1">
 						<div
 							onClick={openSaveDialog}
