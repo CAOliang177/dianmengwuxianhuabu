@@ -22,6 +22,7 @@ import {
 import { logger } from "@/lib/logger";
 import { getTaskStopUrl, getTaskWaitUrl } from "@/lib/task/api-url";
 import { formatStoredTaskErrorForDisplay } from "@/lib/task/error-format";
+import { reconcileCompletedImageTasks } from "@/lib/task/reconcile-image-results";
 import {
     emitSSEConnected,
     emitSSETaskMessage,
@@ -32,6 +33,7 @@ import {
     reportUsageTask,
     trackUsageTask,
 } from "@/lib/usage/usage-telemetry";
+import { useFlow } from "@/hooks/use-flow";
 import type { SSEMessage } from "@/types/sse";
 
 // SSE message shape for the `/api/task/wait` stream
@@ -376,6 +378,26 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                     );
                 }
             });
+            if (handlers.length === 0 && task.status === "COMPLETED") {
+                const flow = useFlow.getState();
+                const reconciled = reconcileCompletedImageTasks(flow.nodes, [
+                    {
+                        id: task.id,
+                        nodeId,
+                        feature: "image-fusion",
+                        status: task.status,
+                        data: task.data,
+                        result: task.result,
+                        createdAt: Date.now(),
+                    },
+                ]);
+                if (reconciled.changed) {
+                    logger.warn(
+                        `[Task Router] Applied durable image fallback for unmounted node ${nodeId}`,
+                    );
+                    flow.setNodes(reconciled.nodes);
+                }
+            }
         } else {
             logger.warn(
                 `[Task Router] No node found for task ${task.id}, storing in global store only`,

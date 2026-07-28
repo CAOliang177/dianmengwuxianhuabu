@@ -702,10 +702,14 @@ export const useFlow = create<FlowState>((set, get) => ({
     setWorkflowName: (name) => {
         set({ workflowName: name });
         const state = get();
-        // Unsaved canvases omit cached titles so localized defaults survive language toggles
-        debouncedSaveWorkflowMeta({
+        saveCanvasMeta({
             id: state.workflowId,
-            name: state.workflowId ? name : "",
+            // A local canvas does not need a server workflow id in order to
+            // own a title. Persist inline renames for local-only canvases too,
+            // otherwise the home-page history keeps the previous name. Title
+            // changes are saved immediately so a quick return to home cannot
+            // hydrate the old disk value over the freshly edited title.
+            name,
             description: state.workflowDescription,
         });
     },

@@ -21,12 +21,13 @@ import {
 import { UpdateButton } from "@/components/workspace/update-button";
 
 const LETTER_COLORS = ["#72a7ff", "#9d8cff", "#63e6be", "#ffd38a", "#ff8fb3", "#89ddff"];
-const RELEASE_VERSION = "0.1.28";
+const RELEASE_VERSION = "0.1.29";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
     return (
-        <span aria-label={text}>
+        <span>
+            <span className="sr-only">{text}</span>
             {Array.from(text).map((letter, index) => (
                 <span
                     key={`${letter}-${index}`}
@@ -51,11 +52,25 @@ export default function Home() {
     useEffect(() => {
         let cancelled = false;
         setHistory(getCanvasHistory());
-        void hydrateCanvasHistoryFromDisk().then((items) => {
-            if (!cancelled) setHistory(items);
-        });
+        const refreshHistory = async () => {
+            for (let attempt = 0; attempt < 4 && !cancelled; attempt += 1) {
+                const items = await hydrateCanvasHistoryFromDisk();
+                if (cancelled) return;
+                if (items.length > 0 || attempt === 3) {
+                    setHistory(items);
+                    return;
+                }
+                await new Promise((resolve) =>
+                    window.setTimeout(resolve, 500 * (attempt + 1)),
+                );
+            }
+        };
+        const handleFocus = () => void refreshHistory();
+        void refreshHistory();
+        window.addEventListener("focus", handleFocus);
         return () => {
             cancelled = true;
+            window.removeEventListener("focus", handleFocus);
         };
     }, []);
 
@@ -232,16 +247,16 @@ export default function Home() {
                                 新版本已准备好，创作操作更顺手
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                本次重点解决画布操作冲突，并提升图片引用和生成结果的稳定性。
+                                本次重点修复生成完成后图片不显示，并增强历史画布的恢复稳定性。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
                     <div className="space-y-3 px-7 py-6 text-sm text-slate-200">
                         {[
-                            "新增选取模式：开启后左键框选，关闭后左键拖动画布，右键专门新建节点。",
-                            "支持 Alt 拖动复制节点、Ctrl+Z 撤回和 Ctrl+Shift+Z 重做。",
-                            "支持直接粘贴截图，裁切新增多种固定比例，@图片引用增加颜色区分。",
-                            "修复连接参考图偶发未参与图生图，以及任务完成后没有图片却不报错的问题。",
+                            "生成期间即使节点移出屏幕，也会继续监听并正确显示生成结果。",
+                            "启动画布时自动核对已完成任务，补回此前完成但没有显示的图片。",
+                            "历史画布读取增加自动重试；画布内改名会立即同步到首页。",
+                            "修复连接多个生成图节点时只显示一张参考图，每条图片连接都会生成对应缩略图与 @图片编号。",
                         ].map((item, index) => (
                             <div
                                 key={item}

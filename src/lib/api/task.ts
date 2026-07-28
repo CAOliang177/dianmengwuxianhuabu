@@ -67,6 +67,10 @@ export async function listTasks(
 ): Promise<ListTasksResponse> {
     return await apiGet<ListTasksResponse>(
         `/api/task/list?page=${page}&pageSize=${pageSize}`,
+        {
+            cache: "no-store",
+            showErrorToast: false,
+        },
     );
 }
 

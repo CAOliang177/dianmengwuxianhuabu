@@ -42,7 +42,9 @@ import { showErrorToast } from "@/components/ui/error-toast";
 import { usePreloadFeatures } from "@/hooks/use-features";
 import type { FlowState } from "@/hooks/use-flow";
 import { useFlow } from "@/hooks/use-flow";
+import { useTaskStore } from "@/hooks/use-task";
 import { useWorkflowRecovery } from "@/hooks/use-workflow-recovery";
+import { listTasks } from "@/lib/api/task";
 import { getPresignedUploadUrl } from "@/lib/api/upload";
 import {
 	canvasStorageKey,
@@ -52,6 +54,7 @@ import {
 	setActiveCanvasId,
 } from "@/lib/canvas-history";
 import { logger } from "@/lib/logger";
+import { reconcileCompletedImageTasks } from "@/lib/task/reconcile-image-results";
 import { isValidFlowConnection } from "@/lib/workflow/connection-rules";
 import { ModeSwitch } from "./mode-switch";
 import SmartIsland from "./smart-island";
@@ -128,6 +131,12 @@ function WorkspaceInner({
 
 	// Separate data and functions to avoid re-renders caused by function reference changes
 	const { nodes, edges } = useFlow(useShallow(selector));
+	const hasActiveCanvasTasks = useTaskStore((state) =>
+		Array.from(state.tasks.values()).some(
+			(task) =>
+				task.status === "PENDING" || task.status === "PROCESSING",
+		),
+	);
 
 	// Get functions directly from the store (function references never change)
 	const onNodesChange = useFlow.getState().onNodesChange;
@@ -816,6 +825,27 @@ function WorkspaceInner({
 					workflowName: meta?.name || tIndex("title"),
 					workflowDescription: meta?.description || "",
 				});
+				void listTasks(1, 200)
+					.then(({ tasks }) => {
+						if (cancelled) return;
+						const flow = useFlow.getState();
+						const reconciled = reconcileCompletedImageTasks(
+							flow.nodes,
+							tasks,
+						);
+						if (reconciled.changed) {
+							logger.warn(
+								"[Workspace] Recovered completed image results that were not applied to their nodes",
+							);
+							flow.setNodes(reconciled.nodes);
+						}
+					})
+					.catch((error) => {
+						logger.debug(
+							"[Workspace] Completed-task reconciliation is not available:",
+							error,
+						);
+					});
 			} catch (e) {
 				logger.error("Failed to restore canvas:", e);
 			}
@@ -838,7 +868,6 @@ function WorkspaceInner({
 	}, [locale, tIndex]);
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: the canvas drop surface must receive native file drag events
 		<div
 			className="relative w-full h-full overflow-hidden [&_.react-flow]:!bg-[#f6f7f9] dark:[&_.react-flow]:!bg-background [&_.react-flow__background]:!pointer-events-none [&_.react-flow__handle]:!z-20 [&_.react-flow__handle]:!pointer-events-auto [&_.react-flow__handle-source]:!h-7 [&_.react-flow__handle-source]:!w-7 [&_.react-flow__handle-source]:!cursor-crosshair [&_.react-flow__handle-source]:!border-[3px] [&_.react-flow__handle-source]:!border-white [&_.react-flow__handle-source]:!bg-amber-500 [&_.react-flow__handle-source]:!shadow-[0_0_0_4px_rgba(245,158,11,.22)] [&_.react-flow__handle-target]:!h-6 [&_.react-flow__handle-target]:!w-6 [&_.react-flow__handle-target]:!cursor-crosshair [&_.react-flow__handle-target]:!border-[3px] [&_.react-flow__handle-target]:!border-white [&_.react-flow__handle-target]:!bg-blue-500"
 			onContextMenuCapture={handlePaneContextMenu}
@@ -890,7 +919,7 @@ function WorkspaceInner({
 				onPaneContextMenu={handlePaneContextMenu}
 				onEdgeContextMenu={handleEdgeContextMenu}
 				nodeOrigin={[0.5, 0.5]}
-				onlyRenderVisibleElements
+				onlyRenderVisibleElements={!hasActiveCanvasTasks}
 				elevateNodesOnSelect={false}
 				selectNodesOnDrag={selectionModeActive}
 				selectionOnDrag={selectionModeActive}

@@ -31,6 +31,7 @@ import {
 	readGenerationHistory,
 	withGenerationHistory,
 } from "@/lib/generation-history";
+import { collectConnectedImageReferences } from "@/lib/image-references";
 import { logger } from "@/lib/logger";
 import {
 	getAbiNodeBySlot,
@@ -40,7 +41,6 @@ import {
 	computeOutputView,
 	normalizeTaskPayloadData,
 } from "@/lib/task/payload";
-import { coerceBaseNodeData } from "@/lib/workflow/flow-node-data";
 import type { TongflowPluginNodeProps } from "@/types/tongflow-flow";
 import { AbiNodeShell } from "../base/abi-node-shell";
 import { AspectRatioPicker } from "../base/aspect-ratio-picker";
@@ -151,16 +151,10 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 
 	const { referenceCount, referenceImages } = useMemo(() => {
 		if (!nodeId) return { referenceCount: 0, referenceImages: [] };
-		const sources = edges
-			.filter(
-				(edge) =>
-					edge.target === nodeId &&
-					nodeLookup.get(edge.source)?.type === "imageNode",
-			)
-			.map((edge) => nodeLookup.get(edge.source))
-			.filter((node) => Boolean(node));
-		const connectedPreviews = sources.flatMap(
-			(node) => coerceBaseNodeData(node?.data).fileKeys ?? [],
+		const connectedPreviews = collectConnectedImageReferences(
+			nodeId,
+			edges,
+			(sourceId) => nodeLookup.get(sourceId),
 		);
 		const bootstrapPreviews = Array.isArray(
 			(data as Record<string, unknown>).referenceBootstrapFileKeys,
@@ -170,13 +164,10 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 						.referenceBootstrapFileKeys as string[]
 				).filter(Boolean)
 			: [];
-		const previews = [
-			...new Set(
-				connectedPreviews.length > 0
-					? connectedPreviews
-					: bootstrapPreviews,
-			),
-		];
+		const previews =
+			connectedPreviews.length > 0
+				? connectedPreviews
+				: bootstrapPreviews;
 		return {
 			referenceCount: previews.length,
 			referenceImages: previews,
@@ -190,16 +181,14 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 			.nodes.find((node) => node.id === nodeId);
 		const currentData = (current?.data ?? {}) as Record<string, unknown>;
 		if (!("referenceBootstrapFileKeys" in currentData)) return;
-		const hasConnectedReference = useFlow
-			.getState()
-			.edges.some(
-				(edge) =>
-					edge.target === nodeId &&
-					useFlow
-						.getState()
-						.nodes.find((node) => node.id === edge.source)?.type ===
-						"imageNode",
-			);
+		const flow = useFlow.getState();
+		const nodeMap = new Map(flow.nodes.map((node) => [node.id, node]));
+		const hasConnectedReference =
+			collectConnectedImageReferences(
+				nodeId,
+				flow.edges,
+				(sourceId) => nodeMap.get(sourceId),
+			).length > 0;
 		if (!hasConnectedReference) return;
 		const nextData = { ...currentData };
 		delete nextData.referenceBootstrapFileKeys;
