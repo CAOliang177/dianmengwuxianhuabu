@@ -133,6 +133,7 @@ export interface FlowState {
         position?: { x: number; y: number },
     ) => string;
     removeNode: (nodeId: string) => void;
+    removeEdges: (edgeIds: string[]) => void;
     /** Dissolve a multi-image upload group into standalone image nodes. */
     ungroupImageNode: (nodeId: string) => string[];
     // Node-created listeners
@@ -375,6 +376,16 @@ export const useFlow = create<FlowState>((set, get) => ({
             edges: newEdges,
         });
         saveCanvasNodes(newNodes);
+        saveCanvasEdges(newEdges);
+    },
+    removeEdges: (edgeIds: string[]) => {
+        if (edgeIds.length === 0) return;
+        const idSet = new Set(edgeIds);
+        const { edges } = get();
+        const newEdges = edges.filter((edge) => !idSet.has(edge.id));
+        if (newEdges.length === edges.length) return;
+        get().pushHistory();
+        set({ edges: newEdges });
         saveCanvasEdges(newEdges);
     },
     ungroupImageNode: (nodeId: string) => {

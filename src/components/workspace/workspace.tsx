@@ -196,8 +196,7 @@ function WorkspaceInner({
 
 	const confirmDeleteEdge = useCallback(() => {
 		if (!pendingDeleteEdgeId) return;
-		const { edges, setEdges } = useFlow.getState();
-		setEdges(edges.filter((e) => e.id !== pendingDeleteEdgeId));
+		useFlow.getState().removeEdges([pendingDeleteEdgeId]);
 		setPendingDeleteEdgeId(null);
 	}, [pendingDeleteEdgeId]);
 
@@ -345,9 +344,7 @@ function WorkspaceInner({
 	);
 
 	const deleteEdge = useCallback((edgeId: string) => {
-		const state = useFlow.getState();
-		state.pushHistory();
-		state.setEdges(state.edges.filter((edge) => edge.id !== edgeId));
+		useFlow.getState().removeEdges([edgeId]);
 		setEdgeContextMenu(null);
 	}, []);
 
@@ -709,9 +706,7 @@ function WorkspaceInner({
 					state.edges.filter((edge) => edge.selected).map((edge) => edge.id),
 				);
 				if (selectedEdgeIds.size > 0) {
-					state.setEdges(
-						state.edges.filter((edge) => !selectedEdgeIds.has(edge.id)),
-					);
+					state.removeEdges(Array.from(selectedEdgeIds));
 					setEdgeContextMenu(null);
 					e.preventDefault();
 					return;

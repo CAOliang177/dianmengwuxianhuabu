@@ -244,14 +244,11 @@ export const NodeHeaderMenuAction = forwardRef<
         // Delete this node and all descendants
         const handleDeleteNodeAndChildren = useCallback(() => {
             if (!id) return;
-            const {
-                edges: curEdges,
-                nodes,
-                setNodes,
-                setEdges,
-            } = useFlow.getState();
+            const state = useFlow.getState();
+            const { edges: curEdges, nodes, setNodes, setEdges } = state;
             const descendants = getDescendantNodeIds(id, curEdges);
             const toRemove = new Set([id, ...descendants]);
+            state.pushHistory();
             setNodes(nodes.filter((node) => !toRemove.has(node.id)));
             setEdges(
                 curEdges.filter(
@@ -266,13 +263,10 @@ export const NodeHeaderMenuAction = forwardRef<
         // Delete only descendants
         const handleDeleteChildren = useCallback(() => {
             if (!id) return;
-            const {
-                edges: curEdges,
-                nodes,
-                setNodes,
-                setEdges,
-            } = useFlow.getState();
+            const state = useFlow.getState();
+            const { edges: curEdges, nodes, setNodes, setEdges } = state;
             const descendants = getDescendantNodeIds(id, curEdges);
+            state.pushHistory();
             setNodes(nodes.filter((node) => !descendants.has(node.id)));
             setEdges(
                 curEdges.filter(

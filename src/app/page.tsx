@@ -21,7 +21,7 @@ import {
 import { UpdateButton } from "@/components/workspace/update-button";
 
 const LETTER_COLORS = ["#72a7ff", "#9d8cff", "#63e6be", "#ffd38a", "#ff8fb3", "#89ddff"];
-const RELEASE_VERSION = "0.1.29";
+const RELEASE_VERSION = "0.1.30";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -244,19 +244,20 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                新版本已准备好，创作操作更顺手
+                                连线删除更稳定，生成与历史恢复更可靠
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                本次重点修复生成完成后图片不显示，并增强历史画布的恢复稳定性。
+                                0.1.30 统一优化节点与连线删除，同时包含生成结果、历史画布和多参考图修复。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
                     <div className="space-y-3 px-7 py-6 text-sm text-slate-200">
                         {[
-                            "生成期间即使节点移出屏幕，也会继续监听并正确显示生成结果。",
-                            "启动画布时自动核对已完成任务，补回此前完成但没有显示的图片。",
-                            "历史画布读取增加自动重试；画布内改名会立即同步到首页。",
-                            "修复连接多个生成图节点时只显示一张参考图，每条图片连接都会生成对应缩略图与 @图片编号。",
+                            "连接线剪刀固定在线段中点，扩大悬停与点击区域，移除缩放跳动，点击更稳定。",
+                            "剪刀、右键菜单和 Delete 键统一删除逻辑；删错连线可用 Ctrl+Z 撤回。",
+                            "删除节点会同步清理相关连线，删除节点及下游节点同样支持撤回。",
+                            "修复生成完成后图片不显示：离屏节点继续接收结果，重进画布自动补回遗漏图片。",
+                            "历史画布增加读取重试，画布内改名立即同步首页；多个生成图连接会完整显示全部参考图。",
                         ].map((item, index) => (
                             <div
                                 key={item}

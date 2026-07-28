@@ -125,7 +125,7 @@ const CustomEdge = ({
 		hideTimerRef.current = setTimeout(() => {
 			setHovered(false);
 			hideTimerRef.current = null;
-		}, 250);
+		}, 650);
 	}, []);
 
 	useEffect(
@@ -136,8 +136,7 @@ const CustomEdge = ({
 	);
 
 	const cutConnection = useCallback(() => {
-		const { edges, setEdges } = useFlow.getState();
-		setEdges(edges.filter((edge) => edge.id !== id));
+		useFlow.getState().removeEdges([id]);
 	}, [id]);
 
 	return (
@@ -146,14 +145,14 @@ const CustomEdge = ({
 				id={id}
 				path={edgePath}
 				style={edgeStyle}
-				interactionWidth={32}
+				interactionWidth={44}
 			/>
 			{/* biome-ignore lint/a11y/useSemanticElements: an SVG edge hit area cannot be represented by an HTML button */}
 			<path
 				d={edgePath}
 				fill="none"
 				stroke="transparent"
-				strokeWidth={32}
+				strokeWidth={44}
 				pointerEvents="stroke"
 				role="button"
 				tabIndex={0}
@@ -175,30 +174,34 @@ const CustomEdge = ({
 			/>
 			{controlsVisible && (
 				<EdgeLabelRenderer>
-					<button
-						type="button"
-						aria-label="剪断连接线"
-						title="剪断连接线"
-						className="nodrag nopan absolute flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-red-500 text-white shadow-lg transition hover:scale-110 hover:bg-red-600"
+					<div
+						className="nodrag nopan absolute flex h-16 w-16 items-center justify-center"
 						style={{
 							transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
 							pointerEvents: "all",
 							zIndex: 40,
 						}}
-						onMouseEnter={cancelHide}
-						onMouseLeave={scheduleHide}
-						onMouseDown={(event) => {
-							event.preventDefault();
-							event.stopPropagation();
-						}}
-						onClick={(event) => {
-							event.preventDefault();
-							event.stopPropagation();
-							cutConnection();
-						}}
+						onPointerEnter={cancelHide}
+						onPointerLeave={scheduleHide}
 					>
-						<Scissors className="h-4 w-4" />
-					</button>
+						<button
+							type="button"
+							aria-label="剪断连接线"
+							title="点击删除连接线"
+							className="nodrag nopan flex h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-red-500 text-white shadow-[0_6px_18px_rgba(220,38,38,.35)] transition-colors hover:bg-red-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-300/60"
+							onPointerDown={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+							}}
+							onClick={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								cutConnection();
+							}}
+						>
+							<Scissors className="h-5 w-5" />
+						</button>
+					</div>
 				</EdgeLabelRenderer>
 			)}
 			{controlsVisible && options.length >= 2 && (
@@ -206,7 +209,7 @@ const CustomEdge = ({
 					<div
 						className="nodrag nopan absolute"
 						style={{
-							transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + 30}px)`,
+							transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + 46}px)`,
 							pointerEvents: "all",
 						}}
 					>
