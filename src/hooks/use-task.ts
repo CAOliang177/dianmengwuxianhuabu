@@ -13,9 +13,15 @@ import {
     type SSEStatusType,
     TaskStatus,
 } from "@/constants/task-status";
-import { createTask as apiCreateTask, updateTaskStatus } from "@/lib/api/task";
+import {
+    createTask as apiCreateTask,
+    getTask as apiGetTask,
+    type Task as PersistedTask,
+    updateTaskStatus,
+} from "@/lib/api/task";
 import { logger } from "@/lib/logger";
 import { getTaskStopUrl, getTaskWaitUrl } from "@/lib/task/api-url";
+import { formatStoredTaskErrorForDisplay } from "@/lib/task/error-format";
 import {
     emitSSEConnected,
     emitSSETaskMessage,
@@ -62,6 +68,48 @@ export interface Task {
     result?: unknown;
     error?: string;
     nodeId?: string; // Linked node id
+}
+
+function recoverableTerminalTask(
+    persisted: PersistedTask,
+    fallbackNodeId?: string,
+): Task | null {
+    const status = persisted.status.toLowerCase();
+    if (
+        status !== "completed" &&
+        status !== "failed" &&
+        status !== "cancelled"
+    ) {
+        return null;
+    }
+    const taskStatus: Task["status"] =
+        status === "completed"
+            ? "COMPLETED"
+            : status === "failed"
+              ? "FAILED"
+              : "CANCELLED";
+    const resultData =
+        persisted.result &&
+        typeof persisted.result === "object" &&
+        !Array.isArray(persisted.result)
+            ? (persisted.result as Record<string, unknown>)
+            : undefined;
+    const errorText = formatStoredTaskErrorForDisplay(persisted.error);
+    return {
+        id: persisted.id,
+        status: taskStatus,
+        progress: persisted.progress ?? 0,
+        data:
+            taskStatus === "FAILED"
+                ? {
+                      message: errorText || "任务执行失败",
+                      error: errorText || "任务执行失败",
+                  }
+                : resultData,
+        result: persisted.result,
+        error: errorText || undefined,
+        nodeId: persisted.nodeId || fallbackNodeId,
+    };
 }
 
 // Node handler map: taskId -> nodeId -> handler
@@ -354,6 +402,7 @@ export function useTaskSubscription(
     const eventSourceRef = useRef<EventSource | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const reconnectAttemptsRef = useRef(0);
+    const terminalDeliveredRef = useRef(false);
     const maxRetries = options?.maxRetries ?? SSE_DEFAULT_MAX_RETRIES;
     const baseRetryDelay = options?.retryDelay ?? SSE_DEFAULT_RETRY_DELAY;
 
@@ -364,8 +413,71 @@ export function useTaskSubscription(
         }
 
         let isSubscribed = true;
+        let isMounted = true;
+        let recoveryTimer: ReturnType<typeof setInterval> | null = null;
+        terminalDeliveredRef.current = false;
 
-        const connect = () => {
+        const stopRecovery = () => {
+            if (recoveryTimer != null) {
+                clearInterval(recoveryTimer);
+                recoveryTimer = null;
+            }
+        };
+
+        const recoverPersistedTerminalTask = async () => {
+            if (!isMounted || terminalDeliveredRef.current) return;
+            try {
+                const { task: persisted } = await apiGetTask(taskId);
+                const internalTask = recoverableTerminalTask(
+                    persisted,
+                    useTaskStore.getState().getTaskNodeId(persisted.id),
+                );
+                if (!internalTask) return;
+
+                terminalDeliveredRef.current = true;
+                stopRecovery();
+                logger.warn(
+                    `[Task Recovery] Recovered terminal task ${taskId} (${internalTask.status}) from persistent storage after missing SSE completion`,
+                );
+                emitTaskProgressFromSSE({
+                    id: internalTask.id,
+                    status:
+                        internalTask.status === "COMPLETED"
+                            ? TaskStatus.COMPLETED
+                            : internalTask.status === "FAILED"
+                              ? TaskStatus.FAILED
+                              : TaskStatus.CANCELLED,
+                    nodeId: internalTask.nodeId,
+                    data: internalTask.data,
+                    progress: internalTask.progress,
+                });
+                setTask(internalTask.id, internalTask);
+                reportUsageTask(internalTask);
+                routeTaskToNode(internalTask);
+                options?.onTaskUpdate?.(internalTask);
+
+                if (internalTask.status === "COMPLETED") {
+                    toast.success(t("taskCompleted"), { duration: 2000 });
+                }
+
+                isSubscribed = false;
+                eventSourceRef.current?.close();
+                eventSourceRef.current = null;
+                if (reconnectTimeoutRef.current) {
+                    clearTimeout(reconnectTimeoutRef.current);
+                    reconnectTimeoutRef.current = null;
+                }
+                setStatus("disconnected");
+                options?.onStatusChange?.("disconnected");
+            } catch (error) {
+                logger.debug(
+                    `[Task Recovery] Snapshot not ready for ${taskId}:`,
+                    error,
+                );
+            }
+        };
+
+        const connect = (reconnect = false) => {
             if (!isSubscribed) return;
 
             try {
@@ -376,7 +488,9 @@ export function useTaskSubscription(
                 );
 
                 // Open SSE connection
-                const eventSource = new EventSource(getTaskWaitUrl(taskId));
+                const eventSource = new EventSource(
+                    getTaskWaitUrl(taskId, reconnect),
+                );
                 eventSourceRef.current = eventSource;
 
                 eventSource.onopen = () => {
@@ -402,6 +516,11 @@ export function useTaskSubscription(
                         const taskStatus = mapSSEStatusToTaskStatus(
                             message.status,
                         );
+                        if (isTerminalStatus(message.status)) {
+                            if (terminalDeliveredRef.current) return;
+                            terminalDeliveredRef.current = true;
+                            stopRecovery();
+                        }
 
                         const msgNodeId = message.nodeId;
 
@@ -527,7 +646,7 @@ export function useTaskSubscription(
 
                         reconnectTimeoutRef.current = setTimeout(() => {
                             if (isSubscribed) {
-                                connect();
+                                connect(true);
                             }
                         }, delay);
                     } else {
@@ -556,10 +675,19 @@ export function useTaskSubscription(
         };
 
         connect();
+        recoveryTimer = setInterval(() => {
+            void recoverPersistedTerminalTask();
+        }, 2500);
+        const firstRecovery = setTimeout(() => {
+            void recoverPersistedTerminalTask();
+        }, 1500);
 
         // Teardown
         return () => {
+            isMounted = false;
             isSubscribed = false;
+            clearTimeout(firstRecovery);
+            stopRecovery();
             if (eventSourceRef.current) {
                 eventSourceRef.current.close();
                 eventSourceRef.current = null;
@@ -665,6 +793,8 @@ export function useBatchTaskManager(
     const reconnectTimeoutsRef = useRef<
         Map<string, ReturnType<typeof setTimeout>>
     >(new Map());
+    const recoveredTerminalTasksRef = useRef<Set<string>>(new Set());
+    const recoveryRequestsRef = useRef<Set<string>>(new Set());
 
     const createBatchTasks = useCallback(
         async (taskConfigs: TaskCreationConfig[]) => {
@@ -704,8 +834,10 @@ export function useBatchTaskManager(
                     trackTaskToNode(taskId, taskConfig.nodeId);
 
                     // Per-task SSE (with backoff reconnect)
-                    const connectTaskSSE = (tid: string) => {
-                        const es = new EventSource(getTaskWaitUrl(tid));
+                    const connectTaskSSE = (tid: string, reconnect = false) => {
+                        const es = new EventSource(
+                            getTaskWaitUrl(tid, reconnect),
+                        );
 
                         es.onopen = () => {
                             logger.debug(
@@ -765,6 +897,8 @@ export function useBatchTaskManager(
                                 }
 
                                 if (isTerminalStatus(message.status)) {
+                                    recoveredTerminalTasksRef.current.add(tid);
+                                    toast.dismiss(`task-recovery:${tid}`);
                                     reportUsageTask(internalTask);
                                     updateTaskStatus({
                                         taskId: message.id,
@@ -823,10 +957,29 @@ export function useBatchTaskManager(
                             es.close();
                             eventSourcesRef.current.delete(tid);
                             activeConnectionsRef.current.delete(tid);
-                            if (activeConnectionsRef.current.size === 0) {
+                            const stored = useTaskStore.getState().getTask(tid);
+                            if (
+                                activeConnectionsRef.current.size === 0 &&
+                                stored &&
+                                (stored.status === "COMPLETED" ||
+                                    stored.status === "FAILED" ||
+                                    stored.status === "CANCELLED")
+                            ) {
                                 setIsLoading(false);
                                 logger.debug(
                                     "[SSE Batch] All connections closed, loading stopped",
+                                );
+                            } else if (
+                                !stored ||
+                                stored.status === "PENDING" ||
+                                stored.status === "PROCESSING"
+                            ) {
+                                logger.warn(
+                                    `[SSE Batch] Stream closed before terminal event for ${tid}; waiting for persistent recovery`,
+                                );
+                                toast.loading(
+                                    "生成连接短暂中断，正在自动恢复结果…",
+                                    { id: `task-recovery:${tid}` },
                                 );
                             }
                         });
@@ -850,7 +1003,7 @@ export function useBatchTaskManager(
                                 );
                                 const timeoutId = setTimeout(() => {
                                     reconnectTimeoutsRef.current.delete(tid);
-                                    connectTaskSSE(tid);
+                                    connectTaskSSE(tid, true);
                                 }, delay);
                                 reconnectTimeoutsRef.current.set(
                                     tid,
@@ -861,9 +1014,6 @@ export function useBatchTaskManager(
                                     `[SSE Batch] Max reconnection attempts reached for task ${tid}`,
                                 );
                                 activeConnectionsRef.current.delete(tid);
-                                if (activeConnectionsRef.current.size === 0) {
-                                    setIsLoading(false);
-                                }
                                 if (options?.onError) {
                                     options.onError(
                                         new Error(
@@ -883,6 +1033,10 @@ export function useBatchTaskManager(
                 });
 
                 const createdTaskIds = await Promise.all(createPromises);
+                createdTaskIds.forEach((id) => {
+                    recoveredTerminalTasksRef.current.delete(id);
+                    recoveryRequestsRef.current.delete(id);
+                });
                 setCurrentBatchTaskIds(new Set(createdTaskIds));
 
                 return createdTaskIds;
@@ -896,6 +1050,115 @@ export function useBatchTaskManager(
         },
         [setTask, trackTaskToNode, routeTaskToNode, options],
     );
+
+    // SSE is fast but not durable: the final packet can be lost on a weak
+    // client connection. Poll the persisted task snapshots in parallel and
+    // route any terminal result that has not reached the node yet.
+    useEffect(() => {
+        if (currentBatchTaskIds.size === 0) return;
+        let mounted = true;
+
+        const recover = async () => {
+            for (const taskId of currentBatchTaskIds) {
+                if (
+                    recoveredTerminalTasksRef.current.has(taskId) ||
+                    recoveryRequestsRef.current.has(taskId)
+                ) {
+                    continue;
+                }
+                const existing = useTaskStore.getState().getTask(taskId);
+                if (
+                    existing &&
+                    (existing.status === "COMPLETED" ||
+                        existing.status === "FAILED" ||
+                        existing.status === "CANCELLED")
+                ) {
+                    recoveredTerminalTasksRef.current.add(taskId);
+                    continue;
+                }
+
+                recoveryRequestsRef.current.add(taskId);
+                try {
+                    const { task: persisted } = await apiGetTask(taskId);
+                    if (!mounted) return;
+                    const recovered = recoverableTerminalTask(
+                        persisted,
+                        useTaskStore.getState().getTaskNodeId(taskId),
+                    );
+                    if (
+                        !recovered ||
+                        recoveredTerminalTasksRef.current.has(taskId)
+                    ) {
+                        continue;
+                    }
+
+                    recoveredTerminalTasksRef.current.add(taskId);
+                    toast.dismiss(`task-recovery:${taskId}`);
+                    logger.warn(
+                        `[Batch Task Recovery] Recovered ${taskId} (${recovered.status}) from persistent storage`,
+                    );
+                    emitTaskProgressFromSSE({
+                        id: recovered.id,
+                        status:
+                            recovered.status === "COMPLETED"
+                                ? TaskStatus.COMPLETED
+                                : recovered.status === "FAILED"
+                                  ? TaskStatus.FAILED
+                                  : TaskStatus.CANCELLED,
+                        nodeId: recovered.nodeId,
+                        data: recovered.data,
+                        progress: recovered.progress,
+                    });
+                    setTask(recovered.id, recovered);
+                    reportUsageTask(recovered);
+                    routeTaskToNode(recovered);
+                    options?.onTaskUpdate?.(recovered);
+                    if (recovered.status === "COMPLETED") {
+                        toast.success(t("taskCompleted"), {
+                            duration: 2000,
+                        });
+                    }
+
+                    const source = eventSourcesRef.current.get(taskId);
+                    source?.close();
+                    eventSourcesRef.current.delete(taskId);
+                    activeConnectionsRef.current.delete(taskId);
+                    const reconnect = reconnectTimeoutsRef.current.get(taskId);
+                    if (reconnect != null) {
+                        clearTimeout(reconnect);
+                        reconnectTimeoutsRef.current.delete(taskId);
+                    }
+                    reconnectAttemptsRef.current.set(
+                        taskId,
+                        Number.POSITIVE_INFINITY,
+                    );
+                } catch (error) {
+                    logger.debug(
+                        `[Batch Task Recovery] Snapshot not ready for ${taskId}:`,
+                        error,
+                    );
+                } finally {
+                    recoveryRequestsRef.current.delete(taskId);
+                }
+            }
+
+            if (
+                [...currentBatchTaskIds].every((id) =>
+                    recoveredTerminalTasksRef.current.has(id),
+                )
+            ) {
+                setIsLoading(false);
+            }
+        };
+
+        const first = setTimeout(() => void recover(), 1500);
+        const interval = setInterval(() => void recover(), 2500);
+        return () => {
+            mounted = false;
+            clearTimeout(first);
+            clearInterval(interval);
+        };
+    }, [currentBatchTaskIds, options, routeTaskToNode, setTask, t]);
 
     // Notify when entire batch settles
     useEffect(() => {
@@ -918,8 +1181,8 @@ export function useBatchTaskManager(
                 config.onProgress(completed.length, totalTasks);
             }
 
-            if (completed.length === totalTasks && config?.onBatchComplete) {
-                config.onBatchComplete(completed);
+            if (completed.length === totalTasks) {
+                config?.onBatchComplete?.(completed);
                 setCurrentBatchTaskIds(new Set());
             }
         }, 500);
@@ -983,6 +1246,7 @@ export function useBatchTaskManager(
             );
             // Synthesize toast events if SSE is silent
             for (const taskId of taskIds) {
+                toast.dismiss(`task-recovery:${taskId}`);
                 emitSSETaskMessage({
                     id: taskId,
                     status: TaskStatus.CANCELLED,
@@ -1042,6 +1306,8 @@ export function useBatchTaskManager(
             reconnectTimeoutsRef.current.forEach(clearTimeout);
             reconnectTimeoutsRef.current.clear();
             reconnectAttemptsRef.current.clear();
+            recoveredTerminalTasksRef.current.clear();
+            recoveryRequestsRef.current.clear();
         };
     }, []);
 

@@ -44,6 +44,20 @@ export interface ListTasksResponse {
     tasks: Task[];
 }
 
+export interface GetTaskResponse {
+    task: Task;
+}
+
+export async function getTask(taskId: string): Promise<GetTaskResponse> {
+    return await apiGet<GetTaskResponse>(
+        `/api/task/${encodeURIComponent(taskId)}`,
+        {
+            cache: "no-store",
+            showErrorToast: false,
+        },
+    );
+}
+
 /**
  * Get task list
  */

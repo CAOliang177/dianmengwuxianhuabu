@@ -21,7 +21,7 @@ import {
 import { UpdateButton } from "@/components/workspace/update-button";
 
 const LETTER_COLORS = ["#72a7ff", "#9d8cff", "#63e6be", "#ffd38a", "#ff8fb3", "#89ddff"];
-const RELEASE_VERSION = "0.1.27";
+const RELEASE_VERSION = "0.1.28";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {

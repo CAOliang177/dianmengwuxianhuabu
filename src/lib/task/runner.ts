@@ -9,10 +9,16 @@ import { eq } from "drizzle-orm";
 import { TaskStatus, WorkflowStatus } from "@/constants/task-status";
 import { getDb, tasks, workflows } from "@/db";
 import { ABI_NODES, type NodeSlot } from "@/generated/abi";
+import { readUploadFileByFileKey } from "@/lib/file/file-utils";
 import { logger } from "@/lib/logger";
 import { executePlugin } from "@/lib/plugin-executor/execute";
 import { prepareAssetInput } from "@/lib/plugin-executor/prepare-asset-input.server";
+import {
+    getAbiNodeBySlot,
+    resolveAbiOutputMappings,
+} from "@/lib/schema/tongflow-abi";
 import { serializeTaskErrorForDb } from "@/lib/task/error-envelope";
+import { computeOutputView } from "@/lib/task/payload";
 import { notifyTask, registerTask, removeTask } from "./emitter";
 import { executeWorkflowViaEngine } from "./engine-delegate.server";
 
@@ -194,6 +200,38 @@ export async function executeTask(taskId: string): Promise<void> {
             throw new Error("Handler returned no result");
         }
 
+        if (taskData.nodeSlot === "image-fusion" && result.success !== false) {
+            const abiNode = getAbiNodeBySlot(taskData.nodeSlot);
+            const routes = abiNode ? resolveAbiOutputMappings(abiNode) : [];
+            const imageOutput = Object.values(
+                computeOutputView(routes, result as Record<string, unknown>),
+            ).find((channel) => channel.nodeType === "imageNode");
+            if (!imageOutput?.values.length) {
+                logger.error(
+                    `[TaskRunner] task=${taskId} image plugin reported success without image output; keys=${Object.keys(result).join(",")}`,
+                );
+                throw new Error(
+                    "接口返回了成功状态，但没有返回可用图片，请检查模型渠道或稍后重试",
+                );
+            }
+            for (const fileKey of imageOutput.values) {
+                try {
+                    const imageBytes = await readUploadFileByFileKey(fileKey);
+                    if (imageBytes.length === 0) {
+                        throw new Error("empty image file");
+                    }
+                } catch (error) {
+                    logger.error(
+                        `[TaskRunner] task=${taskId} image result is unreadable; fileKey=${fileKey}`,
+                        error,
+                    );
+                    throw new Error(
+                        "图片生成接口已经返回结果，但结果文件未能保存或读取，请重试；若持续出现，请检查磁盘空间和安全软件拦截",
+                    );
+                }
+            }
+        }
+
         // Emit completion payloads
         if (result.success === false) {
             const rec = result as Record<string, unknown>;
@@ -205,12 +243,6 @@ export async function executeTask(taskId: string): Promise<void> {
             logger.info(
                 `[TaskRunner] task=${taskId} plugin returned success=false: ${failMsg}`,
             );
-            notifyTask(
-                taskId,
-                TaskStatus.FAILED,
-                result as Record<string, unknown>,
-                taskData.nodeId,
-            );
             await db
                 .update(tasks)
                 .set({
@@ -218,23 +250,30 @@ export async function executeTask(taskId: string): Promise<void> {
                     error: serializeTaskErrorForDb({ message: failMsg }),
                 })
                 .where(eq(tasks.id, taskId));
+            notifyTask(
+                taskId,
+                TaskStatus.FAILED,
+                result as Record<string, unknown>,
+                taskData.nodeId,
+            );
         } else {
             logger.info(
                 `[TaskRunner] task=${taskId} plugin returned success=true`,
             );
+            await db
+                .update(tasks)
+                .set({
+                    status: "completed",
+                    progress: 100,
+                    result: JSON.stringify(result),
+                })
+                .where(eq(tasks.id, taskId));
             notifyTask(
                 taskId,
                 TaskStatus.COMPLETED,
                 result as Record<string, unknown>,
                 taskData.nodeId,
             );
-            await db
-                .update(tasks)
-                .set({
-                    status: "completed",
-                    result: JSON.stringify(result),
-                })
-                .where(eq(tasks.id, taskId));
         }
     } catch (error) {
         if (controller.signal.aborted) return;
@@ -245,6 +284,14 @@ export async function executeTask(taskId: string): Promise<void> {
             error instanceof Error && error.stack ? error.stack : errorMsg;
         logger.error(`[TaskRunner] Task ${taskId} failed:\n${errorStack}`);
 
+        const db = await getDb();
+        await db
+            .update(tasks)
+            .set({
+                status: "failed",
+                error: serializeTaskErrorForDb({ message: errorMsg }),
+            })
+            .where(eq(tasks.id, taskId));
         notifyTask(
             taskId,
             TaskStatus.FAILED,
@@ -254,15 +301,6 @@ export async function executeTask(taskId: string): Promise<void> {
             },
             taskData.nodeId,
         );
-
-        const db = await getDb();
-        await db
-            .update(tasks)
-            .set({
-                status: "failed",
-                error: serializeTaskErrorForDb({ message: errorMsg }),
-            })
-            .where(eq(tasks.id, taskId));
     } finally {
         removeTask(taskId);
     }

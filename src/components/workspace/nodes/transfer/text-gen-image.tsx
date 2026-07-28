@@ -89,7 +89,10 @@ function fitDimensionsToTier(
 	const maxSide = tier.value === "4k" ? 3840 : 1024 * tier.scale;
 	let fittedWidth = Math.sqrt(pixelBudget * ratio);
 	let fittedHeight = Math.sqrt(pixelBudget / ratio);
-	const limitScale = Math.min(1, maxSide / Math.max(fittedWidth, fittedHeight));
+	const limitScale = Math.min(
+		1,
+		maxSide / Math.max(fittedWidth, fittedHeight),
+	);
 	fittedWidth *= limitScale;
 	fittedHeight *= limitScale;
 	const snap = (value: number) => Math.max(16, Math.round(value / 16) * 16);
@@ -162,8 +165,10 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 		const bootstrapPreviews = Array.isArray(
 			(data as Record<string, unknown>).referenceBootstrapFileKeys,
 		)
-			? ((data as Record<string, unknown>)
-					.referenceBootstrapFileKeys as string[]).filter(Boolean)
+			? (
+					(data as Record<string, unknown>)
+						.referenceBootstrapFileKeys as string[]
+				).filter(Boolean)
 			: [];
 		const previews = [
 			...new Set(
@@ -258,7 +263,8 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 		},
 		[form, localText],
 	);
-	const width = (form.state.width as number | undefined) ?? DEFAULT_RATIO.width;
+	const width =
+		(form.state.width as number | undefined) ?? DEFAULT_RATIO.width;
 	const height =
 		(form.state.height as number | undefined) ?? DEFAULT_RATIO.height;
 
@@ -385,9 +391,9 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 			});
 			const abiNode = getAbiNodeBySlot("image-fusion");
 			const routes = abiNode ? resolveAbiOutputMappings(abiNode) : [];
-			const output = Object.values(computeOutputView(routes, payload)).find(
-				(channel) => channel.nodeType === "imageNode",
-			);
+			const output = Object.values(
+				computeOutputView(routes, payload),
+			).find((channel) => channel.nodeType === "imageNode");
 			if (!output?.values.length) {
 				logger.error(
 					"[TextGenImageNode] Task completed without a usable image output",
@@ -402,7 +408,10 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 			const current = useFlow
 				.getState()
 				.nodes.find((node) => node.id === nodeId);
-			const currentData = (current?.data ?? {}) as Record<string, unknown>;
+			const currentData = (current?.data ?? {}) as Record<
+				string,
+				unknown
+			>;
 			const now = Date.now();
 			const previousHistory = readGenerationHistory(currentData, now);
 			const generationHistory = readGenerationHistory(
@@ -431,6 +440,8 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 	const { url: generatedImageUrl } = useFileAsyncLoader(generatedImage, {
 		priority: "high",
 	});
+	const [generatedImageLoadFailed, setGeneratedImageLoadFailed] =
+		useState(false);
 	const [generatedDimensions, setGeneratedDimensions] = useState<{
 		width: number;
 		height: number;
@@ -438,10 +449,13 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 
 	useEffect(() => {
 		setGeneratedDimensions(null);
+		setGeneratedImageLoadFailed(false);
 	}, [generatedImageUrl]);
 
 	const compactRatioLabel =
-		currentRatio.value === "custom" ? `${width}×${height}` : currentRatio.value;
+		currentRatio.value === "custom"
+			? `${width}×${height}`
+			: currentRatio.value;
 
 	const collapsedPreviewUrl = generatedImageUrl ?? firstReferenceUrl;
 	const collapsedPreviewDimensions = generatedImageUrl
@@ -473,7 +487,17 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 							aspectRatio: `${normalizedPreviewDimensions.width} / ${normalizedPreviewDimensions.height}`,
 						}}
 					>
-						{collapsedPreviewUrl ? (
+						{generatedImage && generatedImageLoadFailed ? (
+							<div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-red-950/30 px-8 text-center text-red-100">
+								<Atom className="h-10 w-10 text-red-300" />
+								<div className="text-base font-semibold">
+									生成结果加载失败
+								</div>
+								<div className="text-xs leading-5 text-red-200/80">
+									任务已返回，但图片文件无法读取。请重新生成；若持续出现，请检查磁盘空间或安全软件拦截。
+								</div>
+							</div>
+						) : collapsedPreviewUrl ? (
 							<img
 								src={collapsedPreviewUrl}
 								alt={`${modeLabel}预览`}
@@ -481,29 +505,55 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 								className="h-full w-full object-contain"
 								onLoad={(event) => {
 									if (!generatedImageUrl) return;
-									const nextWidth = event.currentTarget.naturalWidth;
-									const nextHeight = event.currentTarget.naturalHeight;
-									if (nextWidth <= 0 || nextHeight <= 0) return;
+									const nextWidth =
+										event.currentTarget.naturalWidth;
+									const nextHeight =
+										event.currentTarget.naturalHeight;
+									if (nextWidth <= 0 || nextHeight <= 0)
+										return;
 									setGeneratedDimensions((previous) =>
-										previous?.width === nextWidth && previous.height === nextHeight
+										previous?.width === nextWidth &&
+										previous.height === nextHeight
 											? previous
-											: { width: nextWidth, height: nextHeight },
+											: {
+													width: nextWidth,
+													height: nextHeight,
+												},
 									);
+								}}
+								onError={() => {
+									if (!generatedImageUrl) return;
+									setGeneratedImageLoadFailed(true);
+									showErrorToast({
+										message:
+											"任务已返回，但生成图片文件无法读取。请重试；若持续出现，请检查磁盘空间或安全软件拦截。",
+									});
 								}}
 							/>
 						) : (
 							<div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_center,rgba(59,130,246,.18),transparent_62%)] text-zinc-300">
 								<Atom className="h-10 w-10 text-blue-300" />
-								<div className="text-lg font-semibold">{modeLabel}</div>
-								<div className="text-xs text-zinc-500">选中节点即可输入提示词</div>
+								<div className="text-lg font-semibold">
+									{modeLabel}
+								</div>
+								<div className="text-xs text-zinc-500">
+									选中节点即可输入提示词
+								</div>
 							</div>
 						)}
 						<div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/75 to-transparent px-4 py-3 text-white">
-							<div className="flex items-center gap-2 text-sm font-medium"><Atom className="h-4 w-4" />{modeLabel}</div>
-							<span className="text-xs text-white/70">{compactRatioLabel} / {currentTier.label}</span>
+							<div className="flex items-center gap-2 text-sm font-medium">
+								<Atom className="h-4 w-4" />
+								{modeLabel}
+							</div>
+							<span className="text-xs text-white/70">
+								{compactRatioLabel} / {currentTier.label}
+							</span>
 						</div>
 						<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-4 py-3 text-xs text-white/70 opacity-0 transition group-hover:opacity-100">
-							<span>{selected ? "正在编辑" : "选中节点即可编辑"}</span>
+							<span>
+								{selected ? "正在编辑" : "选中节点即可编辑"}
+							</span>
 						</div>
 						{generatedImageUrl && (
 							<div className="nodrag absolute bottom-3 right-3 flex gap-2 opacity-0 transition group-hover:opacity-100">
@@ -513,7 +563,9 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 									title="下载生成图片"
 									onClick={(event) => {
 										event.stopPropagation();
-										void downloadImageFile(generatedImageUrl);
+										void downloadImageFile(
+											generatedImageUrl,
+										);
 									}}
 								>
 									<Download className="h-4 w-4" /> 下载
@@ -542,15 +594,28 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 					>
 						<div className="nodrag nopan nowheel w-[min(800px,calc(100vw-32px))] select-text rounded-2xl border border-border/80 bg-background/95 p-3 text-foreground shadow-2xl backdrop-blur-xl [text-rendering:geometricPrecision]">
 							<div className="mb-2 flex min-h-16 flex-wrap items-start gap-2">
-								{referenceImages.length > 0 ? referenceImages.map((fileKey, index) => (
-									<button key={`${fileKey}:${index}`} type="button"
-										className={`nodrag relative rounded-xl border bg-muted/50 p-0.5 text-left transition hover:-translate-y-0.5 hover:ring-2 ${REFERENCE_STYLES[index % REFERENCE_STYLES.length]} ${activeReference === index ? "scale-105 ring-2 ring-current" : ""}`}
-										title={`点击引用图片${index + 1}`} onClick={() => insertReferenceToken(index)}>
-										<MediaThumbnail fileKey={fileKey} label={`图片${index + 1}`} type="image" />
-									</button>
-								)) : (
+								{referenceImages.length > 0 ? (
+									referenceImages.map((fileKey, index) => (
+										<button
+											key={`${fileKey}:${index}`}
+											type="button"
+											className={`nodrag relative rounded-xl border bg-muted/50 p-0.5 text-left transition hover:-translate-y-0.5 hover:ring-2 ${REFERENCE_STYLES[index % REFERENCE_STYLES.length]} ${activeReference === index ? "scale-105 ring-2 ring-current" : ""}`}
+											title={`点击引用图片${index + 1}`}
+											onClick={() =>
+												insertReferenceToken(index)
+											}
+										>
+											<MediaThumbnail
+												fileKey={fileKey}
+												label={`图片${index + 1}`}
+												type="image"
+											/>
+										</button>
+									))
+								) : (
 									<div className="flex h-16 min-w-32 items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-4 text-xs text-muted-foreground">
-										<ImagePlus className="h-4 w-4" /> 拖入参考图（可选）
+										<ImagePlus className="h-4 w-4" />{" "}
+										拖入参考图（可选）
 									</div>
 								)}
 							</div>
@@ -558,66 +623,127 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 							<div className="rounded-xl bg-muted/35 px-3 py-1">
 								{referenceImages.length > 0 && (
 									<div className="flex flex-wrap gap-1.5 pt-2">
-										{referenceImages.map((fileKey, index) => (
-											<button
-												key={`reference-token:${fileKey}:${index}`}
-												type="button"
-												className={`nodrag nopan rounded-md border px-2 py-0.5 text-xs font-medium transition hover:brightness-110 ${REFERENCE_STYLES[index % REFERENCE_STYLES.length]}`}
-												onClick={() => insertReferenceToken(index)}
-											>
-												@图片{index + 1}
-											</button>
-										))}
+										{referenceImages.map(
+											(fileKey, index) => (
+												<button
+													key={`reference-token:${fileKey}:${index}`}
+													type="button"
+													className={`nodrag nopan rounded-md border px-2 py-0.5 text-xs font-medium transition hover:brightness-110 ${REFERENCE_STYLES[index % REFERENCE_STYLES.length]}`}
+													onClick={() =>
+														insertReferenceToken(
+															index,
+														)
+													}
+												>
+													@图片{index + 1}
+												</button>
+											),
+										)}
 									</div>
 								)}
-								<NodeTextarea ref={promptRef} rows={2} showCard={false} enableVoiceInput={false}
-									enableFullscreen placeholder="描述想生成或修改的画面，点击参考图可插入图片编号…"
-									className="nodrag nopan nowheel min-h-12 resize-none select-text border-0 bg-transparent px-0 py-2 text-sm shadow-none focus-visible:ring-0" {...form.bind("text")} />
+								<NodeTextarea
+									ref={promptRef}
+									rows={2}
+									showCard={false}
+									enableVoiceInput={false}
+									enableFullscreen
+									placeholder="描述想生成或修改的画面，点击参考图可插入图片编号…"
+									className="nodrag nopan nowheel min-h-12 resize-none select-text border-0 bg-transparent px-0 py-2 text-sm shadow-none focus-visible:ring-0"
+									{...form.bind("text")}
+								/>
 							</div>
 
 							{advancedSettingsOpen && (
 								<div className="mt-2 space-y-3 rounded-xl border border-border bg-muted/25 p-3 text-foreground">
-										<AspectRatioPicker
-											ratios={IMAGE_ASPECT_RATIOS}
-											value={{ ...currentRatio, width, height }}
-											onChange={(ratio) => applySize(ratio, currentTier)}
-											showSize
-											autoOption={{
-												active:
-													followReferenceRatio &&
-													referenceCount > 0,
-												disabled: referenceCount === 0,
-												onSelect: () =>
-													toggleFollowReferenceRatio(true),
-											}}
-										/>
-										<ResolutionPicker tiers={IMAGE_RESOLUTION_TIERS} value={currentTier.value} onChange={changeResolutionTier} />
+									<AspectRatioPicker
+										ratios={IMAGE_ASPECT_RATIOS}
+										value={{
+											...currentRatio,
+											width,
+											height,
+										}}
+										onChange={(ratio) =>
+											applySize(ratio, currentTier)
+										}
+										showSize
+										autoOption={{
+											active:
+												followReferenceRatio &&
+												referenceCount > 0,
+											disabled: referenceCount === 0,
+											onSelect: () =>
+												toggleFollowReferenceRatio(
+													true,
+												),
+										}}
+									/>
+									<ResolutionPicker
+										tiers={IMAGE_RESOLUTION_TIERS}
+										value={currentTier.value}
+										onChange={changeResolutionTier}
+									/>
 								</div>
 							)}
 
 							<div className="mt-2 flex items-center gap-1 border-t border-border/70 pt-2">
-								<NodePluginIdSelect nodeSlot="image-fusion" data={data} compact />
-								<NodePluginModelSelect nodeSlot="image-fusion" data={data} compact />
-								<button type="button" className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
-									onClick={() => setAdvancedSettingsOpen((open) => !open)} aria-expanded={advancedSettingsOpen}>
+								<NodePluginIdSelect
+									nodeSlot="image-fusion"
+									data={data}
+									compact
+								/>
+								<NodePluginModelSelect
+									nodeSlot="image-fusion"
+									data={data}
+									compact
+								/>
+								<button
+									type="button"
+									className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+									onClick={() =>
+										setAdvancedSettingsOpen((open) => !open)
+									}
+									aria-expanded={advancedSettingsOpen}
+								>
 									<SlidersHorizontal className="h-4 w-4" />
 									{compactRatioLabel} / {currentTier.label}
-									<ChevronDown className={`h-3.5 w-3.5 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`} />
+									<ChevronDown
+										className={`h-3.5 w-3.5 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
+									/>
 								</button>
 								<div className="flex-1" />
 								{execution.loading && execution.canCancel && (
-									<Button type="button" variant="ghost" size="sm" className="h-9" onClick={execution.cancel}>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-9"
+										onClick={execution.cancel}
+									>
 										<X className="h-4 w-4" /> 取消
 									</Button>
 								)}
-								<Button type="button" size="icon" className="h-10 w-10 rounded-full shadow-md"
-									onClick={execution.run} disabled={!localText.trim() || !execution.canRun || execution.loading}>
-									{execution.loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+								<Button
+									type="button"
+									size="icon"
+									className="h-10 w-10 rounded-full shadow-md"
+									onClick={execution.run}
+									disabled={
+										!localText.trim() ||
+										!execution.canRun ||
+										execution.loading
+									}
+								>
+									{execution.loading ? (
+										<LoaderCircle className="h-4 w-4 animate-spin" />
+									) : (
+										<Wand2 className="h-4 w-4" />
+									)}
 								</Button>
 							</div>
 						</div>
 					</NodeToolbar>
-					{viewerOpen && generatedImageUrl &&
+					{viewerOpen &&
+						generatedImageUrl &&
 						createPortal(
 							<div className="fixed inset-0 z-[9999] bg-black/90 p-4 backdrop-blur-sm">
 								<button
@@ -629,7 +755,10 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
 									<X className="h-5 w-5" />
 								</button>
 								<div className="h-full overflow-hidden rounded-2xl border border-white/15">
-									<ZoomableImageViewer src={generatedImageUrl} alt="生成图片编辑器" />
+									<ZoomableImageViewer
+										src={generatedImageUrl}
+										alt="生成图片编辑器"
+									/>
 								</div>
 							</div>,
 							document.body,
