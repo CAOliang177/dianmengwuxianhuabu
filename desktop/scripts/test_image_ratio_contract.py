@@ -76,6 +76,24 @@ def main() -> None:
         "image_size": "4K",
     }
 
+    new_channel._REQUEST_MODEL = "gemini-3.1-flash-image-preview"
+    preview_2k = new_channel._chat_payload("test", [], "2560x1440")
+    assert preview_2k["size"] == "2560x1440"
+    assert preview_2k["google"] == {
+        "image_config": {
+            "aspect_ratio": "16:9",
+            "image_size": "2K",
+        }
+    }
+    for conflicting_key in (
+        "aspect_ratio",
+        "image_size",
+        "image_config",
+        "generation_config",
+        "extra_body",
+    ):
+        assert conflicting_key not in preview_2k
+
     print("image ratio contract OK")
 
 

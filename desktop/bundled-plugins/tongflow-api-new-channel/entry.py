@@ -374,8 +374,9 @@ def _chat_payload(
     else:
         content = prompt
 
+    request_model = _model()
     payload: dict[str, Any] = {
-        "model": _model(),
+        "model": request_model,
         "messages": [{"role": "user", "content": content}],
         "temperature": 0.7,
     }
@@ -385,21 +386,26 @@ def _chat_payload(
         # Keep standard `size` too for relays that translate that field instead.
         payload["modalities"] = ["text", "image"]
         payload["size"] = _relay_size_hint(size, image_config)
-        payload["aspect_ratio"] = image_config["aspect_ratio"]
-        payload["image_size"] = image_config["image_size"]
-        payload["image_config"] = image_config
         camel_image_config = {
             "aspectRatio": image_config["aspect_ratio"],
             "imageSize": image_config["image_size"],
         }
-        payload["generation_config"] = {
-            "responseModalities": ["TEXT", "IMAGE"],
-            "imageConfig": camel_image_config,
-            "responseFormat": {"image": camel_image_config},
-        }
         google_extension = {"image_config": image_config}
-        payload["extra_body"] = {"google": google_extension}
         payload["google"] = google_extension
+        if request_model.lower() != "gemini-3.1-flash-image-preview":
+            # The retired Flash preview alias is still exposed by some relays,
+            # but its legacy route regresses to 1K when modern compatibility
+            # fields are mixed together. Keep the old minimal `google` shape
+            # that is known to return 2K/4K on that route.
+            payload["aspect_ratio"] = image_config["aspect_ratio"]
+            payload["image_size"] = image_config["image_size"]
+            payload["image_config"] = image_config
+            payload["generation_config"] = {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "imageConfig": camel_image_config,
+                "responseFormat": {"image": camel_image_config},
+            }
+            payload["extra_body"] = {"google": google_extension}
     return payload
 
 
