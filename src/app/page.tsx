@@ -36,7 +36,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.34";
+const RELEASE_VERSION = "0.1.35";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -353,7 +353,7 @@ export default function Home() {
                                 创作 Skill 市场上线，图片生成控制更准确
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                0.1.34 新增 48 个图片与视频创作
+                                0.1.35 新增 48 个图片与视频创作
                                 Skill，并修复文生图、图生图比例及模型选择问题。
                             </DialogDescription>
                         </DialogHeader>
