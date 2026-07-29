@@ -320,6 +320,23 @@ def _chat_image_config(size: str | None) -> dict[str, str] | None:
     return {"aspect_ratio": aspect_ratio, "image_size": image_size}
 
 
+def _relay_size_hint(
+    size: str | None,
+    image_config: dict[str, str] | None,
+) -> str | None:
+    """Work around a New API distributor boundary bug for square 4K images.
+
+    Some relays infer the tier from `size` with `longest_side > 4096`.
+    Consequently an exact 4096x4096 request is incorrectly routed as 2K even
+    though Google's image_config explicitly says 1:1/4K.  A one-pixel
+    compatibility hint crosses that boundary; Gemini still returns its native
+    documented 4096x4096 output because image_config remains authoritative.
+    """
+    if image_config == {"aspect_ratio": "1:1", "image_size": "4K"}:
+        return "4097x4097"
+    return size
+
+
 def _chat_payload(
     prompt: str,
     images: list[bytes],
@@ -367,7 +384,7 @@ def _chat_payload(
         # Google extension object for hard resolution/aspect-ratio controls.
         # Keep standard `size` too for relays that translate that field instead.
         payload["modalities"] = ["text", "image"]
-        payload["size"] = size
+        payload["size"] = _relay_size_hint(size, image_config)
         payload["aspect_ratio"] = image_config["aspect_ratio"]
         payload["image_size"] = image_config["image_size"]
         payload["image_config"] = image_config
@@ -465,9 +482,13 @@ def _images_generate(prompt: str, size: str | None):
     model = _model()
     payload: dict[str, Any] = {"model": model, "prompt": prompt, "n": 1}
     effective_size = _size_for_model(model, size)
-    if effective_size:
-        payload["size"] = effective_size
     image_config = _chat_image_config(effective_size)
+    if effective_size:
+        payload["size"] = (
+            _relay_size_hint(effective_size, image_config)
+            if model.lower().startswith("gemini-")
+            else effective_size
+        )
     if image_config and model.lower().startswith("gemini-"):
         payload["aspect_ratio"] = image_config["aspect_ratio"]
         payload["image_size"] = image_config["image_size"]
@@ -490,9 +511,13 @@ def _images_edit(prompt: str, images: list[bytes], size: str | None):
     model = _model()
     fields = {"model": model, "prompt": prompt, "n": "1"}
     effective_size = _size_for_model(model, size)
-    if effective_size:
-        fields["size"] = effective_size
     image_config = _chat_image_config(effective_size)
+    if effective_size:
+        fields["size"] = (
+            _relay_size_hint(effective_size, image_config)
+            if model.lower().startswith("gemini-")
+            else effective_size
+        )
     if image_config and model.lower().startswith("gemini-"):
         fields["aspect_ratio"] = image_config["aspect_ratio"]
         fields["image_size"] = image_config["image_size"]

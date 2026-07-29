@@ -67,6 +67,15 @@ def main() -> None:
         payload["messages"][0]["content"]
     )
 
+    square_4k = new_channel._chat_payload("test", [], "4096x4096")
+    assert square_4k["size"] == "4097x4097"
+    assert square_4k["aspect_ratio"] == "1:1"
+    assert square_4k["image_size"] == "4K"
+    assert square_4k["extra_body"]["google"]["image_config"] == {
+        "aspect_ratio": "1:1",
+        "image_size": "4K",
+    }
+
     print("image ratio contract OK")
 
 
