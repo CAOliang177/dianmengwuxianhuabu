@@ -17,7 +17,7 @@
 		},
 		{
 			"key": "IMG2_IMAGE_MODEL",
-			"default": "gpt-image-2",
+			"default": "gpt-image-2-1k",
 			"description": "默认 IMG2 模型；每个节点也可以单独选择"
 		},
 		{

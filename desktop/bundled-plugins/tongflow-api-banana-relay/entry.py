@@ -98,10 +98,12 @@ def _edit_async_enabled() -> bool:
 
 
 def _size(width: int | None, height: int | None) -> str | None:
+    # A node's manual ratio/size is authoritative.  The environment value is
+    # only a legacy fallback for requests that do not contain dimensions.
+    if width and height:
+        return f"{width}x{height}"
     override = _env("BANANA_IMAGE_SIZE")
-    if override:
-        return override
-    return f"{width}x{height}" if width and height else None
+    return override or None
 
 
 def _size_for_model(model: str, size: str | None) -> str | None:

@@ -13,15 +13,17 @@ type NodePluginModelSelectProps = {
     nodeSlot: string;
     data: BaseNodeData;
     compact?: boolean;
+    /** Show all models as a horizontal wrapping button group. */
+    horizontal?: boolean;
 };
 
 const NEW_CHANNEL_MODEL_LABELS: Record<string, string> = {
-	"gemini-3-pro-image-preview": "Nano Banana Pro（Gemini 3 Pro）",
-	"gemini-3.1-flash-image-preview": "Nano Banana 2 预览版",
-	"gpt-image-2-pro": "GPT Image 2 Pro",
+    "gemini-3-pro-image-preview": "Nano Banana Pro（Gemini 3 Pro）",
+    "gemini-3.1-flash-image-preview": "Nano Banana 2 预览版",
+    "gpt-image-2-pro": "GPT Image 2 Pro",
 };
 
-function modelDisplayName(pluginId: string, model: string): string {
+export function modelDisplayName(pluginId: string, model: string): string {
     if (pluginId === "tongflow-api-new-channel")
         return NEW_CHANNEL_MODEL_LABELS[model] ?? model;
     return model;
@@ -38,6 +40,7 @@ export function NodePluginModelSelect({
     nodeSlot,
     data,
     compact = false,
+    horizontal = false,
 }: NodePluginModelSelectProps) {
     const id = useNodeId()!;
     const updates = useFlow((s) => s.updates);
@@ -67,6 +70,37 @@ export function NodePluginModelSelect({
     );
 
     if (options.length === 0) return null;
+
+    if (horizontal) {
+        return (
+            <fieldset className="flex w-full flex-wrap gap-2">
+                <legend className="sr-only">{t("pluginModelTitle")}</legend>
+                {options.map((option) => {
+                    const selected = option.value === resolved;
+                    return (
+                        <button
+                            key={option.value}
+                            type="button"
+                            aria-pressed={selected}
+                            className={`nodrag min-w-[132px] flex-1 rounded-xl border px-3 py-2.5 text-center text-xs font-medium transition ${
+                                selected
+                                    ? "border-foreground bg-foreground text-background shadow-sm"
+                                    : "border-border bg-background text-foreground hover:border-foreground/40 hover:bg-muted"
+                            }`}
+                            onClick={() =>
+                                updates(id, {
+                                    ...data,
+                                    pluginModel: option.value,
+                                })
+                            }
+                        >
+                            {option.label}
+                        </button>
+                    );
+                })}
+            </fieldset>
+        );
+    }
 
     return (
         <NodePluginSelect

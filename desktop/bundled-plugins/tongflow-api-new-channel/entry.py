@@ -86,10 +86,12 @@ def _edit_async_enabled() -> bool:
 
 
 def _size(width: int | None, height: int | None) -> str | None:
+    # A node's manual ratio/size is authoritative.  The environment value is
+    # only a legacy fallback for requests that do not contain dimensions.
+    if width and height:
+        return f"{width}x{height}"
     override = _env("NEW_CHANNEL_IMAGE_SIZE")
-    if override:
-        return override
-    return f"{width}x{height}" if width and height else None
+    return override or None
 
 
 def _size_for_model(model: str, size: str | None) -> str | None:
@@ -318,13 +320,27 @@ def _chat_image_config(size: str | None) -> dict[str, str] | None:
     return {"aspect_ratio": aspect_ratio, "image_size": image_size}
 
 
-def _chat_image(prompt: str, images: list[bytes], size: str | None):
-    endpoint = f"{_base_url()}/chat/completions"
+def _chat_payload(
+    prompt: str,
+    images: list[bytes],
+    size: str | None,
+) -> dict[str, Any]:
+    """Build a relay-compatible Gemini image request.
+
+    Different OpenAI-compatible Gemini relays consume the same setting at
+    different extension points.  In particular, New API based distributors
+    expect the literal `extra_body.google.image_config` object, while some
+    upstreams consume `google.image_config` after an OpenAI SDK has flattened
+    `extra_body`.  Send both shapes alongside the common compatibility fields.
+    Relays ignore extension fields they do not understand; the explicit prompt
+    is the final compatibility fallback.
+    """
     image_config = _chat_image_config(size)
     if image_config:
         prompt = (
-            f"{prompt}\n\nGenerate at {image_config['image_size']} resolution "
-            f"with a {image_config['aspect_ratio']} aspect ratio."
+            f"{prompt}\n\nThe OUTPUT CANVAS must be "
+            f"{image_config['aspect_ratio']} at {image_config['image_size']}. "
+            "Do not preserve an input image's original aspect ratio."
         )
 
     if images:
@@ -341,7 +357,7 @@ def _chat_image(prompt: str, images: list[bytes], size: str | None):
     else:
         content = prompt
 
-    payload = {
+    payload: dict[str, Any] = {
         "model": _model(),
         "messages": [{"role": "user", "content": content}],
         "temperature": 0.7,
@@ -352,7 +368,27 @@ def _chat_image(prompt: str, images: list[bytes], size: str | None):
         # Keep standard `size` too for relays that translate that field instead.
         payload["modalities"] = ["text", "image"]
         payload["size"] = size
-        payload["google"] = {"image_config": image_config}
+        payload["aspect_ratio"] = image_config["aspect_ratio"]
+        payload["image_size"] = image_config["image_size"]
+        payload["image_config"] = image_config
+        camel_image_config = {
+            "aspectRatio": image_config["aspect_ratio"],
+            "imageSize": image_config["image_size"],
+        }
+        payload["generation_config"] = {
+            "responseModalities": ["TEXT", "IMAGE"],
+            "imageConfig": camel_image_config,
+            "responseFormat": {"image": camel_image_config},
+        }
+        google_extension = {"image_config": image_config}
+        payload["extra_body"] = {"google": google_extension}
+        payload["google"] = google_extension
+    return payload
+
+
+def _chat_image(prompt: str, images: list[bytes], size: str | None):
+    endpoint = f"{_base_url()}/chat/completions"
+    payload = _chat_payload(prompt, images, size)
     response = _json(
         _http(
             endpoint,
@@ -431,6 +467,17 @@ def _images_generate(prompt: str, size: str | None):
     effective_size = _size_for_model(model, size)
     if effective_size:
         payload["size"] = effective_size
+    image_config = _chat_image_config(effective_size)
+    if image_config and model.lower().startswith("gemini-"):
+        payload["aspect_ratio"] = image_config["aspect_ratio"]
+        payload["image_size"] = image_config["image_size"]
+        payload["generation_config"] = {
+            "responseModalities": ["IMAGE"],
+            "imageConfig": {
+                "aspectRatio": image_config["aspect_ratio"],
+                "imageSize": image_config["image_size"],
+            },
+        }
     if _async_enabled():
         payload["async"] = True
     body = json.dumps(payload).encode("utf-8")
@@ -445,6 +492,19 @@ def _images_edit(prompt: str, images: list[bytes], size: str | None):
     effective_size = _size_for_model(model, size)
     if effective_size:
         fields["size"] = effective_size
+    image_config = _chat_image_config(effective_size)
+    if image_config and model.lower().startswith("gemini-"):
+        fields["aspect_ratio"] = image_config["aspect_ratio"]
+        fields["image_size"] = image_config["image_size"]
+        fields["generation_config"] = json.dumps(
+            {
+                "responseModalities": ["IMAGE"],
+                "imageConfig": {
+                    "aspectRatio": image_config["aspect_ratio"],
+                    "imageSize": image_config["image_size"],
+                },
+            }
+        )
     if _edit_async_enabled():
         fields["async"] = "true"
     fixed_gpt_image = bool(

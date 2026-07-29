@@ -22,7 +22,7 @@ from tongflow.protocol import asset, prompt_media_to_bytes
 from tongflow.slots import node_slot
 
 DEFAULT_BASE_URL = "http://ai.maxagent.top/v1"
-DEFAULT_MODEL = "gpt-image-2"
+DEFAULT_MODEL = "gpt-image-2-1k"
 FIXED_SKU_PIXEL_BUDGETS = {
     "1k": 1024 * 1024,
     "2k": 2048 * 2048,
@@ -31,7 +31,6 @@ FIXED_SKU_PIXEL_BUDGETS = {
 FIXED_SKU_MAX_SIDE = {"1k": 1024, "2k": 2048, "4k": 3840}
 
 SUPPORTED_IMAGE_MODELS = [
-    "gpt-image-2",
     "gpt-image-2-1k",
     "gpt-image-2-2k",
     "gpt-image-2-4k",
@@ -87,10 +86,12 @@ def _edit_async_enabled() -> bool:
 
 
 def _size(width: int | None, height: int | None) -> str | None:
+    # A node's manual ratio/size is authoritative.  The environment value is
+    # only a legacy fallback for requests that do not contain dimensions.
+    if width and height:
+        return f"{width}x{height}"
     override = _env("IMG2_IMAGE_SIZE")
-    if override:
-        return override
-    return f"{width}x{height}" if width and height else None
+    return override or None
 
 
 def _size_for_model(model: str, size: str | None) -> str | None:

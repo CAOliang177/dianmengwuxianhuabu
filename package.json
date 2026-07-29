@@ -1,6 +1,6 @@
 {
     "name": "tongflow",
-  "version": "0.1.30",
+  "version": "0.1.34",
     "description": "A multi-modal AIGC studio for building generative AI workflows",
     "author": "tong-io",
     "keywords": [

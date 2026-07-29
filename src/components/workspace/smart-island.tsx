@@ -12,17 +12,17 @@
 import { useReactFlow } from "@xyflow/react";
 import {
     Box,
-    Clapperboard,
+    CheckSquare,
     Download,
     Eye,
     FileText,
+    History as HistoryIcon,
     Image,
     ImagePlus,
-    History as HistoryIcon,
-    CheckSquare,
     Link,
     MousePointer2,
     Music,
+    Sparkles,
     Trash2,
     Type,
     Video,
@@ -31,6 +31,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { Button } from "@/components/ui/button";
 import {
     Dialog,
     DialogContent,
@@ -43,28 +44,27 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
+import { CreativeSkillLibrary } from "@/components/workspace/creative-skill-library";
 import { ExecutionButton } from "@/components/workspace/execution-button";
 import { ExecutionStatusLine } from "@/components/workspace/execution-status-line";
+import {
+    downloadImageFile,
+    ZoomableImageViewer,
+} from "@/components/workspace/nodes/base/zoomable-image-viewer";
 import { SaveExecuteDialog } from "@/components/workspace/save-execute-dialog";
+import { useFileAsyncLoader } from "@/hooks/use-file-async-loader";
 import type { FlowState, PossibleNode } from "@/hooks/use-flow";
 import { useFlow } from "@/hooks/use-flow";
-import { useFileAsyncLoader } from "@/hooks/use-file-async-loader";
 import { useNodeActions } from "@/hooks/use-node-actions";
 import { useTaskStore } from "@/hooks/use-task";
 import { useWorkflowExecution } from "@/hooks/use-workflow-execution";
-import { emitTaskCancelRequest } from "@/lib/task/sse-events";
 import {
     generationHistoryNeedsSync,
     readGenerationHistory,
     withGenerationHistory,
 } from "@/lib/generation-history";
+import { emitTaskCancelRequest } from "@/lib/task/sse-events";
 import { cn } from "@/lib/utils";
-import {
-    downloadImageFile,
-    ZoomableImageViewer,
-} from "@/components/workspace/nodes/base/zoomable-image-viewer";
-import { CinematicPromptTool } from "@/components/workspace/cinematic-prompt-tool";
 
 interface IconButtonProps {
     icon: React.ComponentType<{ className?: string }>;
@@ -240,7 +240,7 @@ export default function SmartIsland({
     const reactFlow = useReactFlow();
     const { screenToFlowPosition } = reactFlow;
     const [historyOpen, setHistoryOpen] = useState(false);
-    const [cinematicToolOpen, setCinematicToolOpen] = useState(false);
+    const [skillLibraryOpen, setSkillLibraryOpen] = useState(false);
     const [historySelectionMode, setHistorySelectionMode] = useState(false);
     const [historyPreview, setHistoryPreview] = useState<string | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<Set<string>>(
@@ -380,7 +380,7 @@ export default function SmartIsland({
         [addNode, screenToFlowPosition],
     );
 
-    const useHistoryImage = useCallback(
+    const addHistoryImageToCanvas = useCallback(
         (fileKey: string) => {
             addNodeAtViewportCenter({
                 type: "imageNode",
@@ -441,12 +441,12 @@ export default function SmartIsland({
         </div>
     );
 
-    const cinematicControl = (
-        <div className="flex h-12 items-center rounded-2xl border border-amber-300/50 bg-white p-1 shadow-sm backdrop-blur-md dark:border-amber-700/60 dark:bg-zinc-800/90">
+    const skillControl = (
+        <div className="flex h-12 items-center rounded-2xl border border-violet-300/50 bg-white p-1 shadow-sm backdrop-blur-md dark:border-violet-700/60 dark:bg-zinc-800/90">
             <IconButton
-                icon={Clapperboard}
-                tooltip="电影感提示词"
-                onClick={() => setCinematicToolOpen(true)}
+                icon={Sparkles}
+                tooltip="创作 Skill"
+                onClick={() => setSkillLibraryOpen(true)}
             />
         </div>
     );
@@ -456,9 +456,7 @@ export default function SmartIsland({
             <IconButton
                 icon={MousePointer2}
                 tooltip={
-                    selectionMode
-                        ? "选取模式：左键拖动框选"
-                        : "开启选取模式"
+                    selectionMode ? "选取模式：左键拖动框选" : "开启选取模式"
                 }
                 active={selectionMode}
                 onClick={() => onSelectionModeChange(!selectionMode)}
@@ -577,7 +575,7 @@ export default function SmartIsland({
                                                 }
                                                 onView={setHistoryPreview}
                                                 onUse={() =>
-                                                    useHistoryImage(
+                                                    addHistoryImageToCanvas(
                                                         item.fileKey,
                                                     )
                                                 }
@@ -615,16 +613,11 @@ export default function SmartIsland({
         </>
     );
 
-    const cinematicDialog = (
-        <CinematicPromptTool
-            open={cinematicToolOpen}
-            onOpenChange={setCinematicToolOpen}
-            onCreateNode={(data) =>
-                addNodeAtViewportCenter({
-                    type: "textGenImageNode",
-                    data,
-                })
-            }
+    const skillLibraryDialog = (
+        <CreativeSkillLibrary
+            open={skillLibraryOpen}
+            onOpenChange={setSkillLibraryOpen}
+            onCreateNode={addNodeAtViewportCenter}
         />
     );
 
@@ -633,7 +626,7 @@ export default function SmartIsland({
         return (
             <>
                 {historyDialog}
-                {cinematicDialog}
+                {skillLibraryDialog}
                 <SaveExecuteDialog
                     open={showSaveDialog}
                     onOpenChange={setShowSaveDialog}
@@ -656,7 +649,7 @@ export default function SmartIsland({
                     </div>
                     {selectionControl}
                     {historyControl}
-                    {cinematicControl}
+                    {skillControl}
                 </div>
             </>
         );
@@ -747,12 +740,12 @@ export default function SmartIsland({
         return (
             <>
                 {historyDialog}
-                {cinematicDialog}
+                {skillLibraryDialog}
                 <div className="flex items-center gap-3">
                     {selectionControl}
                     {addToolbar}
                     {historyControl}
-                    {cinematicControl}
+                    {skillControl}
                 </div>
             </>
         );
@@ -765,12 +758,12 @@ export default function SmartIsland({
         return (
             <>
                 {historyDialog}
-                {cinematicDialog}
+                {skillLibraryDialog}
                 <div className="flex items-center gap-3">
                     {selectionControl}
                     {addToolbar}
                     {historyControl}
-                    {cinematicControl}
+                    {skillControl}
                 </div>
             </>
         );
@@ -779,12 +772,12 @@ export default function SmartIsland({
     return (
         <>
             {historyDialog}
-            {cinematicDialog}
+            {skillLibraryDialog}
             <div className="flex items-center justify-center gap-3">
                 {selectionControl}
                 <div>{actions}</div>
                 {historyControl}
-                {cinematicControl}
+                {skillControl}
             </div>
         </>
     );
