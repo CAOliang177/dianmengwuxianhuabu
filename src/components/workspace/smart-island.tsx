@@ -58,9 +58,12 @@ import { useFlow } from "@/hooks/use-flow";
 import { useNodeActions } from "@/hooks/use-node-actions";
 import { useTaskStore } from "@/hooks/use-task";
 import { useWorkflowExecution } from "@/hooks/use-workflow-execution";
+import { listTasks } from "@/lib/api/task";
 import {
     generationHistoryNeedsSync,
+    generationTaskId,
     readGenerationHistory,
+    sortGenerationHistoryRecords,
     withGenerationHistory,
 } from "@/lib/generation-history";
 import { emitTaskCancelRequest } from "@/lib/task/sse-events";
@@ -243,9 +246,40 @@ export default function SmartIsland({
     const [skillLibraryOpen, setSkillLibraryOpen] = useState(false);
     const [historySelectionMode, setHistorySelectionMode] = useState(false);
     const [historyPreview, setHistoryPreview] = useState<string | null>(null);
+    const [historyTaskTimes, setHistoryTaskTimes] = useState<
+        Map<string, number>
+    >(() => new Map());
     const [selectedHistory, setSelectedHistory] = useState<Set<string>>(
         () => new Set(),
     );
+
+    useEffect(() => {
+        if (!historyOpen) return;
+        let cancelled = false;
+        void listTasks(1, 1000)
+            .then(({ tasks }) => {
+                if (cancelled) return;
+                const next = new Map<string, number>();
+                for (const task of tasks) {
+                    const raw = task.createdAt;
+                    const timestamp =
+                        raw instanceof Date
+                            ? raw.getTime()
+                            : Date.parse(String(raw));
+                    if (Number.isFinite(timestamp)) {
+                        next.set(task.id, timestamp);
+                    }
+                }
+                setHistoryTaskTimes(next);
+            })
+            .catch(() => {
+                // Existing node timestamps remain a safe fallback when an old
+                // installation cannot provide the durable task list.
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [historyOpen]);
 
     useEffect(() => {
         const syncHistory = () => {
@@ -272,7 +306,6 @@ export default function SmartIsland({
     }, [nodes]);
 
     const generationHistory = useMemo(() => {
-        const seen = new Set<string>();
         const items: Array<{
             nodeId: string;
             fileKey: string;
@@ -283,13 +316,19 @@ export default function SmartIsland({
             const data = node.data as Record<string, unknown>;
             const records = readGenerationHistory(data, now);
             for (const { fileKey, createdAt } of records) {
-                if (!fileKey || seen.has(fileKey)) continue;
-                seen.add(fileKey);
-                items.push({ nodeId: node.id, fileKey, createdAt });
+                if (!fileKey) continue;
+                const taskId = generationTaskId(fileKey);
+                items.push({
+                    nodeId: node.id,
+                    fileKey,
+                    createdAt:
+                        (taskId ? historyTaskTimes.get(taskId) : undefined) ??
+                        createdAt,
+                });
             }
         }
-        return items.sort((a, b) => b.createdAt - a.createdAt);
-    }, [nodes]);
+        return sortGenerationHistoryRecords(items);
+    }, [nodes, historyTaskTimes]);
 
     useEffect(() => {
         const available = new Set(

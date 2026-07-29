@@ -6,6 +6,29 @@ export interface GenerationHistoryRecord {
     createdAt: number;
 }
 
+export function generationTaskId(fileKey: string): string | null {
+    const match = fileKey
+        .replace(/\\/g, "/")
+        .match(/(?:^|\/)tasks\/([^/]+)(?:\/|$)/i);
+    return match?.[1] ?? null;
+}
+
+export function sortGenerationHistoryRecords<T extends GenerationHistoryRecord>(
+    records: T[],
+): T[] {
+    const latestByFile = new Map<string, T>();
+    for (const record of records) {
+        const current = latestByFile.get(record.fileKey);
+        if (!current || record.createdAt > current.createdAt) {
+            latestByFile.set(record.fileKey, record);
+        }
+    }
+    return [...latestByFile.values()].sort(
+        (a, b) =>
+            b.createdAt - a.createdAt || a.fileKey.localeCompare(b.fileKey),
+    );
+}
+
 export function readGenerationHistory(
     data: Record<string, unknown>,
     now = Date.now(),
@@ -43,15 +66,7 @@ export function readGenerationHistory(
         }
     }
 
-    const seen = new Set<string>();
-    return records
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .filter((record) => {
-            if (seen.has(record.fileKey)) return false;
-            seen.add(record.fileKey);
-            return true;
-        })
-        .slice(0, 1000);
+    return sortGenerationHistoryRecords(records).slice(0, 1000);
 }
 
 export function withGenerationHistory(
