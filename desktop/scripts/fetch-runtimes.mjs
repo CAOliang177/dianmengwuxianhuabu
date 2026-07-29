@@ -37,12 +37,33 @@ function sh(cmd) {
     execSync(cmd, { stdio: "inherit" });
 }
 
-async function download(url, dest) {
-    console.log("[fetch]", url);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`download failed ${res.status}: ${url}`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    fs.writeFileSync(dest, buf);
+async function download(url, dest, attempts = 4) {
+    let lastError;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+            console.log(`[fetch] ${url} (attempt ${attempt}/${attempts})`);
+            const res = await fetch(url, {
+                signal: AbortSignal.timeout(120_000),
+            });
+            if (!res.ok) {
+                throw new Error(`download failed ${res.status}: ${url}`);
+            }
+            const buf = Buffer.from(await res.arrayBuffer());
+            fs.writeFileSync(dest, buf);
+            return;
+        } catch (error) {
+            lastError = error;
+            if (attempt < attempts) {
+                const delayMs = attempt * 5_000;
+                console.warn(
+                    `[fetch] attempt ${attempt} failed; retrying in ${delayMs / 1_000}s`,
+                    error,
+                );
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
+        }
+    }
+    throw lastError;
 }
 
 function extract(archive, into) {
@@ -62,6 +83,15 @@ async function fetchNode() {
     fs.mkdirSync(out, { recursive: true });
 
     if (isWin) {
+        // GitHub Actions has already installed this exact Node version via
+        // actions/setup-node. Reuse it instead of downloading the same binary
+        // from nodejs.org again, which also makes release builds resilient to
+        // transient Cloudflare/connect timeouts.
+        if (process.version === `v${NODE_VERSION}` && arch === os.arch()) {
+            fs.copyFileSync(process.execPath, path.join(out, "node.exe"));
+            console.log("[fetch] node ready (reused current runtime)");
+            return;
+        }
         const name = `node-v${NODE_VERSION}-win-${arch}`;
         const zip = path.join(tmp, `${name}.zip`);
         await download(
