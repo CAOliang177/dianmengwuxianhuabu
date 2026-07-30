@@ -37,7 +37,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.35";
+const RELEASE_VERSION = "0.1.36";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -370,11 +370,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                创作 Skill 市场上线，图片生成控制更准确
+                                历史画布有封面了，生成记录更清晰
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                0.1.35 新增 48 个图片与视频创作
-                                Skill，并修复文生图、图生图比例及模型选择问题。
+                                0.1.36
+                                为历史画布加入自动封面，同时优化生成历史排序与新渠道比例控制。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -382,22 +382,19 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                新功能：创作 Skill 市场
+                                新功能：历史画布自动封面
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                打开画布后，点击底部工具栏的“创作
-                                Skill”，输入一句简单想法，即可得到结构完整的专业提示词。
-                                生成后可直接应用到当前节点、新建生图/视频节点，或复制提示词使用。
+                                每个画布第一次成功生成的图片会自动成为首页封面，帮助你快速辨认不同项目。
+                                封面确定后不会被后续生成替换，旧画布也会自动补齐已有的第一张生成图。
                             </p>
                         </div>
                         {[
-                            "48 个 Skill 分为图片、视频、提示优化和风格化四类，支持搜索与筛选，并配有直观封面。",
-                            "提示词优化会自动补全主体、动作、镜头、构图、光线、材质和生成约束，让简单描述更容易稳定出图。",
-                            "内置电影感画面、商品广告、角色与场景设定、图生视频、专业分镜、动作戏、运镜与连续性等实用导演工具。",
-                            "提供复古胶片、东方美术、粗野主义科幻、3D 动画、末日写实、高奢 TVC 等多种风格方案。",
-                            "使用 Skill 新建节点时会带入建议比例；视频类还会带入建议时长，也可以在节点中继续修改。",
-                            "修复文生图和图生图比例：节点参数优先传给接口，并补齐新渠道 Gemini 中转专用比例协议，不再固定生成 1:1。",
-                            "模型改为横向选择；img-relay 已彻底移除独立模型 gpt-image-2，仅保留 gpt-image-2-1k、2k、4k。",
+                            "首页历史画布卡片使用第一张生成图片作为固定封面；上传的参考图不会被误识别为封面。",
+                            "旧画布无需重新生成，打开首页后会自动从已有记录中寻找最早生成的图片并补上封面。",
+                            "生成历史改为按照任务真实生成时间倒序排列，最新结果优先显示，并修复跨节点去重后的顺序错乱。",
+                            "Nano Banana 2 预览版恢复比例和 1K/2K/4K 选择，不再强制限制为 1:1 / 1K。",
+                            "继续保留新渠道 Gemini 比例与高分辨率兼容参数，文生图和图生图均可使用节点上的尺寸设置。",
                         ].map((item, index) => (
                             <div
                                 key={item}
