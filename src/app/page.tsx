@@ -49,7 +49,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.36";
+const RELEASE_VERSION = "0.1.37";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -412,11 +412,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                历史画布有封面了，生成记录更清晰
+                                画布管理更完整，创作 Skill 大幅扩充
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                0.1.36
-                                为历史画布加入自动封面，同时优化生成历史排序与新渠道比例控制。
+                                0.1.37 新增历史画布删除功能，并在原有基础上加入
+                                80 个图片与视频创作 Skill。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -424,19 +424,20 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                新功能：历史画布自动封面
+                                新功能：128 个创作 Skill
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                每个画布第一次成功生成的图片会自动成为首页封面，帮助你快速辨认不同项目。
-                                封面确定后不会被后续生成替换，旧画布也会自动补齐已有的第一张生成图。
+                                Skill 库现有 128
+                                个不重复模板，覆盖图片风格化、提示词优化、角色与商品设计、
+                                视频运镜、连续性、打戏、追逐、广告和分镜等常用创作方向。
                             </p>
                         </div>
                         {[
-                            "首页历史画布卡片使用第一张生成图片作为固定封面；上传的参考图不会被误识别为封面。",
-                            "旧画布无需重新生成，打开首页后会自动从已有记录中寻找最早生成的图片并补上封面。",
-                            "生成历史改为按照任务真实生成时间倒序排列，最新结果优先显示，并修复跨节点去重后的顺序错乱。",
-                            "Nano Banana 2 预览版恢复比例和 1K/2K/4K 选择，不再强制限制为 1:1 / 1K。",
-                            "继续保留新渠道 Gemini 比例与高分辨率兼容参数，文生图和图生图均可使用节点上的尺寸设置。",
+                            "首页历史画布增加删除按钮和二次确认，可清理不再需要的画布、节点与连接线记录。",
+                            "新增 80 个原创 Skill，最终共 128 个；其中图片 63 个、视频 65 个。",
+                            "新增近身打戏、剑术、枪战调度、追逐、一镜到底、跑酷、体育高光和法术特效模板。",
+                            "新增角色一致性、连续分镜、包装样机、商品广告、像素场景、陶瓷釉彩和刺绣等图片模板。",
+                            "所有 Skill 均可搜索和分类筛选，并会直接生成适合节点使用的结构化提示词。",
                         ].map((item, index) => (
                             <div
                                 key={item}
