@@ -9,7 +9,7 @@ describe("creative skills", () => {
     it("keeps every skill id unique", () => {
         const ids = CREATIVE_SKILLS.map((skill) => skill.id);
         const names = CREATIVE_SKILLS.map((skill) => skill.name);
-        expect(CREATIVE_SKILLS.length).toBeGreaterThanOrEqual(98);
+        expect(CREATIVE_SKILLS.length).toBeGreaterThanOrEqual(128);
         expect(new Set(ids).size).toBe(ids.length);
         expect(new Set(names).size).toBe(names.length);
     });
@@ -23,6 +23,10 @@ describe("creative skills", () => {
         expect(getCreativeSkill("trailer-beat-structure")?.target).toBe(
             "video",
         );
+        expect(getCreativeSkill("cinematic-color-script")?.target).toBe(
+            "image",
+        );
+        expect(getCreativeSkill("fantasy-spell-vfx")?.target).toBe("video");
     });
 
     it("contains both image and video helpers", () => {
