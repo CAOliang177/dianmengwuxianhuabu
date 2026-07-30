@@ -1,6 +1,12 @@
 import "server-only";
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    renameSync,
+    writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { dataDir } from "@/lib/runtime/paths.server";
 
@@ -11,6 +17,7 @@ export interface StoredCanvasHistory {
         createdAt: number;
         updatedAt: number;
         nodeCount: number;
+        coverFileKey?: string;
     }>;
     activeCanvasId?: string;
     canvases: Record<

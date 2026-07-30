@@ -6,6 +6,7 @@ export interface CanvasHistoryItem {
     createdAt: number;
     updatedAt: number;
     nodeCount: number;
+    coverFileKey?: string;
 }
 
 type CanvasPart = "nodes" | "edges" | "meta";
@@ -20,6 +21,11 @@ interface PersistentCanvasStore {
     history: CanvasHistoryItem[];
     activeCanvasId?: string;
     canvases: Record<string, CanvasSnapshot>;
+}
+
+interface CanvasCoverNode {
+    type?: string;
+    data?: Record<string, unknown>;
 }
 
 const HISTORY_KEY = "dianmeng.canvas.history.v1";
@@ -53,6 +59,81 @@ function writeHistory(items: CanvasHistoryItem[], persist = true) {
     if (persist) persistPatch({ history: items });
 }
 
+export function firstGeneratedCanvasImage(
+    nodes: CanvasCoverNode[],
+): string | undefined {
+    const timestamped: Array<{ fileKey: string; createdAt: number }> = [];
+    const legacy: string[] = [];
+
+    for (const node of nodes) {
+        const data = node.data;
+        if (!data) continue;
+
+        const records = Array.isArray(data.generationHistoryRecords)
+            ? data.generationHistoryRecords
+            : [];
+        for (const record of records) {
+            if (
+                record &&
+                typeof record === "object" &&
+                typeof (record as { fileKey?: unknown }).fileKey === "string" &&
+                Number.isFinite(
+                    Number((record as { createdAt?: unknown }).createdAt),
+                )
+            ) {
+                timestamped.push({
+                    fileKey: (record as { fileKey: string }).fileKey,
+                    createdAt: Number(
+                        (record as { createdAt: number }).createdAt,
+                    ),
+                });
+            }
+        }
+
+        if (node.type !== "textGenImageNode") continue;
+        const generationHistory = Array.isArray(data.generationHistory)
+            ? data.generationHistory.filter(
+                  (value): value is string =>
+                      typeof value === "string" && value.length > 0,
+              )
+            : [];
+        if (generationHistory.length > 0) {
+            legacy.push(generationHistory[generationHistory.length - 1]);
+            continue;
+        }
+        const fileKeys = Array.isArray(data.fileKeys)
+            ? data.fileKeys.filter(
+                  (value): value is string =>
+                      typeof value === "string" && value.length > 0,
+              )
+            : [];
+        if (fileKeys[0]) legacy.push(fileKeys[0]);
+    }
+
+    timestamped.sort(
+        (a, b) =>
+            a.createdAt - b.createdAt || a.fileKey.localeCompare(b.fileKey),
+    );
+    return timestamped[0]?.fileKey ?? legacy[0];
+}
+
+function backfillCanvasCovers(
+    history: CanvasHistoryItem[],
+    canvases: Record<string, CanvasSnapshot>,
+) {
+    let changed = false;
+    const next = history.map((item) => {
+        if (item.coverFileKey) return item;
+        const coverFileKey = firstGeneratedCanvasImage(
+            (canvases[item.id]?.nodes ?? []) as CanvasCoverNode[],
+        );
+        if (!coverFileKey) return item;
+        changed = true;
+        return { ...item, coverFileKey };
+    });
+    return { history: next, changed };
+}
+
 function makeId() {
     return globalThis.crypto?.randomUUID?.() ?? `canvas-${Date.now()}`;
 }
@@ -79,7 +160,8 @@ export function ensureCanvas(id: string, name = "未命名画布") {
 export function createCanvas(name?: string) {
     const id = makeId();
     const now = Date.now();
-    const canvasName = name || `未命名画布 ${new Date(now).toLocaleDateString("zh-CN")}`;
+    const canvasName =
+        name || `未命名画布 ${new Date(now).toLocaleDateString("zh-CN")}`;
     writeHistory([
         { id, name: canvasName, createdAt: now, updatedAt: now, nodeCount: 0 },
         ...readHistory(),
@@ -123,7 +205,13 @@ function touchCanvas(id: string, patch: Partial<CanvasHistoryItem> = {}) {
 export function saveCanvasNodes(nodes: Node[]) {
     const id = getActiveCanvasId();
     localStorage.setItem(canvasStorageKey(id, "nodes"), JSON.stringify(nodes));
-    const historyItem = touchCanvas(id, { nodeCount: nodes.length });
+    const current = readHistory().find((item) => item.id === id);
+    const coverFileKey =
+        current?.coverFileKey ?? firstGeneratedCanvasImage(nodes);
+    const historyItem = touchCanvas(id, {
+        nodeCount: nodes.length,
+        ...(coverFileKey ? { coverFileKey } : {}),
+    });
     persistPatch({ canvas: { id, nodes }, historyItem });
 }
 
@@ -140,7 +228,10 @@ export function saveCanvasMeta(meta: {
     description: string;
 }) {
     const canvasId = getActiveCanvasId();
-    localStorage.setItem(canvasStorageKey(canvasId, "meta"), JSON.stringify(meta));
+    localStorage.setItem(
+        canvasStorageKey(canvasId, "meta"),
+        JSON.stringify(meta),
+    );
     const historyItem = touchCanvas(canvasId, {
         name: meta.name || "未命名画布",
     });
@@ -214,16 +305,22 @@ function localSnapshot(): PersistentCanvasStore {
                     localStorage.getItem(canvasStorageKey(item.id, "edges")) ||
                         "[]",
                 ),
-                meta: JSON.parse(
-                    localStorage.getItem(canvasStorageKey(item.id, "meta")) ||
-                        "null",
-                ) || undefined,
+                meta:
+                    JSON.parse(
+                        localStorage.getItem(
+                            canvasStorageKey(item.id, "meta"),
+                        ) || "null",
+                    ) || undefined,
             };
         } catch {
             canvases[item.id] = {};
         }
     }
-    return { history, activeCanvasId: getActiveCanvasId(), canvases };
+    return {
+        history: backfillCanvasCovers(history, canvases).history,
+        activeCanvasId: getActiveCanvasId(),
+        canvases,
+    };
 }
 
 /**
@@ -232,7 +329,9 @@ function localSnapshot(): PersistentCanvasStore {
  */
 export async function hydrateCanvasHistoryFromDisk() {
     try {
-        const response = await fetch("/api/canvas-history", { cache: "no-store" });
+        const response = await fetch("/api/canvas-history", {
+            cache: "no-store",
+        });
         if (!response.ok) return getCanvasHistory();
         const disk = (await response.json()) as PersistentCanvasStore;
         const local = localSnapshot();
@@ -242,7 +341,11 @@ export async function hydrateCanvasHistoryFromDisk() {
         }
         if (!Array.isArray(disk.history)) return local.history;
 
-        writeHistory(disk.history, false);
+        const covers = backfillCanvasCovers(disk.history, disk.canvases || {});
+        writeHistory(covers.history, false);
+        if (covers.changed) {
+            persistPatch({ history: covers.history });
+        }
         if (disk.activeCanvasId) {
             localStorage.setItem(ACTIVE_KEY, disk.activeCanvasId);
         }
@@ -266,7 +369,7 @@ export async function hydrateCanvasHistoryFromDisk() {
                 );
             }
         }
-        return disk.history.sort((a, b) => b.updatedAt - a.updatedAt);
+        return covers.history.sort((a, b) => b.updatedAt - a.updatedAt);
     } catch {
         return getCanvasHistory();
     }

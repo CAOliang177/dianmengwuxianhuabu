@@ -27,6 +27,7 @@ import {
     renameCanvas,
     setActiveCanvasId,
 } from "@/lib/canvas-history";
+import { getFileUrl } from "@/lib/file/url";
 
 const LETTER_COLORS = [
     "#72a7ff",
@@ -302,6 +303,25 @@ export default function Home() {
                                                     strokeDasharray="5 5"
                                                 />
                                             </svg>
+                                            {canvas.coverFileKey ? (
+                                                <>
+                                                    <img
+                                                        src={getFileUrl(
+                                                            canvas.coverFileKey.replace(
+                                                                /\\/g,
+                                                                "/",
+                                                            ),
+                                                        )}
+                                                        alt={`${canvas.name || "未命名画布"}封面`}
+                                                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.035]"
+                                                        onError={(event) => {
+                                                            event.currentTarget.style.display =
+                                                                "none";
+                                                        }}
+                                                    />
+                                                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10" />
+                                                </>
+                                            ) : null}
                                             <div className="absolute bottom-3 right-3 rounded-full bg-black/40 px-2.5 py-1 text-xs text-slate-300 backdrop-blur">
                                                 {canvas.nodeCount} 个节点
                                             </div>
