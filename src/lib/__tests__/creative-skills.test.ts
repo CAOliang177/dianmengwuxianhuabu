@@ -9,7 +9,7 @@ describe("creative skills", () => {
     it("keeps every skill id unique", () => {
         const ids = CREATIVE_SKILLS.map((skill) => skill.id);
         const names = CREATIVE_SKILLS.map((skill) => skill.name);
-        expect(CREATIVE_SKILLS.length).toBeGreaterThanOrEqual(128);
+        expect(CREATIVE_SKILLS).toHaveLength(200);
         expect(new Set(ids).size).toBe(ids.length);
         expect(new Set(names).size).toBe(names.length);
     });
@@ -27,6 +27,16 @@ describe("creative skills", () => {
             "image",
         );
         expect(getCreativeSkill("fantasy-spell-vfx")?.target).toBe("video");
+        expect(getCreativeSkill("golden-age-still-life")?.kind).toBe("style");
+        expect(getCreativeSkill("storyboard-animatic-motion")?.target).toBe(
+            "video",
+        );
+        expect(getCreativeSkill("boxing-exchange-director")?.tags).toContain(
+            "打戏",
+        );
+        expect(getCreativeSkill("improvised-weapon-fight-director")?.kind).toBe(
+            "optimizer",
+        );
     });
 
     it("contains both image and video helpers", () => {
