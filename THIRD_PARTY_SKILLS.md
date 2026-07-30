@@ -24,6 +24,41 @@ required license information.
 - Copyright (c) 2025-2026 DeerFlow Authors
 - License: MIT
 
+## Garden Skills
+
+- Project: https://github.com/ConardLi/garden-skills
+- Copyright (c) 2026 Garden Skills contributors
+- License: MIT
+
+## Seedance 2.0 Prompt Skill
+
+- Project: https://github.com/MapleShaw/seedance2.0-prompt-skill
+- Copyright (c) 2026 Seedance Prompt Skill Contributors
+- License: MIT
+
+## Seedance Prompt Guide
+
+- Project: https://github.com/rich5000/seedance-prompt-guide
+- Copyright (c) 2026 rich5000
+- License: MIT
+
+## Prompt Master
+
+- Project: https://github.com/nidhinjs/prompt-master
+- Copyright (c) 2026 Nidhin Joseph Nelson
+- License: MIT
+
+## Visual Skills
+
+- Project: https://github.com/smixs/visual-skills
+- Copyright (c) 2026 Serge Shima
+- License: Creative Commons Attribution 4.0 International
+- Required attribution: Serge Shima — https://github.com/smixs/visual-skills
+
+The Visual Skills material may be shared and adapted under CC BY 4.0,
+including commercially, provided that the author is credited and changes are
+indicated. Full license: https://creativecommons.org/licenses/by/4.0/
+
 ## MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

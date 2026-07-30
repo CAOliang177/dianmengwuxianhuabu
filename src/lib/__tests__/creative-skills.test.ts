@@ -9,7 +9,7 @@ describe("creative skills", () => {
     it("keeps every skill id unique", () => {
         const ids = CREATIVE_SKILLS.map((skill) => skill.id);
         const names = CREATIVE_SKILLS.map((skill) => skill.name);
-        expect(CREATIVE_SKILLS).toHaveLength(72);
+        expect(CREATIVE_SKILLS).toHaveLength(200);
         expect(new Set(ids).size).toBe(ids.length);
         expect(new Set(names).size).toBe(names.length);
     });
@@ -55,5 +55,15 @@ describe("creative skills", () => {
         const skill = getCreativeSkill("oss-gpt-image2-infographic-engine");
         expect(skill?.coverImage).toContain("case334.png");
         expect(skill?.buildPrompt("城市交通系统")).toContain("避坑约束");
+    });
+
+    it("includes a genuinely multi-source catalog", () => {
+        const sources = CREATIVE_SKILLS.map(
+            (skill) => skill.sourceInspiration?.split(":")[0],
+        ).filter(Boolean);
+        expect(new Set(sources).size).toBeGreaterThanOrEqual(8);
+        expect(
+            CREATIVE_SKILLS.filter((skill) => skill.target === "video").length,
+        ).toBeGreaterThanOrEqual(40);
     });
 });

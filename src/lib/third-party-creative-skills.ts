@@ -1,5 +1,6 @@
 import styleLibrary from "@/lib/awesome-gpt-image-2-style-library.json";
 import type { CreativeSkill } from "@/lib/creative-skills";
+import multiSourceAtlas from "@/lib/multi-source-skill-atlas.json";
 
 type StyleTemplate = (typeof styleLibrary.templates)[number];
 
@@ -121,8 +122,36 @@ const DEERFLOW_VIDEO_GENERATION: CreativeSkill = {
         ].join("\n"),
 };
 
+const MULTI_SOURCE_CREATIVE_SKILLS: CreativeSkill[] =
+    multiSourceAtlas.entries.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        shortName: entry.name,
+        target: entry.target as CreativeSkill["target"],
+        kind: entry.kind as CreativeSkill["kind"],
+        description: entry.description,
+        tags: entry.tags,
+        defaultAspectRatio: entry.defaultAspectRatio,
+        defaultDuration:
+            "defaultDuration" in entry
+                ? (entry.defaultDuration as number)
+                : undefined,
+        coverImage: entry.cover,
+        sourceInspiration: entry.source,
+        buildPrompt: (brief) =>
+            [
+                `当前创作需求：${cleanBrief(brief)}。`,
+                "下面是经过开源作者验证的原始 Skill 指令或提示词模板。请保留它的结构、镜头、版式和约束，把示例主题或占位变量替换为当前创作需求。",
+                "",
+                entry.promptTemplate,
+                "",
+                "只输出替换完成、可以直接提交给生成模型的最终提示词，不解释模板来源，不保留未填写的占位符。",
+            ].join("\n"),
+    }));
+
 export const THIRD_PARTY_CREATIVE_SKILLS: CreativeSkill[] = [
     GPT_IMAGE_2_REFERENCE_ATLAS,
     ...AWESOME_GPT_IMAGE_2_TEMPLATES,
     DEERFLOW_VIDEO_GENERATION,
+    ...MULTI_SOURCE_CREATIVE_SKILLS,
 ];
