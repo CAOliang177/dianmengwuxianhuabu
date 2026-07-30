@@ -49,7 +49,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.37";
+const RELEASE_VERSION = "0.1.38";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -412,11 +412,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                画布管理更完整，创作 Skill 大幅扩充
+                                200 个创作 Skill，图片与动作提示更完整
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                0.1.37 新增历史画布删除功能，并在原有基础上加入
-                                80 个图片与视频创作 Skill。
+                                0.1.38 将 Skill 库扩展到 200
+                                个，重点增加图片风格化、视觉设计和专业打斗提示词。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -424,20 +424,20 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                新功能：128 个创作 Skill
+                                新功能：200 个创作 Skill
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                Skill 库现有 128
-                                个不重复模板，覆盖图片风格化、提示词优化、角色与商品设计、
-                                视频运镜、连续性、打戏、追逐、广告和分镜等常用创作方向。
+                                Skill 库现有 200 个不重复模板，其中图片 112
+                                个、视频 88
+                                个，覆盖摄影、插画、平面、材质手工、商业视觉、运镜、连续性和动作导演。
                             </p>
                         </div>
                         {[
-                            "首页历史画布增加删除按钮和二次确认，可清理不再需要的画布、节点与连接线记录。",
-                            "新增 80 个原创 Skill，最终共 128 个；其中图片 63 个、视频 65 个。",
-                            "新增近身打戏、剑术、枪战调度、追逐、一镜到底、跑酷、体育高光和法术特效模板。",
-                            "新增角色一致性、连续分镜、包装样机、商品广告、像素场景、陶瓷釉彩和刺绣等图片模板。",
-                            "所有 Skill 均可搜索和分类筛选，并会直接生成适合节点使用的结构化提示词。",
+                            "Skill 总数扩展到 200 个：图片 112 个、视频 88 个，名称和功能均不重复。",
+                            "重点扩充摄影、插画、版画、印刷、纸艺、微缩、产品、建筑和复古未来等图片风格。",
+                            "新增拳击攻防、摔投地面技、多人围攻、狭窄空间和环境道具战五个专业打斗导演。",
+                            "打斗模板会约束动作轴线、人物重心、接触点、反作用和角色连续性，减少穿模与乱跳。",
+                            "保留历史画布删除与二次确认功能，所有 Skill 均支持搜索、分类和一键应用。",
                         ].map((item, index) => (
                             <div
                                 key={item}
