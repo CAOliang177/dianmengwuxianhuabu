@@ -19,7 +19,7 @@ type NodePluginModelSelectProps = {
 
 const NEW_CHANNEL_MODEL_LABELS: Record<string, string> = {
     "gemini-3-pro-image-preview": "Nano Banana Pro（Gemini 3 Pro）",
-    "gemini-3.1-flash-image-preview": "Nano Banana 2 预览版（仅 1:1 / 1K）",
+    "gemini-3.1-flash-image-preview": "Nano Banana 2 预览版",
     "gpt-image-2-pro": "GPT Image 2 Pro",
 };
 

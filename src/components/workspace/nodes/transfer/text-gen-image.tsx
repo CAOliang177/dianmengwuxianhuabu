@@ -1,7 +1,6 @@
 import type { Edge } from "@xyflow/react";
 import { NodeToolbar, Position, useNodeId, useStore } from "@xyflow/react";
 import {
-    AlertTriangle,
     Atom,
     ChevronDown,
     Download,
@@ -285,15 +284,6 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
         IMAGE_RESOLUTION_TIERS.find(
             (tier) => tier.value === data.outputResolutionTier,
         ) ?? inferredTier;
-    const { resolved: resolvedPluginId } = useResolvedPluginId(
-        "image-fusion",
-        data,
-    );
-    const selectedModel = String(data.pluginModel ?? "").trim();
-    const previewModelLimited =
-        resolvedPluginId === "tongflow-api-new-channel" &&
-        selectedModel === "gemini-3.1-flash-image-preview";
-
     const updateNodeMeta = useCallback(
         (patch: Record<string, unknown>) => {
             if (!nodeId) return;
@@ -308,30 +298,6 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
         },
         [nodeId],
     );
-
-    useEffect(() => {
-        if (!previewModelLimited) return;
-        if (width !== 1024 || height !== 1024) {
-            form.patch({ width: 1024, height: 1024 });
-        }
-        if (
-            data.outputResolutionTier !== "1k" ||
-            data.followReferenceRatio === true
-        ) {
-            updateNodeMeta({
-                followReferenceRatio: false,
-                outputResolutionTier: "1k",
-            });
-        }
-    }, [
-        previewModelLimited,
-        width,
-        height,
-        form,
-        data.outputResolutionTier,
-        data.followReferenceRatio,
-        updateNodeMeta,
-    ]);
 
     useEffect(() => {
         if (form.state.width === undefined || form.state.height === undefined) {
@@ -491,6 +457,11 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
         collapsedPreviewDimensions,
     );
     const modeLabel = referenceCount > 0 ? "图生图" : "文生图";
+    const { resolved: resolvedPluginId } = useResolvedPluginId(
+        "image-fusion",
+        data,
+    );
+    const selectedModel = String(data.pluginModel ?? "").trim();
     const selectedModelLabel = selectedModel
         ? modelDisplayName(resolvedPluginId, selectedModel)
         : "选择模型";
@@ -707,54 +678,33 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                                             horizontal
                                         />
                                     </div>
-                                    {previewModelLimited ? (
-                                        <div className="flex gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-200">
-                                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                                            <span>
-                                                当前中转站的 Nano Banana 2
-                                                预览版只返回 1:1 /
-                                                1K。需要其他比例或 2K/4K，请选择
-                                                Nano Banana Pro，或让渠道添加
-                                                gemini-3.1-flash-image。
-                                            </span>
-                                        </div>
-                                    ) : null}
-                                    <fieldset
-                                        disabled={previewModelLimited}
-                                        className={
-                                            previewModelLimited
-                                                ? "space-y-3 opacity-45"
-                                                : "space-y-3"
+                                    <AspectRatioPicker
+                                        ratios={IMAGE_ASPECT_RATIOS}
+                                        value={{
+                                            ...currentRatio,
+                                            width,
+                                            height,
+                                        }}
+                                        onChange={(ratio) =>
+                                            applySize(ratio, currentTier)
                                         }
-                                    >
-                                        <AspectRatioPicker
-                                            ratios={IMAGE_ASPECT_RATIOS}
-                                            value={{
-                                                ...currentRatio,
-                                                width,
-                                                height,
-                                            }}
-                                            onChange={(ratio) =>
-                                                applySize(ratio, currentTier)
-                                            }
-                                            showSize
-                                            autoOption={{
-                                                active:
-                                                    followReferenceRatio &&
-                                                    referenceCount > 0,
-                                                disabled: referenceCount === 0,
-                                                onSelect: () =>
-                                                    toggleFollowReferenceRatio(
-                                                        true,
-                                                    ),
-                                            }}
-                                        />
-                                        <ResolutionPicker
-                                            tiers={IMAGE_RESOLUTION_TIERS}
-                                            value={currentTier.value}
-                                            onChange={changeResolutionTier}
-                                        />
-                                    </fieldset>
+                                        showSize
+                                        autoOption={{
+                                            active:
+                                                followReferenceRatio &&
+                                                referenceCount > 0,
+                                            disabled: referenceCount === 0,
+                                            onSelect: () =>
+                                                toggleFollowReferenceRatio(
+                                                    true,
+                                                ),
+                                        }}
+                                    />
+                                    <ResolutionPicker
+                                        tiers={IMAGE_RESOLUTION_TIERS}
+                                        value={currentTier.value}
+                                        onChange={changeResolutionTier}
+                                    />
                                 </div>
                             )}
 
