@@ -110,9 +110,10 @@ function SkillCover({
     const hash = skillHash(skill.id);
     const theme = COVER_THEMES[hash % COVER_THEMES.length];
     const coverImage =
-        hash % 2 === 0
+        skill.coverImage ??
+        (hash % 2 === 0
             ? "/skill-covers/cinematic-director.png"
-            : "/skill-covers/style-lab.png";
+            : "/skill-covers/style-lab.png");
     const icon =
         skill.target === "video" ? (
             <Clapperboard className="h-6 w-6" />

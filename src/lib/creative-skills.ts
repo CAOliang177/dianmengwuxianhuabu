@@ -1,4 +1,5 @@
 import { EXTENDED_CREATIVE_SKILLS } from "@/lib/creative-skill-extensions";
+import { THIRD_PARTY_CREATIVE_SKILLS } from "@/lib/third-party-creative-skills";
 
 export type CreativeSkillTarget = "image" | "video";
 export type CreativeSkillKind = "optimizer" | "style";
@@ -13,6 +14,7 @@ export interface CreativeSkill {
     tags: string[];
     defaultAspectRatio: string;
     defaultDuration?: number;
+    coverImage?: string;
     sourceInspiration?: string;
     buildPrompt: (brief: string) => string;
 }
@@ -411,6 +413,7 @@ export const CREATIVE_SKILLS: CreativeSkill[] = [
             ),
     },
     ...EXTENDED_CREATIVE_SKILLS,
+    ...THIRD_PARTY_CREATIVE_SKILLS,
 ];
 
 export function getCreativeSkill(skillId: string): CreativeSkill | undefined {
