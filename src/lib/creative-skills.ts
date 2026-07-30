@@ -1,4 +1,5 @@
 import { EXTENDED_CREATIVE_SKILLS } from "@/lib/creative-skill-extensions";
+import { CREATIVE_SKILL_PACK_50 } from "@/lib/creative-skill-pack-50";
 
 export type CreativeSkillTarget = "image" | "video";
 export type CreativeSkillKind = "optimizer" | "style";
@@ -411,6 +412,7 @@ export const CREATIVE_SKILLS: CreativeSkill[] = [
             ),
     },
     ...EXTENDED_CREATIVE_SKILLS,
+    ...CREATIVE_SKILL_PACK_50,
 ];
 
 export function getCreativeSkill(skillId: string): CreativeSkill | undefined {

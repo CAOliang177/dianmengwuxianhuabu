@@ -20,6 +20,7 @@ export async function POST(request: Request) {
         activeCanvasId?: string;
         historyItem?: StoredCanvasHistory["history"][number];
         canvas?: StoredCanvasHistory["canvases"][string] & { id: string };
+        deleteCanvasId?: string;
     };
 
     const result = await updateCanvasHistoryStore((current) => {
@@ -43,12 +44,23 @@ export async function POST(request: Request) {
         if (body.historyItem) {
             next.history = [
                 body.historyItem,
-                ...next.history.filter((item) => item.id !== body.historyItem?.id),
+                ...next.history.filter(
+                    (item) => item.id !== body.historyItem?.id,
+                ),
             ];
         }
         if (body.canvas?.id) {
             const { id, ...patch } = body.canvas;
             next.canvases[id] = { ...next.canvases[id], ...patch };
+        }
+        if (body.deleteCanvasId) {
+            next.history = next.history.filter(
+                (item) => item.id !== body.deleteCanvasId,
+            );
+            delete next.canvases[body.deleteCanvasId];
+            if (next.activeCanvasId === body.deleteCanvasId) {
+                next.activeCanvasId = next.history[0]?.id ?? "default";
+            }
         }
         return next;
     });

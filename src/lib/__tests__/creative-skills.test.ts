@@ -8,8 +8,21 @@ import {
 describe("creative skills", () => {
     it("keeps every skill id unique", () => {
         const ids = CREATIVE_SKILLS.map((skill) => skill.id);
-        expect(CREATIVE_SKILLS.length).toBeGreaterThanOrEqual(40);
+        const names = CREATIVE_SKILLS.map((skill) => skill.name);
+        expect(CREATIVE_SKILLS.length).toBeGreaterThanOrEqual(98);
         expect(new Set(ids).size).toBe(ids.length);
+        expect(new Set(names).size).toBe(names.length);
+    });
+
+    it("includes dedicated image, style, video and action prompt packs", () => {
+        expect(getCreativeSkill("identity-consistency-sheet")?.target).toBe(
+            "image",
+        );
+        expect(getCreativeSkill("risograph-print")?.kind).toBe("style");
+        expect(getCreativeSkill("close-quarters-fight")?.target).toBe("video");
+        expect(getCreativeSkill("trailer-beat-structure")?.target).toBe(
+            "video",
+        );
     });
 
     it("contains both image and video helpers", () => {

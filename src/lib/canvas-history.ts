@@ -260,6 +260,26 @@ export function renameCanvas(id: string, value: string) {
     return true;
 }
 
+export function deleteCanvas(id: string) {
+    const items = readHistory();
+    if (!items.some((item) => item.id === id)) return false;
+
+    const history = items.filter((item) => item.id !== id);
+    localStorage.removeItem(canvasStorageKey(id, "nodes"));
+    localStorage.removeItem(canvasStorageKey(id, "edges"));
+    localStorage.removeItem(canvasStorageKey(id, "meta"));
+    writeHistory(history, false);
+
+    const currentActiveId = getActiveCanvasId();
+    const activeCanvasId =
+        currentActiveId === id
+            ? (history[0]?.id ?? "default")
+            : currentActiveId;
+    localStorage.setItem(ACTIVE_KEY, activeCanvasId);
+    persistPatch({ deleteCanvasId: id, history, activeCanvasId });
+    return true;
+}
+
 export function migrateLegacyCanvas() {
     if (readHistory().length > 0) return;
     const legacyNodes = localStorage.getItem("nodes");

@@ -7,10 +7,21 @@ import {
     Pencil,
     Plus,
     Sparkles,
+    Trash2,
     WandSparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, useEffect, useState } from "react";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
     Dialog,
     DialogContent,
@@ -22,6 +33,7 @@ import { UpdateButton } from "@/components/workspace/update-button";
 import {
     type CanvasHistoryItem,
     createCanvas,
+    deleteCanvas,
     getCanvasHistory,
     hydrateCanvasHistoryFromDisk,
     renameCanvas,
@@ -70,6 +82,9 @@ export default function Home() {
         null,
     );
     const [renameValue, setRenameValue] = useState("");
+    const [deleteTarget, setDeleteTarget] = useState<CanvasHistoryItem | null>(
+        null,
+    );
     const [releaseNoticeOpen, setReleaseNoticeOpen] = useState(false);
 
     useEffect(() => {
@@ -131,6 +146,22 @@ export default function Home() {
             setHistory(getCanvasHistory());
             setRenameTarget(null);
         }
+    };
+
+    const beginDeleteCanvas = (
+        event: React.MouseEvent,
+        canvas: CanvasHistoryItem,
+    ) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setDeleteTarget(canvas);
+    };
+
+    const confirmDeleteCanvas = () => {
+        if (deleteTarget && deleteCanvas(deleteTarget.id)) {
+            setHistory(getCanvasHistory());
+        }
+        setDeleteTarget(null);
     };
 
     return (
@@ -342,12 +373,23 @@ export default function Home() {
                                         type="button"
                                         title="重命名画布"
                                         aria-label={`重命名 ${canvas.name || "未命名画布"}`}
-                                        className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/45 text-slate-200 opacity-0 shadow-lg backdrop-blur transition hover:bg-blue-500 hover:text-white group-hover:opacity-100 focus:opacity-100"
+                                        className="absolute right-14 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/45 text-slate-200 opacity-0 shadow-lg backdrop-blur transition hover:bg-blue-500 hover:text-white group-hover:opacity-100 focus:opacity-100"
                                         onClick={(event) =>
                                             beginRenameCanvas(event, canvas)
                                         }
                                     >
                                         <Pencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title="删除画布"
+                                        aria-label={`删除${canvas.name || "未命名画布"}`}
+                                        className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/45 text-slate-200 opacity-0 shadow-lg backdrop-blur transition hover:border-red-300/40 hover:bg-red-500 hover:text-white group-hover:opacity-100 focus:opacity-100"
+                                        onClick={(event) =>
+                                            beginDeleteCanvas(event, canvas)
+                                        }
+                                    >
+                                        <Trash2 className="h-4 w-4" />
                                     </button>
                                 </div>
                             ))}
@@ -416,6 +458,34 @@ export default function Home() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <AlertDialog
+                open={deleteTarget !== null}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTarget(null);
+                }}
+            >
+                <AlertDialogContent className="border-white/15 bg-[#11182a] text-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>删除这个画布？</AlertDialogTitle>
+                        <AlertDialogDescription className="leading-6 text-slate-400">
+                            “{deleteTarget?.name || "未命名画布"}
+                            ”中的节点、连接线和画布记录都会删除，此操作无法撤销。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="border-white/15 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white">
+                            取消
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDeleteCanvas}
+                            className="bg-red-500 text-white hover:bg-red-400"
+                        >
+                            确认删除
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <Dialog
                 open={renameTarget !== null}
