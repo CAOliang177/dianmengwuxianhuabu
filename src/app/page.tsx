@@ -49,7 +49,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.38";
+const RELEASE_VERSION = "0.1.39";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -412,11 +412,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                Skill 库已恢复为原始版本
+                                200 个多来源创作 Skill
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                已移除后来新增的内置模板，恢复为最初的 48 个
-                                Skill，等待接入许可证允许复用的第三方内容。
+                                在原有功能基础上接入多套许可证允许复用的开源
+                                Skill，图片、视频与提示词优化能力更加完整。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -424,19 +424,19 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                当前：48 个原始 Skill
+                                当前：200 个创作 Skill
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                当前只保留项目原有的 48 个 Skill。后续新增内容将来自公开、
-                                可验证许可证并允许再分发的第三方 Skill 仓库。
+                                包含图片风格、海报、商品、角色、品牌、UI、分镜、动作打斗、
+                                视频运镜和节奏设计，并提供搜索与分类筛选。
                             </p>
                         </div>
                         {[
-                            "已删除后来新增的 152 个自编模板，恢复项目最初的 48 个 Skill。",
-                            "画布删除、历史记录、节点连接和其他画布功能不受影响。",
-                            "第三方 Skill 只从许可证明确允许复制和再分发的公开仓库接入。",
-                            "需要保留许可声明的项目会集中收录到应用的第三方开源许可文件。",
-                            "新的第三方 Skill 清单确认后，再生成新的本地测试安装包。",
+                            "Skill 总数扩展到 200 个，其中新增 98 个图片类和 30 个视频类开源 Skill。",
+                            "内容来自 Garden Skills、Visual Skills、Seedance Prompt Skill 等多个独立项目。",
+                            "每个 Skill 都能直接应用到已选节点，或新建对应的图片、视频生成节点。",
+                            "新增真实模板封面，并对大尺寸封面进行压缩，减少加载和安装包体积。",
+                            "第三方许可证与必要署名统一收录在应用随附的第三方许可文件中。",
                         ].map((item, index) => (
                             <div
                                 key={item}
