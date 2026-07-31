@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -31,6 +32,8 @@ def main() -> None:
     os.environ["BANANA_IMAGE_SIZE"] = "1024x1024"
     os.environ["IMG2_IMAGE_SIZE"] = "1024x1024"
     os.environ["NEW_CHANNEL_IMAGE_SIZE"] = "1024x1024"
+    os.environ["NEW_CHANNEL_TIMEOUT"] = "600"
+    os.environ["NEW_CHANNEL_REQUEST_TIMEOUT"] = "90"
 
     # The node selection must win over old fixed-size environment settings.
     assert banana._size(2560, 1440) == "2560x1440"
@@ -77,6 +80,36 @@ def main() -> None:
     # The no-suffix IMG2 model was intentionally retired.
     assert "gpt-image-2" not in img2.SUPPORTED_IMAGE_MODELS
     assert img2.DEFAULT_MODEL == "gpt-image-2-1k"
+
+    # A synchronous generation/edit POST can legitimately stay open until the
+    # image is finished. It must use the full generation timeout rather than
+    # being misreported as "not received" after the 90-second async submit
+    # window.
+    assert new_channel._post_timeout(False) == 600
+    assert new_channel._post_timeout(True) == 90
+
+    observed_timeouts: list[int | None] = []
+
+    def fake_http(_url: str, **kwargs):
+        observed_timeouts.append(kwargs.get("timeout"))
+        return json.dumps({"data": [{"b64_json": "eA=="}]}).encode()
+
+    original_http = new_channel._http
+    new_channel._http = fake_http
+    try:
+        new_channel._REQUEST_MODEL = "gemini-3-pro-image-preview"
+        new_channel._chat_image("test", [], "1024x1024")
+        assert observed_timeouts.pop() == 600
+
+        os.environ["NEW_CHANNEL_EDIT_ASYNC"] = "false"
+        new_channel._images_edit("test", [b"\x89PNG\r\n"], "1024x1024")
+        assert observed_timeouts.pop() == 600
+
+        os.environ["NEW_CHANNEL_ASYNC"] = "true"
+        new_channel._images_generate("test", "1024x1024")
+        assert observed_timeouts.pop() == 90
+    finally:
+        new_channel._http = original_http
 
     new_channel._REQUEST_MODEL = "gemini-3-pro-image-preview"
     payload = new_channel._chat_payload("test", [], "2560x1440")

@@ -50,7 +50,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.43";
+const RELEASE_VERSION = "0.1.44";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -413,11 +413,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                运行任务不中断紧急修复
+                                新渠道香蕉超时误报修复
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                修复 v0.1.42 中将正在生成的节点移出视野后，
-                                任务订阅被切断并导致生成停止的问题。
+                                修复中转站后台已经接单甚至生成成功， 画布却在 90
+                                秒后提示“没有请求到中转站”的问题。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -425,29 +425,29 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                移动画布不再切断生成
+                                同步生图完整等待生成结果
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                只要画布中仍有等待或生成中的任务，节点就会保持运行；
-                                缩放、拖动画布或把节点移出当前视野都不会再终止任务。
+                                新渠道同步文生图、图生图和多图参考请求现在使用完整的
+                                600 秒生成超时，不再在第 90 秒主动断开连接。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                历史防丢与保存优化继续保留
+                                异步提交与同步生成分开计时
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                旧快照防覆盖、任务数据库自动补回、时间戳修正和高频保存合并
-                                均继续生效；任务全部结束后才重新启用离屏节点优化。
+                                90 秒只用于异步接口返回任务 ID；即使真正超时，
+                                提示也会明确说明中转站可能仍在后台生成，避免误判和重复扣费。
                             </p>
                         </div>
                         {[
-                            "等待中或生成中的节点始终保持挂载，移出屏幕也不会断开实时任务连接。",
-                            "任务全部完成、失败或取消后，才重新启用离屏节点虚拟化。",
-                            "继续阻止旧节点快照覆盖新生成历史，并自动补回本机可恢复结果。",
-                            "继续合并密集的节点、连线和设置保存，降低不必要的磁盘写入。",
-                            "加入专门的回归测试，防止后续性能优化再次切断运行任务。",
+                            "同步 /chat/completions 使用完整生成超时，不再错误套用 90 秒提交窗口。",
+                            "同步 /images/generations 和 /images/edits 同样等待完整生成结果。",
+                            "异步接口仍使用短提交窗口取得任务 ID，之后进入最长 600 秒轮询。",
+                            "超时文案改为“未返回响应但可能仍在生成”，不再声称中转站未收到。",
+                            "移动运行中的画布不中断任务、历史防丢和保存优化继续保留。",
                         ].map((item, index) => (
                             <div
                                 key={item}

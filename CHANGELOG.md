@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.44] - 2026-07-31
+
+### Fixed
+
+- New Channel synchronous image requests now use the full generation timeout
+  instead of the 90-second async submission timeout, preventing successful
+  relay jobs from being reported as not received.
+- Async submissions still use the short task-id acknowledgement timeout, then
+  switch to normal long polling.
+- Timeout messages now state that the relay may still be processing the job,
+  avoiding misleading retry advice and accidental duplicate billing.
+
 ## [0.1.43] - 2026-07-31
 
 ### Fixed

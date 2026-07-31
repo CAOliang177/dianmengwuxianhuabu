@@ -92,12 +92,17 @@ def _timeout() -> int:
 
 
 def _submission_timeout() -> int:
-    """Timeout for the initial POST, separate from async task polling."""
+    """Timeout for an async POST that should quickly return a task id."""
     try:
         configured = int(_env("NEW_CHANNEL_REQUEST_TIMEOUT", "90"))
     except ValueError:
         configured = 90
     return max(30, min(configured, _timeout()))
+
+
+def _post_timeout(async_submission: bool) -> int:
+    """Synchronous image APIs may not respond until generation is complete."""
+    return _submission_timeout() if async_submission else _timeout()
 
 
 def _async_enabled() -> bool:
@@ -203,15 +208,15 @@ def _http(
         if isinstance(exc.reason, (socket.timeout, TimeoutError)):
             seconds = timeout or _timeout()
             raise SubmissionTimeout(
-                f"新渠道在 {seconds} 秒内没有确认收到请求。"
-                "请检查中转站状态后重试；为避免重复扣费，本次不会自动重复提交。"
+                f"新渠道在 {seconds} 秒内没有返回响应；这不代表中转站未收到请求，"
+                "中转站可能仍在后台生成。为避免重复扣费，本次不会自动重复提交。"
             ) from exc
         raise RuntimeError(f"无法连接新渠道 API ({url}): {exc.reason}") from exc
     except (socket.timeout, TimeoutError) as exc:
         seconds = timeout or _timeout()
         raise SubmissionTimeout(
-            f"新渠道在 {seconds} 秒内没有确认收到请求。"
-            "请检查中转站状态后重试；为避免重复扣费，本次不会自动重复提交。"
+            f"新渠道在 {seconds} 秒内没有返回响应；这不代表中转站未收到请求，"
+            "中转站可能仍在后台生成。为避免重复扣费，本次不会自动重复提交。"
         ) from exc
 
 
@@ -482,7 +487,7 @@ def _chat_image(prompt: str, images: list[bytes], size: str | None):
             method="POST",
             body=json.dumps(payload).encode("utf-8"),
             content_type="application/json",
-            timeout=_submission_timeout(),
+            timeout=_post_timeout(False),
         )
     )
     image = _finished_asset(response) or _asset_from_chat_value(response)
@@ -580,7 +585,8 @@ def _images_generate(prompt: str, size: str | None):
                 "imageSize": image_config["image_size"],
             },
         }
-    if _async_enabled():
+    async_submission = _async_enabled()
+    if async_submission:
         payload["async"] = True
     body = json.dumps(payload).encode("utf-8")
     response = _json(
@@ -589,7 +595,7 @@ def _images_generate(prompt: str, size: str | None):
             method="POST",
             body=body,
             content_type="application/json",
-            timeout=_submission_timeout(),
+            timeout=_post_timeout(async_submission),
         )
     )
     return _await_result(endpoint, response)
@@ -619,7 +625,8 @@ def _images_edit(prompt: str, images: list[bytes], size: str | None):
                 },
             }
         )
-    if _edit_async_enabled():
+    async_submission = _edit_async_enabled()
+    if async_submission:
         fields["async"] = "true"
     fixed_gpt_image = bool(
         re.search(r"(?:^|-)gpt-image-2-(?:1k|2k|4k)$", model, re.IGNORECASE)
@@ -636,7 +643,7 @@ def _images_edit(prompt: str, images: list[bytes], size: str | None):
             method="POST",
             body=body,
             content_type=content_type,
-            timeout=_submission_timeout(),
+            timeout=_post_timeout(async_submission),
         )
     )
     return _await_result(endpoint, response)

@@ -37,7 +37,7 @@
     {
       "key": "NEW_CHANNEL_REQUEST_TIMEOUT",
       "default": "90",
-      "description": "首次提交请求的等待秒数；中转站未确认接单时会提前报错，避免一直等待"
+      "description": "异步接口首次提交并等待任务 id 的秒数；同步生成会改用完整生成超时"
     },
     {
       "key": "NEW_CHANNEL_TIMEOUT",
