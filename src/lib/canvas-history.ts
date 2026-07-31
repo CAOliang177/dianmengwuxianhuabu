@@ -45,18 +45,51 @@ function readHistory(): CanvasHistoryItem[] {
     }
 }
 
-function persistPatch(patch: Record<string, unknown>) {
-    void fetch("/api/canvas-history", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(patch),
-        keepalive: true,
-    }).catch(() => undefined);
+let persistChain: Promise<void> = Promise.resolve();
+
+async function postPatch(
+    patch: Record<string, unknown>,
+    attempts = 3,
+): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+            const response = await fetch("/api/canvas-history", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(patch),
+                keepalive: true,
+                cache: "no-store",
+            });
+            if (!response.ok) {
+                throw new Error(
+                    `Canvas persistence failed with HTTP ${response.status}`,
+                );
+            }
+            return;
+        } catch (error) {
+            lastError = error;
+            if (attempt < attempts) {
+                await new Promise((resolve) =>
+                    setTimeout(resolve, attempt * 200),
+                );
+            }
+        }
+    }
+    throw lastError;
+}
+
+function persistPatch(patch: Record<string, unknown>): Promise<void> {
+    const operation = persistChain
+        .catch(() => undefined)
+        .then(() => postPatch(patch));
+    persistChain = operation;
+    return operation;
 }
 
 function writeHistory(items: CanvasHistoryItem[], persist = true) {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
-    if (persist) persistPatch({ history: items });
+    if (persist) void persistPatch({ history: items });
 }
 
 export function firstGeneratedCanvasImage(
@@ -140,7 +173,7 @@ function makeId() {
 
 export function setActiveCanvasId(id: string) {
     localStorage.setItem(ACTIVE_KEY, id);
-    persistPatch({ activeCanvasId: id });
+    void persistPatch({ activeCanvasId: id });
 }
 
 export function getActiveCanvasId() {
@@ -173,7 +206,7 @@ export function createCanvas(name?: string) {
         JSON.stringify({ id: null, name: canvasName, description: "" }),
     );
     setActiveCanvasId(id);
-    persistPatch({
+    void persistPatch({
         canvas: {
             id,
             nodes: [],
@@ -251,27 +284,34 @@ export function flushCanvasSnapshot(
     ) {
         return;
     }
-    persistPatch(patch);
+    void persistPatch(patch);
 }
 
-export function saveCanvasNodes(nodes: Node[]) {
-    const id = getActiveCanvasId();
+export function saveCanvasNodesForCanvas(id: string, nodes: Node[]) {
     localStorage.setItem(canvasStorageKey(id, "nodes"), JSON.stringify(nodes));
     const current = readHistory().find((item) => item.id === id);
     const coverFileKey =
         current?.coverFileKey ?? firstGeneratedCanvasImage(nodes);
-    const historyItem = touchCanvas(id, {
-        nodeCount: nodes.length,
-        ...(coverFileKey ? { coverFileKey } : {}),
-    });
-    persistPatch({ canvas: { id, nodes }, historyItem });
+    const historyItem = touchCanvas(
+        id,
+        {
+            nodeCount: nodes.length,
+            ...(coverFileKey ? { coverFileKey } : {}),
+        },
+        false,
+    );
+    return persistPatch({ canvas: { id, nodes }, historyItem });
+}
+
+export function saveCanvasNodes(nodes: Node[]) {
+    return saveCanvasNodesForCanvas(getActiveCanvasId(), nodes);
 }
 
 export function saveCanvasEdges(edges: Edge[]) {
     const id = getActiveCanvasId();
     localStorage.setItem(canvasStorageKey(id, "edges"), JSON.stringify(edges));
-    const historyItem = touchCanvas(id);
-    persistPatch({ canvas: { id, edges }, historyItem });
+    const historyItem = touchCanvas(id, {}, false);
+    void persistPatch({ canvas: { id, edges }, historyItem });
 }
 
 export function saveCanvasMeta(meta: {
@@ -286,8 +326,8 @@ export function saveCanvasMeta(meta: {
     );
     const historyItem = touchCanvas(canvasId, {
         name: meta.name || "未命名画布",
-    });
-    persistPatch({ canvas: { id: canvasId, meta }, historyItem });
+    }, false);
+    void persistPatch({ canvas: { id: canvasId, meta }, historyItem });
 }
 
 export function renameCanvas(id: string, value: string) {
@@ -307,8 +347,8 @@ export function renameCanvas(id: string, value: string) {
     }
 
     localStorage.setItem(canvasStorageKey(id, "meta"), JSON.stringify(meta));
-    const historyItem = touchCanvas(id, { name });
-    persistPatch({ canvas: { id, meta }, historyItem });
+    const historyItem = touchCanvas(id, { name }, false);
+    void persistPatch({ canvas: { id, meta }, historyItem });
     return true;
 }
 
@@ -328,7 +368,7 @@ export function deleteCanvas(id: string) {
             ? (history[0]?.id ?? "default")
             : currentActiveId;
     localStorage.setItem(ACTIVE_KEY, activeCanvasId);
-    persistPatch({ deleteCanvasId: id, history, activeCanvasId });
+    void persistPatch({ deleteCanvasId: id, history, activeCanvasId });
     return true;
 }
 
@@ -408,7 +448,7 @@ export async function hydrateCanvasHistoryFromDisk() {
         const disk = (await response.json()) as PersistentCanvasStore;
         const local = localSnapshot();
         if (!disk.history?.length && local.history.length) {
-            persistPatch({ replace: local });
+            void persistPatch({ replace: local });
             return local.history;
         }
         if (!Array.isArray(disk.history)) return local.history;
@@ -416,7 +456,7 @@ export async function hydrateCanvasHistoryFromDisk() {
         const covers = backfillCanvasCovers(disk.history, disk.canvases || {});
         writeHistory(covers.history, false);
         if (covers.changed) {
-            persistPatch({ history: covers.history });
+            void persistPatch({ history: covers.history });
         }
         if (disk.activeCanvasId) {
             localStorage.setItem(ACTIVE_KEY, disk.activeCanvasId);

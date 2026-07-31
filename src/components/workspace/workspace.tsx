@@ -51,7 +51,9 @@ import {
     ensureCanvas,
     flushCanvasSnapshot,
     getActiveCanvasId,
+    getCanvasHistory,
     hydrateCanvasHistoryFromDisk,
+    saveCanvasNodesForCanvas,
     setActiveCanvasId,
 } from "@/lib/canvas-history";
 import { logger } from "@/lib/logger";
@@ -978,20 +980,50 @@ function WorkspaceInner({
                     workflowName: meta?.name || tIndex("title"),
                     workflowDescription: meta?.description || "",
                 });
-                void listTasks(1, 200)
-                    .then(({ tasks }) => {
-                        if (cancelled) return;
-                        const flow = useFlow.getState();
+                void (async () => {
+                    const tasks: Awaited<
+                        ReturnType<typeof listTasks>
+                    >["tasks"] = [];
+                    const pageSize = 500;
+                    for (let page = 1; page <= 20; page += 1) {
+                        const batch = await listTasks(page, pageSize);
+                        tasks.push(...batch.tasks);
+                        if (batch.tasks.length < pageSize) break;
+                    }
+
+                    if (cancelled) return;
+                    for (const item of getCanvasHistory()) {
+                        const savedNodes = JSON.parse(
+                            localStorage.getItem(
+                                canvasStorageKey(item.id, "nodes"),
+                            ) || "[]",
+                        ) as Node[];
                         const reconciled = reconcileCompletedImageTasks(
-                            flow.nodes,
+                            savedNodes,
                             tasks,
                         );
-                        if (reconciled.changed) {
-                            logger.warn(
-                                "[Workspace] Recovered completed image results that were not applied to their nodes",
-                            );
-                            flow.setNodes(reconciled.nodes);
+                        if (!reconciled.changed) continue;
+                        logger.warn(
+                            `[Workspace] Recovered completed image results for canvas ${item.id}`,
+                        );
+                        await saveCanvasNodesForCanvas(
+                            item.id,
+                            reconciled.nodes,
+                        );
+                        if (item.id === canvasId && !cancelled) {
+                            useFlow
+                                .getState()
+                                .setNodes(reconciled.nodes, {
+                                    immediate: true,
+                                });
                         }
+                    }
+                })()
+                    .then(() => {
+                        if (cancelled) return;
+                        logger.debug(
+                            "[Workspace] Completed-task reconciliation finished",
+                        );
                     })
                     .catch((error) => {
                         logger.debug(

@@ -13,6 +13,7 @@ import {
     type SSEStatusType,
     TaskStatus,
 } from "@/constants/task-status";
+import { useFlow } from "@/hooks/use-flow";
 import {
     createTask as apiCreateTask,
     getTask as apiGetTask,
@@ -33,7 +34,6 @@ import {
     reportUsageTask,
     trackUsageTask,
 } from "@/lib/usage/usage-telemetry";
-import { useFlow } from "@/hooks/use-flow";
 import type { SSEMessage } from "@/types/sse";
 
 // SSE message shape for the `/api/task/wait` stream
@@ -395,7 +395,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
                     logger.warn(
                         `[Task Router] Applied durable image fallback for unmounted node ${nodeId}`,
                     );
-                    flow.setNodes(reconciled.nodes);
+                    flow.setNodes(reconciled.nodes, { immediate: true });
                 }
             }
         } else {

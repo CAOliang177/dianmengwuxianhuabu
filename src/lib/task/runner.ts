@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { TaskStatus, WorkflowStatus } from "@/constants/task-status";
 import { getDb, tasks, workflows } from "@/db";
 import { ABI_NODES, type NodeSlot } from "@/generated/abi";
+import { recordCompletedImageTask } from "@/lib/canvas-history.server";
 import { readUploadFileByFileKey } from "@/lib/file/file-utils";
 import { logger } from "@/lib/logger";
 import { executePlugin } from "@/lib/plugin-executor/execute";
@@ -268,6 +269,13 @@ export async function executeTask(taskId: string): Promise<void> {
                     result: JSON.stringify(result),
                 })
                 .where(eq(tasks.id, taskId));
+            if (taskData.nodeSlot === "image-fusion") {
+                await recordCompletedImageTask(
+                    taskData.nodeId,
+                    taskId,
+                    result,
+                );
+            }
             notifyTask(
                 taskId,
                 TaskStatus.COMPLETED,

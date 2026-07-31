@@ -49,7 +49,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.40";
+const RELEASE_VERSION = "0.1.41";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -412,11 +412,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                画布数据与新渠道稳定性修复
+                                最近生成记录防丢失修复
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                重点修复关机重启后的画布恢复、新渠道长时间无响应，
-                                以及预览版比例和分辨率失效问题。
+                                重点修复进入同一画布后，最近生成的部分图片记录丢失的问题，
+                                并自动找回任务数据库中尚未写回画布的成功结果。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -424,19 +424,19 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                重启后可靠恢复画布
+                                成功生图立即可靠落盘
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                节点、连接线、画布名称和节点内生成记录会整体写入磁盘，
-                                并保留上一份有效备份用于断电恢复。
+                                任务完成时由后台先写入画布，再通知界面显示；界面保存失败会自动重试，
+                                启动时还会扫描全部历史画布进行补漏。
                             </p>
                         </div>
                         {[
-                            "修复桌面端重启更换本地端口后，误进入 default 空画布的问题。",
-                            "关闭窗口或系统关机前发送完整画布快照，节点中的生成历史一并保存。",
-                            "画布磁盘文件增加有效备份，异常断电损坏主文件时自动回退。",
-                            "新渠道提交请求单独使用 90 秒确认超时，不再无提示等待数分钟。",
-                            "Nano Banana 2 预览版恢复完整比例与 1K / 2K / 4K 参数。",
+                            "生成任务成功后，后台直接把图片结果写入所属画布，不再依赖界面防抖保存。",
+                            "界面收到成功结果后立即确认落盘，失败时按顺序自动重试。",
+                            "启动时分页扫描全部完成任务和所有历史画布，不再只检查当前画布前 200 条。",
+                            "可自动补回任务数据库中成功、但此前未写入节点生成历史的图片。",
+                            "保留完整画布快照与上一份有效备份，继续防护异常断电和文件损坏。",
                         ].map((item, index) => (
                             <div
                                 key={item}

@@ -20,12 +20,12 @@ import {
     resolvedSpecForNodeType,
     resolveEdgeHandles,
 } from "@/lib/abi/node-feature-registry";
-import { DATA_NODE_TYPES } from "@/lib/workflow/executable-workflow";
 import {
     saveCanvasEdges,
     saveCanvasMeta,
     saveCanvasNodes,
 } from "@/lib/canvas-history";
+import { DATA_NODE_TYPES } from "@/lib/workflow/executable-workflow";
 
 // True when React Flow reports a persisted data/input node type
 function isDataNode(nodeType: string): boolean {
@@ -120,14 +120,18 @@ export interface FlowState {
     onNodesChange: OnNodesChange<Node>;
     onEdgesChange: OnEdgesChange;
     onConnect: OnConnect;
-    setNodes: (nodes: Node[]) => void;
+    setNodes: (nodes: Node[], options?: { immediate?: boolean }) => void;
     setEdges: (edges: Edge[]) => void;
     /** Id of the edge currently being reconnected (excluded from validation). */
     reconnectingEdgeId: string | null;
     setReconnectingEdgeId: (id: string | null) => void;
     expands: (nodeId: string | null, possibleNodes: PossibleNode[]) => string[];
     compose: (newNode: { type: string; data: unknown }) => string;
-    updates: (nodeId: string, data: Record<string, unknown>) => void;
+    updates: (
+        nodeId: string,
+        data: Record<string, unknown>,
+        options?: { immediate?: boolean },
+    ) => void;
     addNode: (
         node: PossibleNode,
         position?: { x: number; y: number },
@@ -295,16 +299,24 @@ export const useFlow = create<FlowState>((set, get) => ({
         });
         debouncedSaveEdges(edges);
     },
-    setNodes: (nodes) => {
+    setNodes: (nodes, options) => {
         set({ nodes });
-        debouncedSaveNodes(nodes);
+        if (options?.immediate) {
+            void saveCanvasNodes(nodes);
+        } else {
+            debouncedSaveNodes(nodes);
+        }
     },
     setEdges: (edges) => {
         set({ edges });
         debouncedSaveEdges(edges);
     },
     setReconnectingEdgeId: (id) => set({ reconnectingEdgeId: id }),
-    updates: (nodeId: string, data: Record<string, unknown>) => {
+    updates: (
+        nodeId: string,
+        data: Record<string, unknown>,
+        options?: { immediate?: boolean },
+    ) => {
         const newNodes = get().nodes.map((node) => {
             if (node.id === nodeId) {
                 return {
@@ -317,7 +329,11 @@ export const useFlow = create<FlowState>((set, get) => ({
         set({
             nodes: newNodes,
         });
-        debouncedSaveNodes(newNodes);
+        if (options?.immediate) {
+            void saveCanvasNodes(newNodes);
+        } else {
+            debouncedSaveNodes(newNodes);
+        }
     },
     addNode: (node: PossibleNode, position?: { x: number; y: number }) => {
         get().pushHistory();

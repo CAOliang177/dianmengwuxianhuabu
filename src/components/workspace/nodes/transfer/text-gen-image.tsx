@@ -419,10 +419,14 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                 },
                 now,
             );
-            useFlow.getState().updates(nodeId, {
-                ...withGenerationHistory(currentData, generationHistory),
-                fileKeys: output.values,
-            });
+            useFlow.getState().updates(
+                nodeId,
+                {
+                    ...withGenerationHistory(currentData, generationHistory),
+                    fileKeys: output.values,
+                },
+                { immediate: true },
+            );
             return true;
         },
         [nodeId],
