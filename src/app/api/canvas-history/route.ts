@@ -4,6 +4,7 @@ import {
     type StoredCanvasHistory,
     updateCanvasHistoryStore,
 } from "@/lib/canvas-history.server";
+import { mergeDurableNodeHistory } from "@/lib/canvas-node-merge";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,19 @@ export async function POST(request: Request) {
         }
         if (body.canvas?.id) {
             const { id, ...patch } = body.canvas;
-            next.canvases[id] = { ...next.canvases[id], ...patch };
+            const existing = next.canvases[id];
+            next.canvases[id] = {
+                ...existing,
+                ...patch,
+                ...(Array.isArray(patch.nodes)
+                    ? {
+                          nodes: mergeDurableNodeHistory(
+                              existing?.nodes,
+                              patch.nodes,
+                          ),
+                      }
+                    : {}),
+            };
         }
         if (body.deleteCanvasId) {
             next.history = next.history.filter(

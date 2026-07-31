@@ -1,4 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
+import { mergeDurableNodeHistory } from "@/lib/canvas-node-merge";
 
 export interface CanvasHistoryItem {
     id: string;
@@ -85,6 +86,81 @@ function persistPatch(patch: Record<string, unknown>): Promise<void> {
         .then(() => postPatch(patch));
     persistChain = operation;
     return operation;
+}
+
+interface CanvasPersistencePatch {
+    canvas: CanvasSnapshot & { id: string };
+    historyItem?: CanvasHistoryItem;
+}
+
+interface PendingCanvasPatch {
+    patch: CanvasPersistencePatch;
+    timer: ReturnType<typeof setTimeout>;
+    waiters: Array<{
+        resolve: () => void;
+        reject: (reason: unknown) => void;
+    }>;
+}
+
+const pendingCanvasPatches = new Map<string, PendingCanvasPatch>();
+
+/**
+ * Coalesce bursts of node, edge and metadata updates into one disk request.
+ * Task progress and node UI updates can arrive close together; queueing every
+ * full-canvas snapshot made large canvases feel progressively slower.
+ */
+function persistCanvasPatch(patch: CanvasPersistencePatch): Promise<void> {
+    const id = patch.canvas.id;
+    return new Promise((resolve, reject) => {
+        const current = pendingCanvasPatches.get(id);
+        if (current) {
+            clearTimeout(current.timer);
+            current.patch = {
+                canvas: {
+                    ...current.patch.canvas,
+                    ...patch.canvas,
+                    id,
+                },
+                historyItem: patch.historyItem ?? current.patch.historyItem,
+            };
+            current.waiters.push({ resolve, reject });
+            current.timer = setTimeout(() => {
+                void flushPendingCanvasPatch(id);
+            }, 100);
+            return;
+        }
+
+        const pending: PendingCanvasPatch = {
+            patch,
+            waiters: [{ resolve, reject }],
+            timer: setTimeout(() => {
+                void flushPendingCanvasPatch(id);
+            }, 100),
+        };
+        pendingCanvasPatches.set(id, pending);
+    });
+}
+
+async function flushPendingCanvasPatch(id: string) {
+    const pending = pendingCanvasPatches.get(id);
+    if (!pending) return;
+    pendingCanvasPatches.delete(id);
+    try {
+        await persistPatch(pending.patch as unknown as Record<string, unknown>);
+        for (const waiter of pending.waiters) waiter.resolve();
+    } catch (error) {
+        for (const waiter of pending.waiters) waiter.reject(error);
+    }
+}
+
+function supersedePendingCanvasPatch(id: string) {
+    const pending = pendingCanvasPatches.get(id);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingCanvasPatches.delete(id);
+    // A newer complete snapshot or an explicit deletion supersedes this
+    // partial patch, so callers can consider their requested state durable.
+    for (const waiter of pending.waiters) waiter.resolve();
 }
 
 function writeHistory(items: CanvasHistoryItem[], persist = true) {
@@ -251,6 +327,7 @@ export function flushCanvasSnapshot(
     meta: { id: number | null; name: string; description: string },
 ) {
     const id = getActiveCanvasId();
+    supersedePendingCanvasPatch(id);
     localStorage.setItem(canvasStorageKey(id, "nodes"), JSON.stringify(nodes));
     localStorage.setItem(canvasStorageKey(id, "edges"), JSON.stringify(edges));
     localStorage.setItem(canvasStorageKey(id, "meta"), JSON.stringify(meta));
@@ -300,7 +377,7 @@ export function saveCanvasNodesForCanvas(id: string, nodes: Node[]) {
         },
         false,
     );
-    return persistPatch({ canvas: { id, nodes }, historyItem });
+    return persistCanvasPatch({ canvas: { id, nodes }, historyItem });
 }
 
 export function saveCanvasNodes(nodes: Node[]) {
@@ -311,7 +388,7 @@ export function saveCanvasEdges(edges: Edge[]) {
     const id = getActiveCanvasId();
     localStorage.setItem(canvasStorageKey(id, "edges"), JSON.stringify(edges));
     const historyItem = touchCanvas(id, {}, false);
-    void persistPatch({ canvas: { id, edges }, historyItem });
+    void persistCanvasPatch({ canvas: { id, edges }, historyItem });
 }
 
 export function saveCanvasMeta(meta: {
@@ -324,10 +401,17 @@ export function saveCanvasMeta(meta: {
         canvasStorageKey(canvasId, "meta"),
         JSON.stringify(meta),
     );
-    const historyItem = touchCanvas(canvasId, {
-        name: meta.name || "未命名画布",
-    }, false);
-    void persistPatch({ canvas: { id: canvasId, meta }, historyItem });
+    const historyItem = touchCanvas(
+        canvasId,
+        {
+            name: meta.name || "未命名画布",
+        },
+        false,
+    );
+    void persistCanvasPatch({
+        canvas: { id: canvasId, meta },
+        historyItem,
+    });
 }
 
 export function renameCanvas(id: string, value: string) {
@@ -348,7 +432,7 @@ export function renameCanvas(id: string, value: string) {
 
     localStorage.setItem(canvasStorageKey(id, "meta"), JSON.stringify(meta));
     const historyItem = touchCanvas(id, { name }, false);
-    void persistPatch({ canvas: { id, meta }, historyItem });
+    void persistCanvasPatch({ canvas: { id, meta }, historyItem });
     return true;
 }
 
@@ -357,6 +441,7 @@ export function deleteCanvas(id: string) {
     if (!items.some((item) => item.id === id)) return false;
 
     const history = items.filter((item) => item.id !== id);
+    supersedePendingCanvasPatch(id);
     localStorage.removeItem(canvasStorageKey(id, "nodes"));
     localStorage.removeItem(canvasStorageKey(id, "edges"));
     localStorage.removeItem(canvasStorageKey(id, "meta"));
@@ -463,10 +548,20 @@ export async function hydrateCanvasHistoryFromDisk() {
         }
         for (const [id, canvas] of Object.entries(disk.canvases || {})) {
             if (canvas.nodes) {
+                const localNodes = local.canvases[id]?.nodes;
+                const nodes = mergeDurableNodeHistory(
+                    localNodes,
+                    canvas.nodes,
+                ) as Node[];
                 localStorage.setItem(
                     canvasStorageKey(id, "nodes"),
-                    JSON.stringify(canvas.nodes),
+                    JSON.stringify(nodes),
                 );
+                if (JSON.stringify(nodes) !== JSON.stringify(canvas.nodes)) {
+                    void persistCanvasPatch({
+                        canvas: { id, nodes },
+                    });
+                }
             }
             if (canvas.edges) {
                 localStorage.setItem(

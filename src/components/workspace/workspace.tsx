@@ -42,7 +42,6 @@ import { showErrorToast } from "@/components/ui/error-toast";
 import { usePreloadFeatures } from "@/hooks/use-features";
 import type { FlowState } from "@/hooks/use-flow";
 import { useFlow } from "@/hooks/use-flow";
-import { useTaskStore } from "@/hooks/use-task";
 import { useWorkflowRecovery } from "@/hooks/use-workflow-recovery";
 import { listTasks } from "@/lib/api/task";
 import { getPresignedUploadUrl } from "@/lib/api/upload";
@@ -147,12 +146,6 @@ function WorkspaceInner({
 
     // Separate data and functions to avoid re-renders caused by function reference changes
     const { nodes, edges } = useFlow(useShallow(selector));
-    const hasActiveCanvasTasks = useTaskStore((state) =>
-        Array.from(state.tasks.values()).some(
-            (task) => task.status === "PENDING" || task.status === "PROCESSING",
-        ),
-    );
-
     // Get functions directly from the store (function references never change)
     const onNodesChange = useFlow.getState().onNodesChange;
     const onEdgesChange = useFlow.getState().onEdgesChange;
@@ -1011,11 +1004,9 @@ function WorkspaceInner({
                             reconciled.nodes,
                         );
                         if (item.id === canvasId && !cancelled) {
-                            useFlow
-                                .getState()
-                                .setNodes(reconciled.nodes, {
-                                    immediate: true,
-                                });
+                            useFlow.getState().setNodes(reconciled.nodes, {
+                                immediate: true,
+                            });
                         }
                     }
                 })()
@@ -1131,7 +1122,11 @@ function WorkspaceInner({
                 onPaneContextMenu={handlePaneContextMenu}
                 onEdgeContextMenu={handleEdgeContextMenu}
                 nodeOrigin={[0.5, 0.5]}
-                onlyRenderVisibleElements={!hasActiveCanvasTasks}
+                // Completed outputs are now recorded by the task runner and
+                // reconciled from SQLite, so off-screen nodes no longer need
+                // to stay mounted. Virtualizing them keeps large canvases
+                // responsive even while an image task is running.
+                onlyRenderVisibleElements
                 elevateNodesOnSelect={false}
                 selectNodesOnDrag={selectionModeActive}
                 selectionOnDrag={selectionModeActive}

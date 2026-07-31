@@ -6,6 +6,15 @@ export interface GenerationHistoryRecord {
     createdAt: number;
 }
 
+export function normalizeGenerationTimestamp(value: number): number {
+    // Some legacy task runners wrote seconds while others wrote
+    // microseconds. Normalize both to JavaScript milliseconds so one-week
+    // retention and chronological sorting remain reliable after upgrades.
+    if (value > 100_000_000_000_000) return Math.floor(value / 1000);
+    if (value > 0 && value < 100_000_000_000) return Math.floor(value * 1000);
+    return Math.floor(value);
+}
+
 export function generationTaskId(fileKey: string): string | null {
     const match = fileKey
         .replace(/\\/g, "/")
@@ -46,10 +55,12 @@ export function readGenerationHistory(
             typeof item.fileKey === "string" &&
             item.fileKey.length > 0 &&
             typeof item.createdAt === "number" &&
-            Number.isFinite(item.createdAt) &&
-            item.createdAt >= cutoff
+            Number.isFinite(item.createdAt)
         ) {
-            records.push({ fileKey: item.fileKey, createdAt: item.createdAt });
+            const createdAt = normalizeGenerationTimestamp(item.createdAt);
+            if (createdAt >= cutoff) {
+                records.push({ fileKey: item.fileKey, createdAt });
+            }
         }
     }
 
