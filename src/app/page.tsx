@@ -6,6 +6,7 @@ import {
     Layers3,
     Pencil,
     Plus,
+    SlidersHorizontal,
     Sparkles,
     Trash2,
     WandSparkles,
@@ -429,6 +430,18 @@ export default function Home() {
                             <p className="mt-2 leading-6 text-slate-300">
                                 任务完成时由后台先写入画布，再通知界面显示；界面保存失败会自动重试，
                                 启动时还会扫描全部历史画布进行补漏。
+                            </p>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
+                            <div className="flex items-center gap-2 font-semibold text-white">
+                                <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
+                                图片比例请求全面修复
+                            </div>
+                            <p className="mt-2 leading-6 text-slate-300">
+                                文生图、图生图和多图融合统一为 10
+                                种标准比例。画布选择、节点保存和 API
+                                请求现在使用同一套严格尺寸规则，修复 85:128
+                                等近似比例被中转站拒绝的问题。
                             </p>
                         </div>
                         {[
