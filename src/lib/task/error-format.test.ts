@@ -25,4 +25,12 @@ describe("formatStoredTaskErrorForDisplay", () => {
             ),
         ).toBe(JSON.stringify({ success: false, error: "boom" }));
     });
+
+    it("explains the image input byte limit in plain Chinese", () => {
+        expect(
+            formatStoredTaskErrorForDisplay(
+                "status_code=400, image task input size must be between 1 and 20971520 bytes",
+            ),
+        ).toContain("单张图片超过 20 MB");
+    });
 });

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.42] - 2026-07-31
+
+### Changed
+
+- Large canvases render only visible nodes, including while generation tasks
+  are running.
+- Bursts of node, edge, and metadata persistence are coalesced into fewer
+  atomic disk writes.
+
+### Fixed
+
+- Stale renderer snapshots can no longer overwrite generation history already
+  recorded by the background task runner.
+- Startup recovery merges local and disk history and restores recoverable
+  completed images from the local task database across every saved canvas.
+- Legacy second/millisecond/microsecond timestamps are normalized before
+  sorting and applying the one-week history retention window.
+- Empty, missing, or over-20-MB input images now show an actionable Chinese
+  error instead of the raw byte-limit message.
+
 ## [0.1.13] - 2026-07-04
 
 ### Added

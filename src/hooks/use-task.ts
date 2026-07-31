@@ -22,7 +22,10 @@ import {
 } from "@/lib/api/task";
 import { logger } from "@/lib/logger";
 import { getTaskStopUrl, getTaskWaitUrl } from "@/lib/task/api-url";
-import { formatStoredTaskErrorForDisplay } from "@/lib/task/error-format";
+import {
+    formatStoredTaskErrorForDisplay,
+    humanizeTaskErrorForDisplay,
+} from "@/lib/task/error-format";
 import { reconcileCompletedImageTasks } from "@/lib/task/reconcile-image-results";
 import {
     emitSSEConnected,
@@ -551,10 +554,12 @@ export function useTaskSubscription(
                             status: taskStatus,
                             progress: message.progress || 0,
                             data: message.data,
-                            error:
+                            error: humanizeTaskErrorForDisplay(
                                 message.error ||
-                                ((message.data as Record<string, unknown>)
-                                    ?.error as string),
+                                    (((message.data as Record<string, unknown>)
+                                        ?.error as string) ??
+                                        ""),
+                            ),
                             nodeId:
                                 (msgNodeId != null && msgNodeId !== ""
                                     ? String(msgNodeId)
@@ -892,7 +897,9 @@ export function useBatchTaskManager(
                                     status: taskStatus,
                                     progress: message.progress || 0,
                                     data: message.data,
-                                    error: message.error,
+                                    error: humanizeTaskErrorForDisplay(
+                                        message.error ?? "",
+                                    ),
                                     nodeId:
                                         (msgNodeId != null && msgNodeId !== ""
                                             ? String(msgNodeId)

@@ -3,6 +3,18 @@ import type {
     SerializedWorkflowFailure,
 } from "@/lib/task/error-envelope";
 
+export function humanizeTaskErrorForDisplay(raw: string): string {
+    const message = raw.trim();
+    if (
+        /image task input size must be between 1 and 20971520 bytes/i.test(
+            message,
+        )
+    ) {
+        return "输入或参考图片读取失败，或单张图片超过 20 MB。请逐张检查参考图；重新上传空文件或已丢失的图片，并压缩超过 20 MB 的图片后重试。";
+    }
+    return message;
+}
+
 /** Human line from persisted `tasks.error` JSON (`SerializedTaskError`); returns the raw string on parse failure. */
 export function formatStoredTaskErrorForDisplay(
     raw: string | null | undefined,
@@ -12,13 +24,13 @@ export function formatStoredTaskErrorForDisplay(
     try {
         const o = JSON.parse(raw) as Partial<SerializedTaskError>;
         if (typeof o.message === "string" && o.message.trim()) {
-            return o.message.trim();
+            return humanizeTaskErrorForDisplay(o.message);
         }
     } catch {
         /* Malformed write — best-effort display below. */
     }
 
-    return raw;
+    return humanizeTaskErrorForDisplay(raw);
 }
 
 /**

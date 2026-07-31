@@ -50,7 +50,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.41";
+const RELEASE_VERSION = "0.1.42";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -413,11 +413,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                最近生成记录防丢失修复
+                                历史找回与大画布流畅度升级
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                重点修复进入同一画布后，最近生成的部分图片记录丢失的问题，
-                                并自动找回任务数据库中尚未写回画布的成功结果。
+                                修复所有客户端都可能遇到的生成历史被旧快照覆盖问题，
+                                同时降低多节点画布的渲染和保存压力。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -425,31 +425,29 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                成功生图立即可靠落盘
+                                历史记录不再被旧画布覆盖
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                任务完成时由后台先写入画布，再通知界面显示；界面保存失败会自动重试，
-                                启动时还会扫描全部历史画布进行补漏。
+                                后台完成记录与界面画布快照现在会安全合并，而不是互相替换；
+                                更新后会扫描本机任务数据库，自动补回仍可恢复的成功图片。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                图片比例请求全面修复
+                                节点再多也更流畅
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                文生图、图生图和多图融合统一为 10
-                                种标准比例。画布选择、节点保存和 API
-                                请求现在使用同一套严格尺寸规则，修复 85:128
-                                等近似比例被中转站拒绝的问题。
+                                离开视野的节点不再持续参与渲染，短时间内连续发生的节点、
+                                连线和设置保存会自动合并，拖动画布与生成过程更轻快。
                             </p>
                         </div>
                         {[
-                            "生成任务成功后，后台直接把图片结果写入所属画布，不再依赖界面防抖保存。",
-                            "界面收到成功结果后立即确认落盘，失败时按顺序自动重试。",
-                            "启动时分页扫描全部完成任务和所有历史画布，不再只检查当前画布前 200 条。",
-                            "可自动补回任务数据库中成功、但此前未写入节点生成历史的图片。",
-                            "保留完整画布快照与上一份有效备份，继续防护异常断电和文件损坏。",
+                            "阻止旧节点快照覆盖刚完成的生成历史，适用于本机和其他已安装客户端。",
+                            "启动时扫描全部历史画布和本机成功任务，自动补回仍保存在数据库中的结果。",
+                            "统一修正旧版秒、毫秒和微秒时间戳，最近一周记录可正确排序和保留。",
+                            "启用离屏节点虚拟化并合并密集保存请求，改善大型画布卡顿。",
+                            "图片为空、丢失或超过 20 MB 时，直接显示可理解的中文处理提示。",
                         ].map((item, index) => (
                             <div
                                 key={item}
