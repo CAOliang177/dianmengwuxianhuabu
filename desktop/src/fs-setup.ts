@@ -17,6 +17,7 @@ const PUBLIC_IMAGE_PRESETS: Record<string, string> = {
     NEW_CHANNEL_IMAGE_MODEL: "gemini-3-pro-image-preview",
     NEW_CHANNEL_ASYNC: "true",
     NEW_CHANNEL_EDIT_ASYNC: "false",
+    NEW_CHANNEL_REQUEST_TIMEOUT: "90",
     NEW_CHANNEL_TIMEOUT: "600",
 };
 

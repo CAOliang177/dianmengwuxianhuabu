@@ -35,6 +35,11 @@
       "description": "可选固定尺寸；留空时按节点设置的比例与分辨率生成"
     },
     {
+      "key": "NEW_CHANNEL_REQUEST_TIMEOUT",
+      "default": "90",
+      "description": "首次提交请求的等待秒数；中转站未确认接单时会提前报错，避免一直等待"
+    },
+    {
       "key": "NEW_CHANNEL_TIMEOUT",
       "default": "600",
       "description": "生成和轮询超时秒数"

@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+    copyFileSync,
     existsSync,
     mkdirSync,
     readFileSync,
@@ -28,11 +29,12 @@ export interface StoredCanvasHistory {
 
 const emptyStore = (): StoredCanvasHistory => ({ history: [], canvases: {} });
 const storePath = () => join(dataDir(), "canvas-history.json");
+const backupPath = () => `${storePath()}.bak`;
 
-export function readCanvasHistoryStore(): StoredCanvasHistory {
+function readStoreFile(path: string): StoredCanvasHistory | null {
     try {
-        if (!existsSync(storePath())) return emptyStore();
-        const parsed = JSON.parse(readFileSync(storePath(), "utf8"));
+        if (!existsSync(path)) return null;
+        const parsed = JSON.parse(readFileSync(path, "utf8"));
         return {
             history: Array.isArray(parsed.history) ? parsed.history : [],
             activeCanvasId:
@@ -45,8 +47,18 @@ export function readCanvasHistoryStore(): StoredCanvasHistory {
                     : {},
         };
     } catch {
-        return emptyStore();
+        return null;
     }
+}
+
+export function readCanvasHistoryStore(): StoredCanvasHistory {
+    // A sudden shutdown can interrupt the last disk write. Keep the previous
+    // valid snapshot as a fallback instead of presenting an empty canvas.
+    return (
+        readStoreFile(storePath()) ??
+        readStoreFile(backupPath()) ??
+        emptyStore()
+    );
 }
 
 let writeChain: Promise<StoredCanvasHistory> = Promise.resolve(emptyStore());
@@ -59,6 +71,9 @@ export function updateCanvasHistoryStore(
         const path = storePath();
         const temp = `${path}.tmp`;
         mkdirSync(dirname(path), { recursive: true });
+        if (readStoreFile(path)) {
+            copyFileSync(path, backupPath());
+        }
         writeFileSync(temp, JSON.stringify(next, null, 2), "utf8");
         renameSync(temp, path);
         return next;

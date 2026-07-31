@@ -184,7 +184,11 @@ export function createCanvas(name?: string) {
     return id;
 }
 
-function touchCanvas(id: string, patch: Partial<CanvasHistoryItem> = {}) {
+function touchCanvas(
+    id: string,
+    patch: Partial<CanvasHistoryItem> = {},
+    persist = true,
+) {
     const now = Date.now();
     const items = readHistory();
     const current = items.find((item) => item.id === id);
@@ -198,8 +202,56 @@ function touchCanvas(id: string, patch: Partial<CanvasHistoryItem> = {}) {
               ...patch,
               updatedAt: now,
           };
-    writeHistory([next, ...items.filter((item) => item.id !== id)]);
+    writeHistory([next, ...items.filter((item) => item.id !== id)], persist);
     return next;
+}
+
+/**
+ * Persist one complete canvas snapshot when the renderer is being hidden or
+ * closed. Desktop launches use a different localhost port, so localStorage is
+ * only a cache; the combined beacon is the durable source of truth after a
+ * reboot and also preserves the generation history embedded in node data.
+ */
+export function flushCanvasSnapshot(
+    nodes: Node[],
+    edges: Edge[],
+    meta: { id: number | null; name: string; description: string },
+) {
+    const id = getActiveCanvasId();
+    localStorage.setItem(canvasStorageKey(id, "nodes"), JSON.stringify(nodes));
+    localStorage.setItem(canvasStorageKey(id, "edges"), JSON.stringify(edges));
+    localStorage.setItem(canvasStorageKey(id, "meta"), JSON.stringify(meta));
+
+    const current = readHistory().find((item) => item.id === id);
+    const coverFileKey =
+        current?.coverFileKey ?? firstGeneratedCanvasImage(nodes);
+    const historyItem = touchCanvas(
+        id,
+        {
+            name: meta.name || "未命名画布",
+            nodeCount: nodes.length,
+            ...(coverFileKey ? { coverFileKey } : {}),
+        },
+        false,
+    );
+    const patch = {
+        activeCanvasId: id,
+        canvas: { id, nodes, edges, meta },
+        historyItem,
+    };
+    const body = JSON.stringify(patch);
+
+    if (
+        typeof navigator !== "undefined" &&
+        typeof navigator.sendBeacon === "function" &&
+        navigator.sendBeacon(
+            "/api/canvas-history",
+            new Blob([body], { type: "application/json" }),
+        )
+    ) {
+        return;
+    }
+    persistPatch(patch);
 }
 
 export function saveCanvasNodes(nodes: Node[]) {

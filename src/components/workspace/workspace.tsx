@@ -49,6 +49,7 @@ import { getPresignedUploadUrl } from "@/lib/api/upload";
 import {
     canvasStorageKey,
     ensureCanvas,
+    flushCanvasSnapshot,
     getActiveCanvasId,
     hydrateCanvasHistoryFromDisk,
     setActiveCanvasId,
@@ -939,11 +940,16 @@ function WorkspaceInner({
             const requestedId = new URLSearchParams(window.location.search).get(
                 "canvas",
             );
-            const canvasId = requestedId || getActiveCanvasId();
-            setActiveCanvasId(canvasId);
             useFlow.setState({ nodes: [], edges: [] });
+            // The desktop server starts on a different localhost port after
+            // every reboot, so that launch begins with a fresh localStorage
+            // origin. Hydrate the port-independent disk store before resolving
+            // the active canvas; otherwise getActiveCanvasId() returns
+            // "default" and the user appears to have lost every saved node.
             await hydrateCanvasHistoryFromDisk();
             if (cancelled) return;
+            const canvasId = requestedId || getActiveCanvasId();
+            setActiveCanvasId(canvasId);
             ensureCanvas(canvasId);
 
             try {
@@ -1000,6 +1006,33 @@ function WorkspaceInner({
         void restore();
         return () => {
             cancelled = true;
+        };
+    }, []);
+
+    // Flush a complete snapshot when Windows is shutting down, the Electron
+    // window closes, or the app is backgrounded. Node data includes the
+    // per-node generation records, so one atomic snapshot protects both the
+    // canvas layout and its recent generation history.
+    useEffect(() => {
+        const flush = () => {
+            const flow = useFlow.getState();
+            flushCanvasSnapshot(flow.nodes, flow.edges, {
+                id: flow.workflowId,
+                name: flow.workflowName,
+                description: flow.workflowDescription,
+            });
+        };
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "hidden") flush();
+        };
+        window.addEventListener("pagehide", flush);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => {
+            window.removeEventListener("pagehide", flush);
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange,
+            );
         };
     }, []);
 

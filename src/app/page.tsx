@@ -49,7 +49,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.39";
+const RELEASE_VERSION = "0.1.40";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -412,11 +412,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                200 个多来源创作 Skill
+                                画布数据与新渠道稳定性修复
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                在原有功能基础上接入多套许可证允许复用的开源
-                                Skill，图片、视频与提示词优化能力更加完整。
+                                重点修复关机重启后的画布恢复、新渠道长时间无响应，
+                                以及预览版比例和分辨率失效问题。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -424,19 +424,19 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                当前：200 个创作 Skill
+                                重启后可靠恢复画布
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                包含图片风格、海报、商品、角色、品牌、UI、分镜、动作打斗、
-                                视频运镜和节奏设计，并提供搜索与分类筛选。
+                                节点、连接线、画布名称和节点内生成记录会整体写入磁盘，
+                                并保留上一份有效备份用于断电恢复。
                             </p>
                         </div>
                         {[
-                            "Skill 总数扩展到 200 个，其中新增 98 个图片类和 30 个视频类开源 Skill。",
-                            "内容来自 Garden Skills、Visual Skills、Seedance Prompt Skill 等多个独立项目。",
-                            "每个 Skill 都能直接应用到已选节点，或新建对应的图片、视频生成节点。",
-                            "新增真实模板封面，并对大尺寸封面进行压缩，减少加载和安装包体积。",
-                            "第三方许可证与必要署名统一收录在应用随附的第三方许可文件中。",
+                            "修复桌面端重启更换本地端口后，误进入 default 空画布的问题。",
+                            "关闭窗口或系统关机前发送完整画布快照，节点中的生成历史一并保存。",
+                            "画布磁盘文件增加有效备份，异常断电损坏主文件时自动回退。",
+                            "新渠道提交请求单独使用 90 秒确认超时，不再无提示等待数分钟。",
+                            "Nano Banana 2 预览版恢复完整比例与 1K / 2K / 4K 参数。",
                         ].map((item, index) => (
                             <div
                                 key={item}

@@ -45,6 +45,10 @@ TONGFLOW_SLOT_MODELS = {
 _REQUEST_MODEL = ""
 
 
+class SubmissionTimeout(RuntimeError):
+    """The relay did not acknowledge a generation submission in time."""
+
+
 def _env(name: str, fallback: str = "") -> str:
     return (os.environ.get(name) or fallback).strip()
 
@@ -72,6 +76,15 @@ def _timeout() -> int:
         return max(30, int(_env("NEW_CHANNEL_TIMEOUT", "600")))
     except ValueError:
         return 600
+
+
+def _submission_timeout() -> int:
+    """Timeout for the initial POST, separate from async task polling."""
+    try:
+        configured = int(_env("NEW_CHANNEL_REQUEST_TIMEOUT", "90"))
+    except ValueError:
+        configured = 90
+    return max(30, min(configured, _timeout()))
 
 
 def _async_enabled() -> bool:
@@ -123,20 +136,38 @@ def _size_for_model(model: str, size: str | None) -> str | None:
     return f"{snap(fitted_width)}x{snap(fitted_height)}"
 
 
-def _http(url: str, *, method: str = "GET", body: bytes | None = None,
-          content_type: str | None = None) -> bytes:
+def _http(
+    url: str,
+    *,
+    method: str = "GET",
+    body: bytes | None = None,
+    content_type: str | None = None,
+    timeout: int | None = None,
+) -> bytes:
     headers = {"Authorization": f"Bearer {_api_key()}", "Accept": "application/json"}
     if content_type:
         headers["Content-Type"] = content_type
     request = Request(url, data=body, headers=headers, method=method)
     try:
-        with urlopen(request, timeout=_timeout()) as response:  # noqa: S310
+        with urlopen(request, timeout=timeout or _timeout()) as response:  # noqa: S310
             return response.read()
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"新渠道 API HTTP {exc.code} ({url}): {detail or exc.reason}") from exc
     except URLError as exc:
+        if isinstance(exc.reason, (socket.timeout, TimeoutError)):
+            seconds = timeout or _timeout()
+            raise SubmissionTimeout(
+                f"新渠道在 {seconds} 秒内没有确认收到请求。"
+                "请检查中转站状态后重试；为避免重复扣费，本次不会自动重复提交。"
+            ) from exc
         raise RuntimeError(f"无法连接新渠道 API ({url}): {exc.reason}") from exc
+    except (socket.timeout, TimeoutError) as exc:
+        seconds = timeout or _timeout()
+        raise SubmissionTimeout(
+            f"新渠道在 {seconds} 秒内没有确认收到请求。"
+            "请检查中转站状态后重试；为避免重复扣费，本次不会自动重复提交。"
+        ) from exc
 
 
 def _json(body: bytes) -> dict[str, Any]:
@@ -392,20 +423,18 @@ def _chat_payload(
         }
         google_extension = {"image_config": image_config}
         payload["google"] = google_extension
-        if request_model.lower() != "gemini-3.1-flash-image-preview":
-            # The retired Flash preview alias is still exposed by some relays,
-            # but its legacy route regresses to 1K when modern compatibility
-            # fields are mixed together. Keep the old minimal `google` shape
-            # that is known to return 2K/4K on that route.
-            payload["aspect_ratio"] = image_config["aspect_ratio"]
-            payload["image_size"] = image_config["image_size"]
-            payload["image_config"] = image_config
-            payload["generation_config"] = {
-                "responseModalities": ["TEXT", "IMAGE"],
-                "imageConfig": camel_image_config,
-                "responseFormat": {"image": camel_image_config},
-            }
-            payload["extra_body"] = {"google": google_extension}
+        # Send every commonly accepted relay shape for both Gemini models.
+        # The Flash preview path previously omitted these fields and silently
+        # fell back to its default 1:1 / 1K output.
+        payload["aspect_ratio"] = image_config["aspect_ratio"]
+        payload["image_size"] = image_config["image_size"]
+        payload["image_config"] = image_config
+        payload["generation_config"] = {
+            "responseModalities": ["TEXT", "IMAGE"],
+            "imageConfig": camel_image_config,
+            "responseFormat": {"image": camel_image_config},
+        }
+        payload["extra_body"] = {"google": google_extension}
     return payload
 
 
@@ -418,6 +447,7 @@ def _chat_image(prompt: str, images: list[bytes], size: str | None):
             method="POST",
             body=json.dumps(payload).encode("utf-8"),
             content_type="application/json",
+            timeout=_submission_timeout(),
         )
     )
     image = _finished_asset(response) or _asset_from_chat_value(response)
@@ -440,7 +470,12 @@ def _await_result(endpoint: str, response: dict[str, Any]):
     generation_endpoint = f"{_base_url()}/images/generations"
     while time.monotonic() < deadline:
         try:
-            status_response = _json(_http(f"{poll_endpoint}/{task_id}"))
+            status_response = _json(
+                _http(
+                    f"{poll_endpoint}/{task_id}",
+                    timeout=min(30, _timeout()),
+                )
+            )
         except RuntimeError as exc:
             # Several relays use the generations status route for every image task,
             # including jobs created through /images/edits.
@@ -449,7 +484,12 @@ def _await_result(endpoint: str, response: dict[str, Any]):
                 and "新渠道 API HTTP 404" in str(exc)
             ):
                 poll_endpoint = generation_endpoint
-                status_response = _json(_http(f"{poll_endpoint}/{task_id}"))
+                status_response = _json(
+                    _http(
+                        f"{poll_endpoint}/{task_id}",
+                        timeout=min(30, _timeout()),
+                    )
+                )
             else:
                 raise
         image = _finished_asset(status_response)
@@ -508,7 +548,15 @@ def _images_generate(prompt: str, size: str | None):
     if _async_enabled():
         payload["async"] = True
     body = json.dumps(payload).encode("utf-8")
-    response = _json(_http(endpoint, method="POST", body=body, content_type="application/json"))
+    response = _json(
+        _http(
+            endpoint,
+            method="POST",
+            body=body,
+            content_type="application/json",
+            timeout=_submission_timeout(),
+        )
+    )
     return _await_result(endpoint, response)
 
 
@@ -547,7 +595,15 @@ def _images_edit(prompt: str, images: list[bytes], size: str | None):
         mime, extension = _image_type(blob)
         files.append((field, f"image_{index}.{extension}", mime, blob))
     body, content_type = _multipart(fields, files)
-    response = _json(_http(endpoint, method="POST", body=body, content_type=content_type))
+    response = _json(
+        _http(
+            endpoint,
+            method="POST",
+            body=body,
+            content_type=content_type,
+            timeout=_submission_timeout(),
+        )
+    )
     return _await_result(endpoint, response)
 
 
@@ -556,6 +612,10 @@ def _run_protocol_fallback(*attempts: tuple[str, Any]):
     for label, operation in attempts:
         try:
             return operation()
+        except SubmissionTimeout:
+            # A timed-out POST may still have reached the upstream. Retrying a
+            # second protocol could create and bill a duplicate image.
+            raise
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{label}: {exc}")
     raise RuntimeError("新渠道所有兼容协议均失败：\n" + "\n".join(errors))
