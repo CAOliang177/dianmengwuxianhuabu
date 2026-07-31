@@ -1,32 +1,28 @@
 import { useNodesData } from "@xyflow/react";
-import { Combine, Maximize2, Sparkles } from "lucide-react";
+import { Combine, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
     type AspectRatio,
+    getImageDimensions,
     IMAGE_ASPECT_RATIOS,
+    IMAGE_RESOLUTION_TIERS,
+    normalizeImageDimensions,
+    type ResolutionTier,
 } from "@/constants/media-options";
 import { useAbiForm } from "@/hooks/use-abi-form";
 import { NODE_TYPE_SOURCE_SPEC } from "@/lib/abi/node-feature-registry";
 import type { SourceSpec } from "@/lib/abi/sources";
-import { cn } from "@/lib/utils";
 import { coerceBaseNodeData } from "@/lib/workflow/flow-node-data";
 import type { TongflowPluginNodeProps } from "@/types/tongflow-flow";
 import { AbiNodeShell } from "../base/abi-node-shell";
 import { AspectRatioPicker } from "../base/aspect-ratio-picker";
 import { MediaThumbnail } from "../base/media-thumbnail";
 import { NodeTextarea } from "../base/node-textarea";
-
-const resolutions = [
-    { value: "512", key: "res512", label: "512" },
-    { value: "1K", key: "res1K", label: "1K" },
-    { value: "2K", key: "res2K", label: "2K" },
-    { value: "4K", key: "res4K", label: "4K" },
-];
+import { ResolutionPicker } from "../base/resolution-picker";
 
 // `images` collects every connected image edge. `text` may come from an upstream
 // textNode (via the auto-rendered `in:text` handle) or be typed manually — the
@@ -60,17 +56,25 @@ const ImageFusionNode = ({
 
     const width = (form.state.width as number | undefined) ?? 1024;
     const height = (form.state.height as number | undefined) ?? 1024;
-    const currentRatio: AspectRatio =
-        IMAGE_ASPECT_RATIOS.find(
-            (r) => r.width === width && r.height === height,
-        ) ?? IMAGE_ASPECT_RATIOS[2];
-
-    // UI-only resolution toggle (not part of ABI inputs).
-    const [currentResolution, setCurrentResolution] = useState(
-        () =>
-            (data.selectedResolution as (typeof resolutions)[0] | undefined) ??
-            resolutions[1],
+    const initialSize = useMemo(
+        () => normalizeImageDimensions(width, height),
+        [width, height],
     );
+    const currentRatio: AspectRatio = initialSize.ratio;
+    const [currentResolution, setCurrentResolution] = useState<ResolutionTier>(
+        () => initialSize.tier,
+    );
+
+    useEffect(() => {
+        const normalized = normalizeImageDimensions(
+            width,
+            height,
+            currentResolution,
+        );
+        if (width !== normalized.width || height !== normalized.height) {
+            form.patch({ width: normalized.width, height: normalized.height });
+        }
+    }, [width, height, currentResolution, form]);
 
     const userPrompt = (form.state.text as string | undefined) ?? "";
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -113,41 +117,19 @@ const ImageFusionNode = ({
                     ratios={IMAGE_ASPECT_RATIOS}
                     value={currentRatio}
                     onChange={(ratio) =>
-                        form.patch({ width: ratio.width, height: ratio.height })
+                        form.patch(getImageDimensions(ratio, currentResolution))
                     }
                     showSize
                 />
 
-                <Card className="p-3">
-                    <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                            <Maximize2 className="h-4 w-4" />
-                            {t("common.resolution")}
-                        </Label>
-                        <div className="grid grid-cols-4 gap-2">
-                            {resolutions.map((res) => (
-                                <Button
-                                    key={res.value}
-                                    variant={
-                                        currentResolution.value === res.value
-                                            ? "default"
-                                            : "outline"
-                                    }
-                                    size="sm"
-                                    onClick={() => setCurrentResolution(res)}
-                                    className={cn(
-                                        "h-auto py-2 px-2 text-xs transition-all",
-                                        currentResolution.value === res.value
-                                            ? "bg-primary text-primary-foreground shadow-md"
-                                            : "hover:bg-accent hover:text-accent-foreground",
-                                    )}
-                                >
-                                    {res.label}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-                </Card>
+                <ResolutionPicker
+                    tiers={IMAGE_RESOLUTION_TIERS}
+                    value={currentResolution.value}
+                    onChange={(tier) => {
+                        setCurrentResolution(tier);
+                        form.patch(getImageDimensions(currentRatio, tier));
+                    }}
+                />
 
                 <Card className="p-3">
                     <div className="space-y-2">

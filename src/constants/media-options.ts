@@ -18,15 +18,15 @@ export interface ResolutionTier {
 
 export const IMAGE_ASPECT_RATIOS: AspectRatio[] = [
     { value: "1:1", label: "square", width: 1024, height: 1024 },
-    { value: "16:9", label: "landscape", width: 1280, height: 720 },
-    { value: "9:16", label: "portrait", width: 720, height: 1280 },
-    { value: "4:3", label: "standard", width: 1024, height: 768 },
-    { value: "3:4", label: "verticalStandard", width: 768, height: 1024 },
-    { value: "3:2", label: "threeTwo", width: 1152, height: 768 },
-    { value: "2:3", label: "twoThree", width: 768, height: 1152 },
     { value: "5:4", label: "fiveFour", width: 1280, height: 1024 },
-    { value: "4:5", label: "fourFive", width: 1024, height: 1280 },
+    { value: "9:16", label: "portrait", width: 720, height: 1280 },
     { value: "21:9", label: "cinemaWide", width: 1344, height: 576 },
+    { value: "16:9", label: "landscape", width: 1280, height: 720 },
+    { value: "3:2", label: "threeTwo", width: 1152, height: 768 },
+    { value: "4:3", label: "standard", width: 1024, height: 768 },
+    { value: "4:5", label: "fourFive", width: 1024, height: 1280 },
+    { value: "3:4", label: "verticalStandard", width: 768, height: 1024 },
+    { value: "2:3", label: "twoThree", width: 768, height: 1152 },
 ];
 
 // Resolution tiers scale an aspect ratio's base (1K) dimensions. The picked
@@ -36,6 +36,69 @@ export const IMAGE_RESOLUTION_TIERS: ResolutionTier[] = [
     { value: "2k", label: "2K", scale: 2 },
     { value: "4k", label: "4K", scale: 4 },
 ];
+
+export function getImageDimensions(
+    ratio: AspectRatio,
+    tier: ResolutionTier,
+): { width: number; height: number } {
+    return {
+        width: ratio.width * tier.scale,
+        height: ratio.height * tier.scale,
+    };
+}
+
+export function findClosestImageAspectRatio(
+    width: number,
+    height: number,
+): AspectRatio {
+    if (width <= 0 || height <= 0) return IMAGE_ASPECT_RATIOS[0];
+    const actual = width / height;
+    return IMAGE_ASPECT_RATIOS.reduce((best, candidate) => {
+        const bestDistance = Math.abs(
+            Math.log(actual / (best.width / best.height)),
+        );
+        const candidateDistance = Math.abs(
+            Math.log(actual / (candidate.width / candidate.height)),
+        );
+        return candidateDistance < bestDistance ? candidate : best;
+    });
+}
+
+export function findClosestImageResolutionTier(
+    width: number,
+    height: number,
+    ratio = findClosestImageAspectRatio(width, height),
+): ResolutionTier {
+    if (width <= 0 || height <= 0) return IMAGE_RESOLUTION_TIERS[0];
+    return IMAGE_RESOLUTION_TIERS.reduce((best, candidate) => {
+        const bestSize = getImageDimensions(ratio, best);
+        const candidateSize = getImageDimensions(ratio, candidate);
+        const distance = (size: { width: number; height: number }) =>
+            Math.abs(Math.log(width / size.width)) +
+            Math.abs(Math.log(height / size.height));
+        return distance(candidateSize) < distance(bestSize) ? candidate : best;
+    });
+}
+
+/**
+ * Convert legacy/custom dimensions into the exact image ratio contract used by
+ * both the canvas and every bundled image provider.
+ */
+export function normalizeImageDimensions(
+    width: number,
+    height: number,
+    preferredTier?: ResolutionTier,
+): {
+    ratio: AspectRatio;
+    tier: ResolutionTier;
+    width: number;
+    height: number;
+} {
+    const ratio = findClosestImageAspectRatio(width, height);
+    const tier =
+        preferredTier ?? findClosestImageResolutionTier(width, height, ratio);
+    return { ratio, tier, ...getImageDimensions(ratio, tier) };
+}
 
 export const VIDEO_ASPECT_RATIOS: AspectRatio[] = [
     { value: "9:16", label: "portrait", width: 576, height: 1024 },

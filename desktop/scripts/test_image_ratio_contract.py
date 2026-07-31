@@ -36,6 +36,43 @@ def main() -> None:
     assert banana._size(2560, 1440) == "2560x1440"
     assert img2._size(1440, 2560) == "1440x2560"
     assert new_channel._size(2048, 2048) == "2048x2048"
+    # Legacy/custom values are normalized before any provider receives them.
+    # 680x1024 previously reached the relay as unsupported 85:128.
+    assert banana._size(680, 1024) == "768x1152"
+    assert img2._size(680, 1024) == "768x1152"
+    assert new_channel._size(680, 1024) == "768x1152"
+
+    expected_ratios = {
+        "1:1": (1, 1),
+        "5:4": (5, 4),
+        "9:16": (9, 16),
+        "21:9": (21, 9),
+        "16:9": (16, 9),
+        "3:2": (3, 2),
+        "4:3": (4, 3),
+        "4:5": (4, 5),
+        "3:4": (3, 4),
+        "2:3": (2, 3),
+    }
+    assert [item[0] for item in banana.SUPPORTED_ASPECT_RATIOS] == list(
+        expected_ratios
+    )
+    for plugin in (banana, img2, new_channel):
+        for model_tier in ("1k", "2k", "4k"):
+            for label, ratio_width, ratio_height, width, height in (
+                plugin.SUPPORTED_ASPECT_RATIOS
+            ):
+                fitted = plugin._size_for_model(
+                    f"contract-model-{model_tier}",
+                    f"{width}x{height}",
+                )
+                fitted_width, fitted_height = map(int, fitted.split("x"))
+                assert fitted_width * ratio_height == fitted_height * ratio_width, (
+                    plugin.__name__,
+                    model_tier,
+                    label,
+                    fitted,
+                )
 
     # The no-suffix IMG2 model was intentionally retired.
     assert "gpt-image-2" not in img2.SUPPORTED_IMAGE_MODELS
@@ -85,14 +122,17 @@ def main() -> None:
             "image_size": "2K",
         }
     }
-    for conflicting_key in (
-        "aspect_ratio",
-        "image_size",
-        "image_config",
-        "generation_config",
-        "extra_body",
-    ):
-        assert conflicting_key not in preview_2k
+    assert preview_2k["aspect_ratio"] == "16:9"
+    assert preview_2k["image_size"] == "2K"
+    assert preview_2k["generation_config"]["imageConfig"] == {
+        "aspectRatio": "16:9",
+        "imageSize": "2K",
+    }
+
+    # Ultra-wide 1K must remain 1K even though its canonical long side is 1344.
+    ultra_wide_1k = new_channel._chat_payload("test", [], "1344x576")
+    assert ultra_wide_1k["aspect_ratio"] == "21:9"
+    assert ultra_wide_1k["image_size"] == "1K"
 
     print("image ratio contract OK")
 

@@ -29,6 +29,19 @@ FIXED_SKU_PIXEL_BUDGETS = {
     "4k": 3840 * 2160,
 }
 FIXED_SKU_MAX_SIDE = {"1k": 1024, "2k": 2048, "4k": 3840}
+SUPPORTED_ASPECT_RATIOS = [
+    ("1:1", 1, 1, 1024, 1024),
+    ("5:4", 5, 4, 1280, 1024),
+    ("9:16", 9, 16, 720, 1280),
+    ("21:9", 21, 9, 1344, 576),
+    ("16:9", 16, 9, 1280, 720),
+    ("3:2", 3, 2, 1152, 768),
+    ("4:3", 4, 3, 1024, 768),
+    ("4:5", 4, 5, 1024, 1280),
+    ("3:4", 3, 4, 768, 1024),
+    ("2:3", 2, 3, 768, 1152),
+]
+RESOLUTION_SCALES = (1, 2, 4)
 
 SUPPORTED_IMAGE_MODELS = [
     "nano-banana-pro-1k",
@@ -97,13 +110,48 @@ def _edit_async_enabled() -> bool:
     return _env("BANANA_EDIT_ASYNC", "false").lower() not in {"0", "false", "no", "off"}
 
 
+def _closest_ratio(width: int, height: int):
+    actual = width / height
+    return min(
+        SUPPORTED_ASPECT_RATIOS,
+        key=lambda item: abs(math.log(actual / (item[1] / item[2]))),
+    )
+
+
+def _normalize_dimensions(width: int, height: int) -> tuple[int, int]:
+    ratio = _closest_ratio(width, height)
+    _, _, _, base_width, base_height = ratio
+    scale = min(
+        RESOLUTION_SCALES,
+        key=lambda candidate: (
+            abs(math.log(width / (base_width * candidate)))
+            + abs(math.log(height / (base_height * candidate)))
+        ),
+    )
+    return base_width * scale, base_height * scale
+
+
+def _normalize_size_string(size: str | None) -> str | None:
+    if not size:
+        return size
+    dimensions = re.fullmatch(r"\s*(\d+)\s*x\s*(\d+)\s*", size, re.IGNORECASE)
+    if not dimensions:
+        return size
+    width, height = int(dimensions.group(1)), int(dimensions.group(2))
+    if width <= 0 or height <= 0:
+        return size
+    width, height = _normalize_dimensions(width, height)
+    return f"{width}x{height}"
+
+
 def _size(width: int | None, height: int | None) -> str | None:
     # A node's manual ratio/size is authoritative.  The environment value is
     # only a legacy fallback for requests that do not contain dimensions.
     if width and height:
-        return f"{width}x{height}"
+        normalized_width, normalized_height = _normalize_dimensions(width, height)
+        return f"{normalized_width}x{normalized_height}"
     override = _env("BANANA_IMAGE_SIZE")
-    return override or None
+    return _normalize_size_string(override or None)
 
 
 def _size_for_model(model: str, size: str | None) -> str | None:
@@ -121,18 +169,17 @@ def _size_for_model(model: str, size: str | None) -> str | None:
     tier = sku.group(1).lower()
     pixel_budget = FIXED_SKU_PIXEL_BUDGETS[tier]
     max_side = FIXED_SKU_MAX_SIDE[tier]
-    ratio = width / height
-
-    fitted_width = math.sqrt(pixel_budget * ratio)
-    fitted_height = math.sqrt(pixel_budget / ratio)
-    scale = min(1.0, max_side / max(fitted_width, fitted_height))
-    fitted_width *= scale
-    fitted_height *= scale
-
-    def snap(value: float) -> int:
-        return max(16, int(round(value / 16)) * 16)
-
-    return f"{snap(fitted_width)}x{snap(fitted_height)}"
+    _, ratio_width, ratio_height, _, _ = _closest_ratio(width, height)
+    multiplier = math.floor(
+        min(
+            math.sqrt(pixel_budget / (ratio_width * ratio_height)),
+            max_side / max(ratio_width, ratio_height),
+        )
+    )
+    # One shared multiplier preserves the exact rational aspect ratio. Using
+    # separate width/height rounding produced rejected values such as 85:128.
+    multiplier = max(16, (multiplier // 16) * 16)
+    return f"{ratio_width * multiplier}x{ratio_height * multiplier}"
 
 
 def _http(url: str, *, method: str = "GET", body: bytes | None = None,

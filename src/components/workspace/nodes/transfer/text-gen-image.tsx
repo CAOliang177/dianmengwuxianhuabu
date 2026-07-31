@@ -17,8 +17,11 @@ import { Button } from "@/components/ui/button";
 import { showErrorToast } from "@/components/ui/error-toast";
 import {
     type AspectRatio,
+    findClosestImageResolutionTier,
+    getImageDimensions,
     IMAGE_ASPECT_RATIOS,
     IMAGE_RESOLUTION_TIERS,
+    normalizeImageDimensions,
     type ResolutionTier,
 } from "@/constants/media-options";
 import { useAbiForm } from "@/hooks/use-abi-form";
@@ -77,7 +80,6 @@ const UNIFIED_IMAGE_SOURCE_SPEC = {
 const DEFAULT_RATIO =
     IMAGE_ASPECT_RATIOS.find((ratio) => ratio.value === "1:1") ??
     IMAGE_ASPECT_RATIOS[0];
-const DEFAULT_TIER = IMAGE_RESOLUTION_TIERS[0];
 const REFERENCE_STYLES = [
     "border-cyan-400/80 bg-cyan-500/15 text-cyan-600 dark:text-cyan-300",
     "border-fuchsia-400/80 bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-300",
@@ -86,41 +88,11 @@ const REFERENCE_STYLES = [
     "border-violet-400/80 bg-violet-500/15 text-violet-600 dark:text-violet-300",
 ] as const;
 
-function fitDimensionsToTier(
-    dimensions: { width: number; height: number },
-    tier: ResolutionTier,
-) {
-    const ratio = dimensions.width / dimensions.height;
-    const pixelBudget = 1024 * 1024 * tier.scale * tier.scale;
-    const maxSide = tier.value === "4k" ? 3840 : 1024 * tier.scale;
-    let fittedWidth = Math.sqrt(pixelBudget * ratio);
-    let fittedHeight = Math.sqrt(pixelBudget / ratio);
-    const limitScale = Math.min(
-        1,
-        maxSide / Math.max(fittedWidth, fittedHeight),
-    );
-    fittedWidth *= limitScale;
-    fittedHeight *= limitScale;
-    const snap = (value: number) => Math.max(16, Math.round(value / 16) * 16);
-    return { width: snap(fittedWidth), height: snap(fittedHeight) };
-}
-
 // Image providers occasionally return dimensions that are only approximately a
 // requested ratio (for example 2048x2047 for 1:1).  Canvas cards should be sized
 // by their visual ratio, not by pixel resolution, so snap near-standard outputs
 // to one canonical footprint while preserving genuinely unusual ratios.
-const CANONICAL_PREVIEW_RATIOS = [
-    { width: 1, height: 1 },
-    { width: 16, height: 9 },
-    { width: 9, height: 16 },
-    { width: 4, height: 3 },
-    { width: 3, height: 4 },
-    { width: 3, height: 2 },
-    { width: 2, height: 3 },
-    { width: 5, height: 4 },
-    { width: 4, height: 5 },
-    { width: 21, height: 9 },
-] as const;
+const CANONICAL_PREVIEW_RATIOS = IMAGE_ASPECT_RATIOS;
 
 function normalizePreviewDimensions(dimensions: {
     width: number;
@@ -206,9 +178,6 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
         width: number;
         height: number;
     } | null>(null);
-    // Manual ratio is the default, even when reference images are connected.
-    // Users can explicitly enable matching the reference ratio per node.
-    const followReferenceRatio = data.followReferenceRatio === true;
 
     useEffect(() => {
         if (!firstReferenceUrl) {
@@ -261,29 +230,17 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
     const height =
         (form.state.height as number | undefined) ?? DEFAULT_RATIO.height;
 
-    const { ratio: currentRatio, tier: inferredTier } = useMemo(() => {
-        for (const tier of IMAGE_RESOLUTION_TIERS) {
-            const ratio = IMAGE_ASPECT_RATIOS.find(
-                (candidate) =>
-                    candidate.width * tier.scale === width &&
-                    candidate.height * tier.scale === height,
-            );
-            if (ratio) return { ratio, tier };
-        }
-        return {
-            ratio: {
-                value: "custom",
-                label: "square",
-                width,
-                height,
-            },
-            tier: DEFAULT_TIER,
-        };
-    }, [width, height]);
+    const storedTier = IMAGE_RESOLUTION_TIERS.find(
+        (tier) => tier.value === data.outputResolutionTier,
+    );
+    const normalizedSize = useMemo(
+        () => normalizeImageDimensions(width, height, storedTier),
+        [width, height, storedTier],
+    );
+    const currentRatio = normalizedSize.ratio;
     const currentTier =
-        IMAGE_RESOLUTION_TIERS.find(
-            (tier) => tier.value === data.outputResolutionTier,
-        ) ?? inferredTier;
+        storedTier ??
+        findClosestImageResolutionTier(width, height, currentRatio);
     const updateNodeMeta = useCallback(
         (patch: Record<string, unknown>) => {
             if (!nodeId) return;
@@ -300,20 +257,43 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
     );
 
     useEffect(() => {
-        if (form.state.width === undefined || form.state.height === undefined) {
+        const needsDimensionMigration =
+            form.state.width === undefined ||
+            form.state.height === undefined ||
+            width !== normalizedSize.width ||
+            height !== normalizedSize.height;
+        if (needsDimensionMigration) {
             form.patch({
-                width: DEFAULT_RATIO.width * DEFAULT_TIER.scale,
-                height: DEFAULT_RATIO.height * DEFAULT_TIER.scale,
+                width: normalizedSize.width,
+                height: normalizedSize.height,
             });
         }
-    }, [form.state.width, form.state.height, form.patch]);
+        if (
+            data.followReferenceRatio === true ||
+            data.outputResolutionTier !== currentTier.value
+        ) {
+            updateNodeMeta({
+                followReferenceRatio: false,
+                outputResolutionTier: currentTier.value,
+            });
+        }
+    }, [
+        form.state.width,
+        form.state.height,
+        width,
+        height,
+        normalizedSize.width,
+        normalizedSize.height,
+        data.followReferenceRatio,
+        data.outputResolutionTier,
+        currentTier.value,
+        form,
+        updateNodeMeta,
+    ]);
 
     const applySize = useCallback(
         (ratio: AspectRatio, tier: ResolutionTier) => {
-            form.patch({
-                width: ratio.width * tier.scale,
-                height: ratio.height * tier.scale,
-            });
+            form.patch(getImageDimensions(ratio, tier));
             updateNodeMeta({
                 followReferenceRatio: false,
                 outputResolutionTier: tier.value,
@@ -322,56 +302,11 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
         [form, updateNodeMeta],
     );
 
-    useEffect(() => {
-        if (!followReferenceRatio || !referenceDimensions) return;
-        const next = fitDimensionsToTier(referenceDimensions, currentTier);
-        if (width !== next.width || height !== next.height) {
-            form.patch(next);
-        }
-        if (data.outputResolutionTier !== currentTier.value) {
-            updateNodeMeta({ outputResolutionTier: currentTier.value });
-        }
-    }, [
-        followReferenceRatio,
-        referenceDimensions,
-        currentTier,
-        width,
-        height,
-        form,
-        data.outputResolutionTier,
-        updateNodeMeta,
-    ]);
-
-    const toggleFollowReferenceRatio = useCallback(
-        (enabled: boolean) => {
-            updateNodeMeta({ followReferenceRatio: enabled });
-        },
-        [updateNodeMeta],
-    );
-
     const changeResolutionTier = useCallback(
         (tier: ResolutionTier) => {
-            if (followReferenceRatio && referenceDimensions) {
-                form.patch(fitDimensionsToTier(referenceDimensions, tier));
-            } else if (currentRatio.value === "custom") {
-                form.patch(fitDimensionsToTier({ width, height }, tier));
-            } else {
-                form.patch({
-                    width: currentRatio.width * tier.scale,
-                    height: currentRatio.height * tier.scale,
-                });
-            }
-            updateNodeMeta({ outputResolutionTier: tier.value });
+            applySize(currentRatio, tier);
         },
-        [
-            followReferenceRatio,
-            referenceDimensions,
-            currentRatio,
-            width,
-            height,
-            form,
-            updateNodeMeta,
-        ],
+        [applySize, currentRatio],
     );
 
     const handleTaskUpdate = useCallback(
@@ -693,16 +628,6 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                                             applySize(ratio, currentTier)
                                         }
                                         showSize
-                                        autoOption={{
-                                            active:
-                                                followReferenceRatio &&
-                                                referenceCount > 0,
-                                            disabled: referenceCount === 0,
-                                            onSelect: () =>
-                                                toggleFollowReferenceRatio(
-                                                    true,
-                                                ),
-                                        }}
                                     />
                                     <ResolutionPicker
                                         tiers={IMAGE_RESOLUTION_TIERS}
