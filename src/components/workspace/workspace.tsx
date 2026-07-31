@@ -42,6 +42,7 @@ import { showErrorToast } from "@/components/ui/error-toast";
 import { usePreloadFeatures } from "@/hooks/use-features";
 import type { FlowState } from "@/hooks/use-flow";
 import { useFlow } from "@/hooks/use-flow";
+import { useTaskStore } from "@/hooks/use-task";
 import { useWorkflowRecovery } from "@/hooks/use-workflow-recovery";
 import { listTasks } from "@/lib/api/task";
 import { getPresignedUploadUrl } from "@/lib/api/upload";
@@ -57,6 +58,7 @@ import {
 } from "@/lib/canvas-history";
 import { logger } from "@/lib/logger";
 import { reconcileCompletedImageTasks } from "@/lib/task/reconcile-image-results";
+import { shouldVirtualizeCanvasNodes } from "@/lib/workflow/canvas-virtualization";
 import { isValidFlowConnection } from "@/lib/workflow/connection-rules";
 import {
     collectCopyableSelection,
@@ -146,6 +148,9 @@ function WorkspaceInner({
 
     // Separate data and functions to avoid re-renders caused by function reference changes
     const { nodes, edges } = useFlow(useShallow(selector));
+    const virtualizeCanvasNodes = useTaskStore((state) =>
+        shouldVirtualizeCanvasNodes(state.tasks.values()),
+    );
     // Get functions directly from the store (function references never change)
     const onNodesChange = useFlow.getState().onNodesChange;
     const onEdgesChange = useFlow.getState().onEdgesChange;
@@ -1122,11 +1127,11 @@ function WorkspaceInner({
                 onPaneContextMenu={handlePaneContextMenu}
                 onEdgeContextMenu={handleEdgeContextMenu}
                 nodeOrigin={[0.5, 0.5]}
-                // Completed outputs are now recorded by the task runner and
-                // reconciled from SQLite, so off-screen nodes no longer need
-                // to stay mounted. Virtualizing them keeps large canvases
-                // responsive even while an image task is running.
-                onlyRenderVisibleElements
+                // A running node owns the live SSE subscription. Keep all
+                // nodes mounted while any task is active so panning it out of
+                // view cannot tear down the generation stream. Virtualize
+                // again as soon as the canvas becomes idle.
+                onlyRenderVisibleElements={virtualizeCanvasNodes}
                 elevateNodesOnSelect={false}
                 selectNodesOnDrag={selectionModeActive}
                 selectionOnDrag={selectionModeActive}

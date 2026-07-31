@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.43] - 2026-07-31
+
+### Fixed
+
+- Keep every node mounted while any canvas task is pending or processing, so
+  panning a running node out of view cannot tear down its live task
+  subscription and stop generation.
+- Re-enable off-screen node virtualization only after all tasks become
+  terminal, while retaining the persistence coalescing and history recovery
+  improvements from v0.1.42.
+
 ## [0.1.42] - 2026-07-31
 
 ### Changed

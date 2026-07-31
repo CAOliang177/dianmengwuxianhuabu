@@ -50,7 +50,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.42";
+const RELEASE_VERSION = "0.1.43";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -413,11 +413,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                历史找回与大画布流畅度升级
+                                运行任务不中断紧急修复
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                修复所有客户端都可能遇到的生成历史被旧快照覆盖问题，
-                                同时降低多节点画布的渲染和保存压力。
+                                修复 v0.1.42 中将正在生成的节点移出视野后，
+                                任务订阅被切断并导致生成停止的问题。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -425,29 +425,29 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                历史记录不再被旧画布覆盖
+                                移动画布不再切断生成
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                后台完成记录与界面画布快照现在会安全合并，而不是互相替换；
-                                更新后会扫描本机任务数据库，自动补回仍可恢复的成功图片。
+                                只要画布中仍有等待或生成中的任务，节点就会保持运行；
+                                缩放、拖动画布或把节点移出当前视野都不会再终止任务。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                节点再多也更流畅
+                                历史防丢与保存优化继续保留
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                离开视野的节点不再持续参与渲染，短时间内连续发生的节点、
-                                连线和设置保存会自动合并，拖动画布与生成过程更轻快。
+                                旧快照防覆盖、任务数据库自动补回、时间戳修正和高频保存合并
+                                均继续生效；任务全部结束后才重新启用离屏节点优化。
                             </p>
                         </div>
                         {[
-                            "阻止旧节点快照覆盖刚完成的生成历史，适用于本机和其他已安装客户端。",
-                            "启动时扫描全部历史画布和本机成功任务，自动补回仍保存在数据库中的结果。",
-                            "统一修正旧版秒、毫秒和微秒时间戳，最近一周记录可正确排序和保留。",
-                            "启用离屏节点虚拟化并合并密集保存请求，改善大型画布卡顿。",
-                            "图片为空、丢失或超过 20 MB 时，直接显示可理解的中文处理提示。",
+                            "等待中或生成中的节点始终保持挂载，移出屏幕也不会断开实时任务连接。",
+                            "任务全部完成、失败或取消后，才重新启用离屏节点虚拟化。",
+                            "继续阻止旧节点快照覆盖新生成历史，并自动补回本机可恢复结果。",
+                            "继续合并密集的节点、连线和设置保存，降低不必要的磁盘写入。",
+                            "加入专门的回归测试，防止后续性能优化再次切断运行任务。",
                         ].map((item, index) => (
                             <div
                                 key={item}
