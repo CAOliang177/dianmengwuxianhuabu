@@ -91,6 +91,7 @@ function persistPatch(patch: Record<string, unknown>): Promise<void> {
 interface CanvasPersistencePatch {
     canvas: CanvasSnapshot & { id: string };
     historyItem?: CanvasHistoryItem;
+    removedNodeIds?: string[];
 }
 
 interface PendingCanvasPatch {
@@ -122,6 +123,12 @@ function persistCanvasPatch(patch: CanvasPersistencePatch): Promise<void> {
                     id,
                 },
                 historyItem: patch.historyItem ?? current.patch.historyItem,
+                removedNodeIds: [
+                    ...new Set([
+                        ...(current.patch.removedNodeIds ?? []),
+                        ...(patch.removedNodeIds ?? []),
+                    ]),
+                ],
             };
             current.waiters.push({ resolve, reject });
             current.timer = setTimeout(() => {
@@ -155,12 +162,13 @@ async function flushPendingCanvasPatch(id: string) {
 
 function supersedePendingCanvasPatch(id: string) {
     const pending = pendingCanvasPatches.get(id);
-    if (!pending) return;
+    if (!pending) return undefined;
     clearTimeout(pending.timer);
     pendingCanvasPatches.delete(id);
     // A newer complete snapshot or an explicit deletion supersedes this
     // partial patch, so callers can consider their requested state durable.
     for (const waiter of pending.waiters) waiter.resolve();
+    return pending.patch;
 }
 
 function writeHistory(items: CanvasHistoryItem[], persist = true) {
@@ -327,7 +335,7 @@ export function flushCanvasSnapshot(
     meta: { id: number | null; name: string; description: string },
 ) {
     const id = getActiveCanvasId();
-    supersedePendingCanvasPatch(id);
+    const superseded = supersedePendingCanvasPatch(id);
     localStorage.setItem(canvasStorageKey(id, "nodes"), JSON.stringify(nodes));
     localStorage.setItem(canvasStorageKey(id, "edges"), JSON.stringify(edges));
     localStorage.setItem(canvasStorageKey(id, "meta"), JSON.stringify(meta));
@@ -348,6 +356,9 @@ export function flushCanvasSnapshot(
         activeCanvasId: id,
         canvas: { id, nodes, edges, meta },
         historyItem,
+        ...(superseded?.removedNodeIds?.length
+            ? { removedNodeIds: superseded.removedNodeIds }
+            : {}),
     };
     const body = JSON.stringify(patch);
 
@@ -364,7 +375,11 @@ export function flushCanvasSnapshot(
     void persistPatch(patch);
 }
 
-export function saveCanvasNodesForCanvas(id: string, nodes: Node[]) {
+export function saveCanvasNodesForCanvas(
+    id: string,
+    nodes: Node[],
+    options: { removedNodeIds?: string[] } = {},
+) {
     localStorage.setItem(canvasStorageKey(id, "nodes"), JSON.stringify(nodes));
     const current = readHistory().find((item) => item.id === id);
     const coverFileKey =
@@ -377,26 +392,40 @@ export function saveCanvasNodesForCanvas(id: string, nodes: Node[]) {
         },
         false,
     );
-    return persistCanvasPatch({ canvas: { id, nodes }, historyItem });
+    return persistCanvasPatch({
+        canvas: { id, nodes },
+        historyItem,
+        ...(options.removedNodeIds?.length
+            ? { removedNodeIds: options.removedNodeIds }
+            : {}),
+    });
 }
 
-export function saveCanvasNodes(nodes: Node[]) {
-    return saveCanvasNodesForCanvas(getActiveCanvasId(), nodes);
+export function saveCanvasNodes(
+    nodes: Node[],
+    options: { removedNodeIds?: string[] } = {},
+) {
+    return saveCanvasNodesForCanvas(getActiveCanvasId(), nodes, options);
+}
+
+export function saveCanvasEdgesForCanvas(id: string, edges: Edge[]) {
+    localStorage.setItem(canvasStorageKey(id, "edges"), JSON.stringify(edges));
+    const historyItem = touchCanvas(id, {}, false);
+    return persistCanvasPatch({ canvas: { id, edges }, historyItem });
 }
 
 export function saveCanvasEdges(edges: Edge[]) {
-    const id = getActiveCanvasId();
-    localStorage.setItem(canvasStorageKey(id, "edges"), JSON.stringify(edges));
-    const historyItem = touchCanvas(id, {}, false);
-    void persistCanvasPatch({ canvas: { id, edges }, historyItem });
+    return saveCanvasEdgesForCanvas(getActiveCanvasId(), edges);
 }
 
-export function saveCanvasMeta(meta: {
-    id: number | null;
-    name: string;
-    description: string;
-}) {
-    const canvasId = getActiveCanvasId();
+export function saveCanvasMetaForCanvas(
+    canvasId: string,
+    meta: {
+        id: number | null;
+        name: string;
+        description: string;
+    },
+) {
     localStorage.setItem(
         canvasStorageKey(canvasId, "meta"),
         JSON.stringify(meta),
@@ -408,10 +437,18 @@ export function saveCanvasMeta(meta: {
         },
         false,
     );
-    void persistCanvasPatch({
+    return persistCanvasPatch({
         canvas: { id: canvasId, meta },
         historyItem,
     });
+}
+
+export function saveCanvasMeta(meta: {
+    id: number | null;
+    name: string;
+    description: string;
+}) {
+    return saveCanvasMetaForCanvas(getActiveCanvasId(), meta);
 }
 
 export function renameCanvas(id: string, value: string) {
@@ -581,10 +618,7 @@ export async function hydrateCanvasHistoryFromDisk() {
             }
         }
 
-        const covers = backfillCanvasCovers(
-            mergedHistory,
-            selectedCanvases,
-        );
+        const covers = backfillCanvasCovers(mergedHistory, selectedCanvases);
         writeHistory(covers.history, false);
         if (covers.changed) {
             void persistPatch({ history: covers.history });

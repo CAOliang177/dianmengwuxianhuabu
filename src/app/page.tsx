@@ -51,7 +51,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.47";
+const RELEASE_VERSION = "0.1.48";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -415,10 +415,10 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                一键导出诊断包
+                                画布数据安全升级
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                当其他电脑发生画布或生成异常时，可以直接导出完整诊断资料进行分析。
+                                修复生成成功后返回主页或重启应用，部分节点与生成记录可能消失的问题。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -426,30 +426,29 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                首页直接导出
+                                防止旧快照覆盖
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                首页右上角新增诊断包按钮。点击后选择保存位置，
-                                应用会自动生成一个可以直接发送的 ZIP 文件。
+                                每个画布现在拥有独立的保存队列，切换画布、返回主页或关闭应用时，
+                                不会再把上一份延迟数据保存到其他画布。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                自动保护密钥与图片
+                                多重数据保护
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                诊断包只收集运行日志、画布快照、任务数据库和版本信息，
-                                不包含 API
-                                Key、插件、虚拟环境、上传图片或生成原图。
+                                普通保存不能再静默删除已有节点；只有用户明确删除时才会移除节点，
+                                同时画布快照备份从一份增加到五份。
                             </p>
                         </div>
                         {[
-                            "首页右上角新增“一键导出诊断包”按钮。",
-                            "自动收集主进程日志、画布主快照与备份快照。",
-                            "自动收集任务数据库及本地画布缓存，便于交叉定位数据丢失原因。",
-                            "诊断包内附应用版本、系统版本、文件清单和读取失败说明。",
-                            "API Key、设置文件、插件、原始图片和运行环境均不会被打包。",
+                            "修复跨画布延迟保存可能写入错误画布的问题。",
+                            "修复生成完成后旧节点快照覆盖新节点的问题。",
+                            "返回主页、最小化或关闭应用前会取消旧保存并写入最新完整画布。",
+                            "节点删除改为明确删除协议，异常的节点骤减快照会被自动拦截。",
+                            "保留最近五代画布备份，诊断包也会一并收集这些备份。",
                         ].map((item, index) => (
                             <div
                                 key={item}

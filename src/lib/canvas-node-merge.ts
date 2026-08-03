@@ -19,12 +19,14 @@ function fileKeys(data: Record<string, unknown>): string[] {
  * a background task finishes, so replacing the complete node array would
  * otherwise erase the newly recorded result.
  *
- * Only nodes still present in the incoming snapshot are returned. Intentional
- * node deletion therefore remains authoritative.
+ * Nodes omitted by an incoming snapshot are preserved unless the save carries
+ * an explicit deletion list. This is critical because renderer saves are
+ * asynchronous and an older snapshot can otherwise erase newly created nodes.
  */
 export function mergeDurableNodeHistory(
     existingNodes: unknown[] | undefined,
     incomingNodes: unknown[] | undefined,
+    removedNodeIds: readonly string[] = [],
 ): unknown[] | undefined {
     if (!Array.isArray(incomingNodes)) return incomingNodes;
     if (!Array.isArray(existingNodes) || existingNodes.length === 0) {
@@ -37,7 +39,13 @@ export function mergeDurableNodeHistory(
             .map((node) => [node.id, node]),
     );
 
-    return (incomingNodes as Node[]).map((incoming) => {
+    const removed = new Set(removedNodeIds);
+    const incomingIds = new Set(
+        (incomingNodes as Node[])
+            .filter((node) => typeof node?.id === "string")
+            .map((node) => node.id),
+    );
+    const merged = (incomingNodes as Node[]).map((incoming) => {
         const existing = existingById.get(incoming.id);
         if (
             !existing ||
@@ -74,4 +82,21 @@ export function mergeDurableNodeHistory(
             },
         };
     });
+
+    // A delayed renderer save must never erase nodes merely because its
+    // snapshot was captured before those nodes were created. Node removal is
+    // accepted only when the caller explicitly supplies the deleted ids.
+    // This turns accidental stale overwrites into a harmless merge while
+    // preserving intentional delete/ungroup operations.
+    for (const existing of existingNodes as Node[]) {
+        if (
+            typeof existing?.id === "string" &&
+            !incomingIds.has(existing.id) &&
+            !removed.has(existing.id)
+        ) {
+            merged.push(existing);
+        }
+    }
+
+    return merged;
 }

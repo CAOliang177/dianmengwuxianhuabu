@@ -31,7 +31,9 @@ export interface StoredCanvasHistory {
 
 const emptyStore = (): StoredCanvasHistory => ({ history: [], canvases: {} });
 const storePath = () => join(dataDir(), "canvas-history.json");
-const backupPath = () => `${storePath()}.bak`;
+const BACKUP_GENERATIONS = 5;
+const backupPath = (generation = 0) =>
+    `${storePath()}.bak${generation === 0 ? "" : `.${generation}`}`;
 
 function readStoreFile(path: string): StoredCanvasHistory | null {
     try {
@@ -56,11 +58,13 @@ function readStoreFile(path: string): StoredCanvasHistory | null {
 export function readCanvasHistoryStore(): StoredCanvasHistory {
     // A sudden shutdown can interrupt the last disk write. Keep the previous
     // valid snapshot as a fallback instead of presenting an empty canvas.
-    return (
-        readStoreFile(storePath()) ??
-        readStoreFile(backupPath()) ??
-        emptyStore()
-    );
+    const main = readStoreFile(storePath());
+    if (main) return main;
+    for (let generation = 0; generation < BACKUP_GENERATIONS; generation += 1) {
+        const backup = readStoreFile(backupPath(generation));
+        if (backup) return backup;
+    }
+    return emptyStore();
 }
 
 let writeChain: Promise<StoredCanvasHistory> = Promise.resolve(emptyStore());
@@ -76,6 +80,16 @@ export function updateCanvasHistoryStore(
             const temp = `${path}.tmp`;
             mkdirSync(dirname(path), { recursive: true });
             if (readStoreFile(path)) {
+                for (
+                    let generation = BACKUP_GENERATIONS - 1;
+                    generation > 0;
+                    generation -= 1
+                ) {
+                    const previous = backupPath(generation - 1);
+                    if (readStoreFile(previous)) {
+                        copyFileSync(previous, backupPath(generation));
+                    }
+                }
                 copyFileSync(path, backupPath());
             }
             writeFileSync(temp, JSON.stringify(next, null, 2), "utf8");

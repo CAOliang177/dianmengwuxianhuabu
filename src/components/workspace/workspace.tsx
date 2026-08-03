@@ -41,7 +41,7 @@ import {
 import { showErrorToast } from "@/components/ui/error-toast";
 import { usePreloadFeatures } from "@/hooks/use-features";
 import type { FlowState } from "@/hooks/use-flow";
-import { useFlow } from "@/hooks/use-flow";
+import { cancelPendingFlowPersistence, useFlow } from "@/hooks/use-flow";
 import { useTaskStore } from "@/hooks/use-task";
 import { useWorkflowRecovery } from "@/hooks/use-workflow-recovery";
 import { listTasks } from "@/lib/api/task";
@@ -1044,6 +1044,7 @@ function WorkspaceInner({
     useEffect(() => {
         const flush = () => {
             const flow = useFlow.getState();
+            cancelPendingFlowPersistence();
             flushCanvasSnapshot(flow.nodes, flow.edges, {
                 id: flow.workflowId,
                 name: flow.workflowName,
@@ -1352,6 +1353,7 @@ function WorkspaceInner({
                         // the workspace, otherwise a just-created node can be
                         // lost when the user immediately returns home.
                         const flow = useFlow.getState();
+                        cancelPendingFlowPersistence();
                         flushCanvasSnapshot(flow.nodes, flow.edges, {
                             id: flow.workflowId,
                             name: flow.workflowName,

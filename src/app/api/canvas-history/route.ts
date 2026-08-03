@@ -21,6 +21,7 @@ export async function POST(request: Request) {
         activeCanvasId?: string;
         historyItem?: StoredCanvasHistory["history"][number];
         canvas?: StoredCanvasHistory["canvases"][string] & { id: string };
+        removedNodeIds?: string[];
         deleteCanvasId?: string;
     };
 
@@ -61,6 +62,9 @@ export async function POST(request: Request) {
                           nodes: mergeDurableNodeHistory(
                               existing?.nodes,
                               patch.nodes,
+                              Array.isArray(body.removedNodeIds)
+                                  ? body.removedNodeIds
+                                  : [],
                           ),
                       }
                     : {}),
@@ -75,6 +79,15 @@ export async function POST(request: Request) {
                 next.activeCanvasId = next.history[0]?.id ?? "default";
             }
         }
+        // Never trust a separately queued history patch for the node count.
+        // The durable canvas snapshot is the authoritative value.
+        next.history = next.history.map((item) => {
+            const nodes = next.canvases[item.id]?.nodes;
+            return {
+                ...item,
+                nodeCount: Array.isArray(nodes) ? nodes.length : item.nodeCount,
+            };
+        });
         return next;
     });
 

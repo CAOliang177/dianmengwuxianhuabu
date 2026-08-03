@@ -38,9 +38,18 @@ describe("mergeDurableNodeHistory", () => {
         ]);
     });
 
-    it("does not resurrect a node intentionally deleted by the user", () => {
-        expect(mergeDurableNodeHistory([imageNode("deleted", [])], [])).toEqual(
-            [],
-        );
+    it("preserves a node omitted by a stale renderer snapshot", () => {
+        const existing = imageNode("newer-node", []);
+        expect(mergeDurableNodeHistory([existing], [])).toEqual([existing]);
+    });
+
+    it("does not resurrect a node explicitly deleted by the user", () => {
+        expect(
+            mergeDurableNodeHistory(
+                [imageNode("deleted", [])],
+                [],
+                ["deleted"],
+            ),
+        ).toEqual([]);
     });
 });

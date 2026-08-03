@@ -21,9 +21,10 @@ import {
     resolveEdgeHandles,
 } from "@/lib/abi/node-feature-registry";
 import {
-    saveCanvasEdges,
-    saveCanvasMeta,
-    saveCanvasNodes,
+    getActiveCanvasId,
+    saveCanvasEdgesForCanvas,
+    saveCanvasMetaForCanvas,
+    saveCanvasNodesForCanvas,
 } from "@/lib/canvas-history";
 import { DATA_NODE_TYPES } from "@/lib/workflow/executable-workflow";
 
@@ -33,40 +34,92 @@ function isDataNode(nodeType: string): boolean {
 }
 
 // Simple debouncer factory
-function createDebounce<T extends unknown[]>(
-    callback: (...args: T) => void,
-    delay: number,
-) {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+type KeyedDebounced<T extends unknown[]> = ((
+    canvasId: string,
+    ...args: T
+) => void) & { cancel: (canvasId: string) => void };
 
-    return (...args: T) => {
-        if (timeoutId) {
-            clearTimeout(timeoutId);
-        }
-        timeoutId = setTimeout(() => {
-            callback(...args);
-            timeoutId = null;
-        }, delay);
+function createKeyedDebounce<T extends unknown[]>(
+    callback: (canvasId: string, ...args: T) => void,
+    delay: number,
+): KeyedDebounced<T> {
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+    const schedule = ((canvasId: string, ...args: T) => {
+        const previous = timers.get(canvasId);
+        if (previous) clearTimeout(previous);
+        timers.set(
+            canvasId,
+            setTimeout(() => {
+                timers.delete(canvasId);
+                callback(canvasId, ...args);
+            }, delay),
+        );
+    }) as KeyedDebounced<T>;
+    schedule.cancel = (canvasId: string) => {
+        const timer = timers.get(canvasId);
+        if (timer) clearTimeout(timer);
+        timers.delete(canvasId);
     };
+    return schedule;
 }
 
 // Persist React Flow nodes to localStorage with debouncing
-const debouncedSaveNodes = createDebounce((nodes: Node[]) => {
-    saveCanvasNodes(nodes);
+const debouncedSaveNodes = createKeyedDebounce((canvasId, nodes: Node[]) => {
+    saveCanvasNodesForCanvas(canvasId, nodes);
 }, 500);
 
 // Persist edges similarly
-const debouncedSaveEdges = createDebounce((edges: Edge[]) => {
-    saveCanvasEdges(edges);
+const debouncedSaveEdges = createKeyedDebounce((canvasId, edges: Edge[]) => {
+    saveCanvasEdgesForCanvas(canvasId, edges);
 }, 500);
 
 // Persist workflow meta (title, ids, notes)
-const debouncedSaveWorkflowMeta = createDebounce(
-    (meta: { id: number | null; name: string; description: string }) => {
-        saveCanvasMeta(meta);
+const debouncedSaveWorkflowMeta = createKeyedDebounce(
+    (
+        canvasId,
+        meta: { id: number | null; name: string; description: string },
+    ) => {
+        saveCanvasMetaForCanvas(canvasId, meta);
     },
     500,
 );
+
+function scheduleNodes(nodes: Node[]) {
+    debouncedSaveNodes(getActiveCanvasId(), nodes);
+}
+
+function scheduleEdges(edges: Edge[]) {
+    debouncedSaveEdges(getActiveCanvasId(), edges);
+}
+
+function saveNodesImmediately(nodes: Node[], removedNodeIds: string[] = []) {
+    const canvasId = getActiveCanvasId();
+    debouncedSaveNodes.cancel(canvasId);
+    void saveCanvasNodesForCanvas(canvasId, nodes, { removedNodeIds });
+}
+
+function saveEdgesImmediately(edges: Edge[]) {
+    const canvasId = getActiveCanvasId();
+    debouncedSaveEdges.cancel(canvasId);
+    void saveCanvasEdgesForCanvas(canvasId, edges);
+}
+
+function saveMetaImmediately(meta: {
+    id: number | null;
+    name: string;
+    description: string;
+}) {
+    const canvasId = getActiveCanvasId();
+    debouncedSaveWorkflowMeta.cancel(canvasId);
+    void saveCanvasMetaForCanvas(canvasId, meta);
+}
+
+export function cancelPendingFlowPersistence(canvasId = getActiveCanvasId()) {
+    debouncedSaveNodes.cancel(canvasId);
+    debouncedSaveEdges.cancel(canvasId);
+    debouncedSaveWorkflowMeta.cancel(canvasId);
+}
 
 export interface PossibleNode {
     type: string;
@@ -187,8 +240,13 @@ export const useFlow = create<FlowState>((set, get) => ({
                 HISTORY_LIMIT,
             ),
         });
-        saveCanvasNodes(nodes);
-        saveCanvasEdges(edges);
+        saveNodesImmediately(
+            nodes,
+            state.nodes
+                .filter((node) => !nodes.some((next) => next.id === node.id))
+                .map((node) => node.id),
+        );
+        saveEdgesImmediately(edges);
         return true;
     },
     redo: () => {
@@ -205,8 +263,16 @@ export const useFlow = create<FlowState>((set, get) => ({
             historyPast: [...state.historyPast, current].slice(-HISTORY_LIMIT),
             historyFuture: state.historyFuture.slice(1),
         });
-        saveCanvasNodes(nodes);
-        saveCanvasEdges(edges);
+        saveNodesImmediately(
+            nodes,
+            state.nodes
+                .filter(
+                    (node) =>
+                        !nodes.some((nextNode) => nextNode.id === node.id),
+                )
+                .map((node) => node.id),
+        );
+        saveEdgesImmediately(edges);
         return true;
     },
 
@@ -272,8 +338,12 @@ export const useFlow = create<FlowState>((set, get) => ({
                 change.type === "replace" ||
                 (change.type === "position" && change.dragging !== true),
         );
-        if (shouldPersistNodes) debouncedSaveNodes(nodes);
-        if (removedIds.length > 0) debouncedSaveEdges(edges);
+        if (removedIds.length > 0) {
+            saveNodesImmediately(nodes, removedIds);
+            saveEdgesImmediately(edges);
+        } else if (shouldPersistNodes) {
+            scheduleNodes(nodes);
+        }
     },
     onEdgesChange: (changes) => {
         if (changes.some((change) => change.type !== "select")) {
@@ -285,7 +355,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         });
         // Selection is presentation-only and does not belong in persistence.
         if (changes.some((change) => change.type !== "select")) {
-            debouncedSaveEdges(edges);
+            scheduleEdges(edges);
         }
     },
     onConnect: (connection) => {
@@ -297,19 +367,19 @@ export const useFlow = create<FlowState>((set, get) => ({
         set({
             edges: edges,
         });
-        debouncedSaveEdges(edges);
+        scheduleEdges(edges);
     },
     setNodes: (nodes, options) => {
         set({ nodes });
         if (options?.immediate) {
-            void saveCanvasNodes(nodes);
+            saveNodesImmediately(nodes);
         } else {
-            debouncedSaveNodes(nodes);
+            scheduleNodes(nodes);
         }
     },
     setEdges: (edges) => {
         set({ edges });
-        debouncedSaveEdges(edges);
+        scheduleEdges(edges);
     },
     setReconnectingEdgeId: (id) => set({ reconnectingEdgeId: id }),
     updates: (
@@ -330,9 +400,9 @@ export const useFlow = create<FlowState>((set, get) => ({
             nodes: newNodes,
         });
         if (options?.immediate) {
-            void saveCanvasNodes(newNodes);
+            saveNodesImmediately(newNodes);
         } else {
-            debouncedSaveNodes(newNodes);
+            scheduleNodes(newNodes);
         }
     },
     addNode: (node: PossibleNode, position?: { x: number; y: number }) => {
@@ -375,7 +445,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         };
         const newNodes = nodes.concat(newNode);
         set({ nodes: newNodes });
-        debouncedSaveNodes(newNodes);
+        scheduleNodes(newNodes);
         // Notify canvas listeners that a node was inserted
         get().nodeCreatedCallbacks.forEach((cb) => cb([nodeId]));
         return nodeId;
@@ -391,8 +461,8 @@ export const useFlow = create<FlowState>((set, get) => ({
             nodes: newNodes,
             edges: newEdges,
         });
-        saveCanvasNodes(newNodes);
-        saveCanvasEdges(newEdges);
+        saveNodesImmediately(newNodes, [nodeId]);
+        saveEdgesImmediately(newEdges);
     },
     removeEdges: (edgeIds: string[]) => {
         if (edgeIds.length === 0) return;
@@ -402,7 +472,7 @@ export const useFlow = create<FlowState>((set, get) => ({
         if (newEdges.length === edges.length) return;
         get().pushHistory();
         set({ edges: newEdges });
-        saveCanvasEdges(newEdges);
+        saveEdgesImmediately(newEdges);
     },
     ungroupImageNode: (nodeId: string) => {
         const { nodes, edges } = get();
@@ -457,8 +527,8 @@ export const useFlow = create<FlowState>((set, get) => ({
             edges: nextEdges,
             selectedNodes: [],
         });
-        saveCanvasNodes(nextNodes);
-        saveCanvasEdges(nextEdges);
+        saveNodesImmediately(nextNodes, [nodeId]);
+        saveEdgesImmediately(nextEdges);
         const ids = standaloneNodes.map((node) => node.id);
         get().nodeCreatedCallbacks.forEach((callback) => callback(ids));
         return ids;
@@ -596,8 +666,8 @@ export const useFlow = create<FlowState>((set, get) => ({
             nodes: allNodes,
             edges: [...edges],
         });
-        debouncedSaveNodes(allNodes);
-        debouncedSaveEdges(edges);
+        scheduleNodes(allNodes);
+        scheduleEdges(edges);
         // Announce only the brand-new node ids
         if (newlyCreatedIds.length > 0) {
             get().nodeCreatedCallbacks.forEach((cb) => cb(newlyCreatedIds));
@@ -692,8 +762,8 @@ export const useFlow = create<FlowState>((set, get) => ({
             nodes: allNodes,
             edges: allEdges,
         });
-        debouncedSaveNodes(allNodes);
-        debouncedSaveEdges(allEdges);
+        scheduleNodes(allNodes);
+        scheduleEdges(allEdges);
         get().clearCombo();
         // Same notification path as addNode
         get().nodeCreatedCallbacks.forEach((cb) => cb([nodeId]));
@@ -729,7 +799,7 @@ export const useFlow = create<FlowState>((set, get) => ({
     setWorkflowName: (name) => {
         set({ workflowName: name });
         const state = get();
-        saveCanvasMeta({
+        saveMetaImmediately({
             id: state.workflowId,
             // A local canvas does not need a server workflow id in order to
             // own a title. Persist inline renames for local-only canvases too,
@@ -744,7 +814,7 @@ export const useFlow = create<FlowState>((set, get) => ({
     setWorkflowId: (id) => {
         set({ workflowId: id });
         const state = get();
-        debouncedSaveWorkflowMeta({
+        debouncedSaveWorkflowMeta(getActiveCanvasId(), {
             id: id,
             name: state.workflowName,
             description: state.workflowDescription,
@@ -754,7 +824,7 @@ export const useFlow = create<FlowState>((set, get) => ({
     setWorkflowDescription: (description) => {
         set({ workflowDescription: description });
         const state = get();
-        debouncedSaveWorkflowMeta({
+        debouncedSaveWorkflowMeta(getActiveCanvasId(), {
             id: state.workflowId,
             name: state.workflowName,
             description: description,
