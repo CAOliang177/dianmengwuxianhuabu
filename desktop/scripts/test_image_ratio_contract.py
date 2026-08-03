@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -133,8 +134,37 @@ def main() -> None:
         pass
     assert not fallback_called
 
+    # A gateway 5xx is not evidence of protocol incompatibility. Preserve the
+    # status and stop before the second protocol, even if reading the error
+    # response itself ends with WinError 10054.
+    class ResettingErrorBody(io.BytesIO):
+        def read(self, *_args, **_kwargs):
+            error = ConnectionResetError(10054, "connection reset by peer")
+            error.winerror = 10054
+            raise error
+
     original_urlopen = new_channel.urlopen
     os.environ["NEW_CHANNEL_API_KEY"] = "contract-key"
+
+    def gateway_urlopen(*_args, **_kwargs):
+        raise new_channel.HTTPError(
+            "https://relay.invalid/v1/chat/completions",
+            502,
+            "Bad Gateway",
+            {},
+            ResettingErrorBody(),
+        )
+
+    new_channel.urlopen = gateway_urlopen
+    try:
+        try:
+            new_channel._http("https://relay.invalid/v1/chat/completions")
+            raise AssertionError("HTTP 502 must stop protocol fallback")
+        except new_channel.GatewayUnavailable as error:
+            assert "HTTP 502" in str(error)
+            assert "不再自动切换第二协议" in str(error)
+    finally:
+        new_channel.urlopen = original_urlopen
 
     def reset_urlopen(*_args, **_kwargs):
         error = ConnectionResetError(10054, "connection reset by peer")

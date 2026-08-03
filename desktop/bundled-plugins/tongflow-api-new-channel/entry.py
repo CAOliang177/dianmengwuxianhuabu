@@ -66,6 +66,10 @@ class SubmissionUncertain(RuntimeError):
     """The connection died after submission may have reached the relay."""
 
 
+class GatewayUnavailable(RuntimeError):
+    """The relay gateway returned a server-side failure before a usable result."""
+
+
 def _is_connection_reset(exc: BaseException) -> bool:
     return isinstance(
         exc,
@@ -224,8 +228,20 @@ def _http(
         with urlopen(request, timeout=timeout or _timeout()) as response:  # noqa: S310
             return response.read()
     except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"新渠道 API HTTP {exc.code} ({url}): {detail or exc.reason}") from exc
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")
+        except Exception as read_error:  # noqa: BLE001
+            # A gateway can reset the socket while urllib is reading its 5xx
+            # body. Preserve the known HTTP status instead of leaking a raw
+            # WinError 10054 that incorrectly looks like a second failure.
+            detail = f"{exc.reason}（读取错误响应时连接中断：{read_error}）"
+        message = f"新渠道 API HTTP {exc.code} ({url}): {detail or exc.reason}"
+        if 500 <= exc.code <= 599:
+            raise GatewayUnavailable(
+                f"{message}。这是中转站网关或上游渠道故障；本次不再自动切换第二协议，"
+                "请稍后重试或更换渠道。"
+            ) from exc
+        raise RuntimeError(message) from exc
     except URLError as exc:
         if isinstance(exc.reason, (socket.timeout, TimeoutError)):
             seconds = timeout or _timeout()
@@ -684,10 +700,10 @@ def _run_protocol_fallback(*attempts: tuple[str, Any]):
     for label, operation in attempts:
         try:
             return operation()
-        except (SubmissionTimeout, SubmissionUncertain):
+        except (SubmissionTimeout, SubmissionUncertain, GatewayUnavailable):
             # A timed-out POST may still have reached the upstream. Retrying a
-            # second protocol after a timeout or reset could create and bill a
-            # duplicate image.
+            # second protocol after a timeout/reset or a gateway-side 5xx can
+            # create duplicates and cannot repair an unavailable upstream.
             raise
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{label}: {exc}")
