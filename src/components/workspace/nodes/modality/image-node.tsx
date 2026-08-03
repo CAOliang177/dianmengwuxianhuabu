@@ -70,7 +70,7 @@ const FullScreenImageModal = ({
 	if (!mounted) return null;
 
 	const content = (
-		<div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+		<div className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center">
 			<button
 				type="button"
 				onClick={onClose}
@@ -80,15 +80,12 @@ const FullScreenImageModal = ({
 			>
 				<X className="h-7 w-7" />
 			</button>
-			<div className="bg-white dark:bg-zinc-900 rounded-lg shadow-2xl w-11/12 h-5/6 max-h-screen flex flex-col overflow-hidden">
+			<div className="relative flex h-screen w-screen flex-col overflow-hidden bg-black">
 				{/* Header */}
-				<div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-zinc-700 flex-shrink-0">
+				<div className="pointer-events-none absolute left-5 top-5 z-[55] flex items-center text-white">
 					<h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-100">
 						{t("imagePreview")}
 					</h2>
-					<Button size="sm" variant="ghost" onClick={onClose}>
-						<X className="h-4 w-4" />
-					</Button>
 				</div>
 
 				{/* Image with Scrollable Container */}
@@ -165,7 +162,7 @@ const FullScreenWaterfallImageModal = ({
 	);
 
 	const content = (
-		<div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+		<div className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center">
 			<button
 				type="button"
 				onClick={onClose}
@@ -175,7 +172,7 @@ const FullScreenWaterfallImageModal = ({
 			>
 				<X className="h-7 w-7" />
 			</button>
-			<div className="bg-white dark:bg-zinc-900 rounded-lg shadow-2xl w-11/12 h-5/6 max-h-screen flex flex-col overflow-hidden">
+			<div className="h-screen w-screen overflow-hidden bg-black flex flex-col">
 				{/* Header */}
 				<div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-zinc-700 flex-shrink-0">
 					<div className="flex items-center gap-2">
@@ -468,7 +465,9 @@ const ImageNode = ({ id, selected, data }: ImageNodeRfProps) => {
 							<img
 								src={singleImageUrl}
 								alt="生成内容"
-								className="h-full w-full object-contain"
+								className="h-full w-full cursor-zoom-in object-contain"
+								title="双击全屏查看图片"
+								onDoubleClick={() => setIsFullScreen(true)}
 								onError={() => setImageError(true)}
 							/>
 						) : (

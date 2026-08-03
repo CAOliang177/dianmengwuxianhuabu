@@ -127,6 +127,20 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
     const nodeLookup = useStore((state) => state.nodeLookup);
     const edges = useStore((state) => state.edges as Edge[]);
 
+    useEffect(() => {
+        if (!viewerOpen) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        const close = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setViewerOpen(false);
+        };
+        window.addEventListener("keydown", close);
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            window.removeEventListener("keydown", close);
+        };
+    }, [viewerOpen]);
+
     const { referenceCount, referenceImages } = useMemo(() => {
         if (!nodeId) return { referenceCount: 0, referenceImages: [] };
         const connectedPreviews = collectConnectedImageReferences(
@@ -442,6 +456,11 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                                 alt={`${modeLabel}预览`}
                                 draggable={false}
                                 className="h-full w-full object-contain"
+                                title="双击全屏查看图片"
+                                onDoubleClick={(event) => {
+                                    event.stopPropagation();
+                                    setViewerOpen(true);
+                                }}
                                 onLoad={(event) => {
                                     if (!generatedImageUrl) return;
                                     const nextWidth =
@@ -543,7 +562,7 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                         align="center"
                         className="nodrag nopan nowheel z-[80]"
                     >
-                        <div className="nodrag nopan nowheel w-[min(800px,calc(100vw-32px))] select-text rounded-2xl border border-border/80 bg-background/95 p-3 text-foreground shadow-2xl backdrop-blur-xl [text-rendering:geometricPrecision]">
+                        <div className="nodrag nopan nowheel relative w-[min(800px,calc(100vw-32px))] select-text rounded-2xl border border-border/80 bg-background/95 p-3 text-foreground shadow-2xl backdrop-blur-xl [text-rendering:geometricPrecision]">
                             <div className="mb-2 flex min-h-16 flex-wrap items-start gap-2">
                                 {referenceImages.length > 0 ? (
                                     referenceImages.map((fileKey, index) => (
@@ -605,9 +624,9 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                             </div>
 
                             {advancedSettingsOpen && (
-                                <div className="mt-2 max-h-[min(560px,60vh)] space-y-3 overflow-y-auto rounded-2xl border border-border bg-muted/25 p-3 text-foreground shadow-inner">
-                                    <div className="rounded-xl border border-border bg-card p-3">
-                                        <div className="mb-2 text-sm font-medium text-muted-foreground">
+                                <div className="absolute bottom-14 left-3 right-3 z-30 max-h-[min(380px,55vh)] space-y-2 overflow-y-auto rounded-2xl border border-border bg-background/98 p-2 text-foreground shadow-2xl backdrop-blur-xl">
+                                    <div className="rounded-xl border border-border bg-card p-2">
+                                        <div className="mb-1.5 text-sm font-medium text-muted-foreground">
                                             模型
                                         </div>
                                         <NodePluginModelSelect
@@ -628,16 +647,18 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                                             applySize(ratio, currentTier)
                                         }
                                         showSize
+                                        compact
                                     />
                                     <ResolutionPicker
                                         tiers={IMAGE_RESOLUTION_TIERS}
                                         value={currentTier.value}
                                         onChange={changeResolutionTier}
+                                        compact
                                     />
                                 </div>
                             )}
 
-                            <div className="mt-2 flex items-center gap-1 border-t border-border/70 pt-2">
+                            <div className="relative z-40 mt-2 flex items-center gap-1 border-t border-border/70 bg-background/95 pt-2">
                                 <NodePluginIdSelect
                                     nodeSlot="image-fusion"
                                     data={data}
@@ -699,7 +720,7 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                     {viewerOpen &&
                         generatedImageUrl &&
                         createPortal(
-                            <div className="fixed inset-0 z-[9999] bg-black/90 p-4 backdrop-blur-sm">
+                            <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm">
                                 <button
                                     type="button"
                                     className="absolute right-6 top-6 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/70 text-white shadow-xl transition hover:bg-white hover:text-black"
@@ -708,7 +729,7 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                                 >
                                     <X className="h-5 w-5" />
                                 </button>
-                                <div className="h-full overflow-hidden rounded-2xl border border-white/15">
+                                <div className="h-full w-full overflow-hidden">
                                     <ZoomableImageViewer
                                         src={generatedImageUrl}
                                         alt="生成图片编辑器"

@@ -14,6 +14,7 @@ interface AspectRatioPickerProps {
     value: AspectRatio;
     onChange: (ratio: AspectRatio) => void;
     showSize?: boolean;
+    compact?: boolean;
     autoOption?: {
         active: boolean;
         disabled?: boolean;
@@ -26,18 +27,31 @@ export function AspectRatioPicker({
     value,
     onChange,
     showSize = true,
+    compact = false,
     autoOption,
 }: AspectRatioPickerProps) {
     const t = useTranslations("Workspace.nodes");
 
     return (
-        <Card className="p-3">
-            <div className="space-y-2">
-                <Label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <RectangleHorizontal className="h-4 w-4" />
-                    {t("common.aspectRatio")}
-                </Label>
-                <div className="grid grid-cols-5 gap-2">
+        <Card className={compact ? "p-2" : "p-3"}>
+            <div className={compact ? "space-y-1.5" : "space-y-2"}>
+                <div className="flex items-center justify-between gap-3">
+                    <Label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <RectangleHorizontal className="h-4 w-4" />
+                        {t("common.aspectRatio")}
+                    </Label>
+                    {compact && showSize && (
+                        <span className="text-[11px] text-muted-foreground">
+                            {value.width} × {value.height}
+                        </span>
+                    )}
+                </div>
+                <div
+                    className={cn(
+                        "grid gap-2",
+                        compact ? "grid-cols-5 sm:grid-cols-10 gap-1.5" : "grid-cols-5",
+                    )}
+                >
                     {autoOption ? (
                         <Button
                             type="button"
@@ -46,7 +60,8 @@ export function AspectRatioPicker({
                             disabled={autoOption.disabled}
                             onClick={autoOption.onSelect}
                             className={cn(
-                                "h-auto min-w-0 flex-col gap-1 px-1 py-2 text-xs transition-all",
+                                "h-auto min-w-0 flex-col gap-1 px-1 text-xs transition-all",
+                                compact ? "py-1.5" : "py-2",
                                 autoOption.active
                                     ? "bg-primary text-primary-foreground shadow-md"
                                     : "hover:bg-accent hover:text-accent-foreground",
@@ -79,7 +94,8 @@ export function AspectRatioPicker({
                                 size="sm"
                                 onClick={() => onChange(ratio)}
                                 className={cn(
-                                    "h-auto min-w-0 py-2 px-1 flex flex-col items-center gap-1 text-xs whitespace-normal transition-all",
+                                    "h-auto min-w-0 px-1 flex flex-col items-center gap-1 text-xs whitespace-normal transition-all",
+                                    compact ? "py-1.5" : "py-2",
                                     isSelected
                                         ? "bg-primary text-primary-foreground shadow-md"
                                         : "hover:bg-accent hover:text-accent-foreground",
@@ -101,7 +117,7 @@ export function AspectRatioPicker({
                         );
                     })}
                 </div>
-                {showSize && (
+                {showSize && !compact && (
                     <div className="text-xs text-muted-foreground text-center">
                         {t("common.currentSize")} {value.width} × {value.height}
                     </div>

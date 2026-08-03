@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.46] - 2026-08-03
+
+### Changed
+
+- Compact the aspect-ratio and resolution controls so the generation action
+  remains visible without dragging the node downward.
+- Show advanced image-generation settings in an anchored overlay instead of
+  expanding the node toolbar vertically.
+- Open generated and uploaded images in a true edge-to-edge fullscreen viewer
+  with zoom, pan, download, Escape, and a fixed close button.
+
+### Fixed
+
+- Ensure fullscreen image viewers use the entire viewport instead of a small
+  centered dialog.
+
 ## [0.1.45] - 2026-08-03
 
 ### Fixed

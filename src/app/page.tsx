@@ -50,7 +50,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.45";
+const RELEASE_VERSION = "0.1.46";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -413,11 +413,10 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                新渠道香蕉超时误报修复
+                                参数选择更紧凑，大图预览更沉浸
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                修复中转站后台已经接单甚至生成成功， 画布却在 90
-                                秒后提示“没有请求到中转站”的问题。
+                                常用生成参数不再挤占画布空间，生成图和上传图现在都能真正全屏查看。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -425,29 +424,29 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                返回主页不再丢失新节点
+                                生成按钮始终触手可及
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                离开画布前立即保存完整节点、连接线和生成结果；重新进入时，
-                                新的本地快照不会再被旧磁盘记录覆盖。
+                                比例与分辨率改为紧凑排列，高级设置以浮层展开，
+                                无需再把节点向下拖动才能点击生成。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                阻止重复提交与重复扣费
+                                图片真正全屏查看
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                同一节点快速连点只会创建一批任务。遇到 WinError 10054
-                                连接重置时停止自动切换第二协议，并给出明确处理提示。
+                                生成图片和上传图片都可占满整个屏幕预览，支持滚轮缩放、
+                                拖动画面、下载原图，并可点击右上角关闭或按 Esc 退出。
                             </p>
                         </div>
                         {[
-                            "返回主页前立即保存当前画布，刚新增和刚生成的节点不再丢失。",
-                            "重新进入画布时比较快照时间，禁止旧磁盘数据覆盖较新的本地画布。",
-                            "同一节点增加同步执行锁，快速重复点击不会创建重复任务。",
-                            "WinError 10053 / 10054 不再自动回退到第二协议，降低重复生成和扣费风险。",
-                            "连接重置提示会说明请求状态不确定，便于先核对中转站再手动重试。",
+                            "比例选项横向紧凑排列，分辨率选择合并为一行，减少面板高度。",
+                            "高级参数浮层不会再把底部生成按钮顶出可视区域。",
+                            "双击节点图片，或点击节点上的放大按钮，即可进入全屏预览。",
+                            "全屏预览支持滚轮缩放、拖拽移动、下载、Esc 和右上角关闭。",
+                            "继续包含画布保存防丢失、重复提交保护和网络异常防重复扣费修复。",
                         ].map((item, index) => (
                             <div
                                 key={item}

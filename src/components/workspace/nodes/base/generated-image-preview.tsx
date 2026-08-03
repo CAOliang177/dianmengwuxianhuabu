@@ -85,7 +85,7 @@ export function GeneratedImagePreview({ fileKey }: { fileKey: string }) {
                 open &&
                 url &&
                 createPortal(
-                    <div className="nodrag nowheel fixed inset-0 z-[100] flex flex-col bg-black/92 p-4">
+                    <div className="nodrag nowheel fixed inset-0 z-[9999] flex flex-col bg-black/95">
                         <button
                             type="button"
                             aria-label="关闭图片预览"
@@ -98,28 +98,10 @@ export function GeneratedImagePreview({ fileKey }: { fileKey: string }) {
                         >
                             <X className="h-7 w-7" />
                         </button>
-                        <div className="mb-3 flex items-center justify-between text-white">
+                        <div className="pointer-events-none absolute left-6 top-6 z-[105] flex items-center justify-between text-white">
                             <div className="text-sm font-medium">图片预览</div>
-                            <div className="flex gap-2">
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => void downloadImageFile(url)}
-                                >
-                                    <Download className="mr-2 h-4 w-4" />
-                                    下载原图
-                                </Button>
-                                <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="secondary"
-                                    onClick={() => setOpen(false)}
-                                >
-                                    <X className="h-4 w-4" />
-                                </Button>
-                            </div>
                         </div>
-                        <div className="min-h-0 flex-1 overflow-hidden rounded-xl">
+                        <div className="min-h-0 flex-1 overflow-hidden">
                             <ZoomableImageViewer
                                 src={url}
                                 alt="生成图片大图预览"
