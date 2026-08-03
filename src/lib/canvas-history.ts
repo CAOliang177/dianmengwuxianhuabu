@@ -538,7 +538,53 @@ export async function hydrateCanvasHistoryFromDisk() {
         }
         if (!Array.isArray(disk.history)) return local.history;
 
-        const covers = backfillCanvasCovers(disk.history, disk.canvases || {});
+        // The renderer cache may be newer than disk when the user returns home
+        // immediately after creating a node/result. Never let an older disk
+        // snapshot overwrite that newer local canvas during the next visit.
+        const diskHistoryById = new Map(
+            disk.history.map((item) => [item.id, item]),
+        );
+        const localHistoryById = new Map(
+            local.history.map((item) => [item.id, item]),
+        );
+        const allIds = new Set([
+            ...diskHistoryById.keys(),
+            ...localHistoryById.keys(),
+        ]);
+        const mergedHistory = [...allIds]
+            .map((id) => {
+                const diskItem = diskHistoryById.get(id);
+                const localItem = localHistoryById.get(id);
+                if (!diskItem) return localItem;
+                if (!localItem) return diskItem;
+                return localItem.updatedAt > diskItem.updatedAt
+                    ? localItem
+                    : diskItem;
+            })
+            .filter((item): item is CanvasHistoryItem => item !== undefined)
+            .sort((a, b) => b.updatedAt - a.updatedAt);
+
+        const selectedCanvases: Record<string, CanvasSnapshot> = {
+            ...(disk.canvases || {}),
+        };
+        const locallyNewerIds = new Set<string>();
+        for (const id of allIds) {
+            const diskItem = diskHistoryById.get(id);
+            const localItem = localHistoryById.get(id);
+            if (
+                localItem &&
+                (!diskItem || localItem.updatedAt > diskItem.updatedAt) &&
+                local.canvases[id]
+            ) {
+                selectedCanvases[id] = local.canvases[id];
+                locallyNewerIds.add(id);
+            }
+        }
+
+        const covers = backfillCanvasCovers(
+            mergedHistory,
+            selectedCanvases,
+        );
         writeHistory(covers.history, false);
         if (covers.changed) {
             void persistPatch({ history: covers.history });
@@ -546,7 +592,7 @@ export async function hydrateCanvasHistoryFromDisk() {
         if (disk.activeCanvasId) {
             localStorage.setItem(ACTIVE_KEY, disk.activeCanvasId);
         }
-        for (const [id, canvas] of Object.entries(disk.canvases || {})) {
+        for (const [id, canvas] of Object.entries(selectedCanvases)) {
             if (canvas.nodes) {
                 const localNodes = local.canvases[id]?.nodes;
                 const nodes = mergeDurableNodeHistory(
@@ -574,6 +620,15 @@ export async function hydrateCanvasHistoryFromDisk() {
                     canvasStorageKey(id, "meta"),
                     JSON.stringify(canvas.meta),
                 );
+            }
+            if (locallyNewerIds.has(id)) {
+                const historyItem = covers.history.find(
+                    (item) => item.id === id,
+                );
+                void persistCanvasPatch({
+                    canvas: { id, ...canvas },
+                    ...(historyItem ? { historyItem } : {}),
+                });
             }
         }
         return covers.history.sort((a, b) => b.updatedAt - a.updatedAt);

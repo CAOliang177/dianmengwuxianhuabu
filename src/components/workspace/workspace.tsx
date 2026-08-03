@@ -1346,6 +1346,18 @@ function WorkspaceInner({
                 <a
                     href="/"
                     title="返回首页"
+                    onClick={() => {
+                        // Client-side navigation does not fire pagehide. Save
+                        // the latest node/result snapshot before React unmounts
+                        // the workspace, otherwise a just-created node can be
+                        // lost when the user immediately returns home.
+                        const flow = useFlow.getState();
+                        flushCanvasSnapshot(flow.nodes, flow.edges, {
+                            id: flow.workflowId,
+                            name: flow.workflowName,
+                            description: flow.workflowDescription,
+                        });
+                    }}
                     className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-100 bg-white text-gray-600 shadow-sm transition hover:bg-gray-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-200"
                 >
                     <Home className="h-5 w-5" />

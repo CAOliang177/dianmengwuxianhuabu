@@ -111,6 +111,46 @@ def main() -> None:
     finally:
         new_channel._http = original_http
 
+    # A reset connection is submission-uncertain. Do not try the fallback
+    # protocol because the first request may already be running upstream.
+    fallback_called = False
+
+    def uncertain_operation():
+        raise new_channel.SubmissionUncertain("connection reset")
+
+    def fallback_operation():
+        nonlocal fallback_called
+        fallback_called = True
+        return b"unexpected"
+
+    try:
+        new_channel._run_protocol_fallback(
+            ("first", uncertain_operation),
+            ("fallback", fallback_operation),
+        )
+        raise AssertionError("SubmissionUncertain must be propagated")
+    except new_channel.SubmissionUncertain:
+        pass
+    assert not fallback_called
+
+    original_urlopen = new_channel.urlopen
+    os.environ["NEW_CHANNEL_API_KEY"] = "contract-key"
+
+    def reset_urlopen(*_args, **_kwargs):
+        error = ConnectionResetError(10054, "connection reset by peer")
+        error.winerror = 10054
+        raise error
+
+    new_channel.urlopen = reset_urlopen
+    try:
+        try:
+            new_channel._http("https://relay.invalid/v1/chat/completions")
+            raise AssertionError("WinError 10054 must be submission-uncertain")
+        except new_channel.SubmissionUncertain as error:
+            assert "不会自动切换到第二种协议" in str(error)
+    finally:
+        new_channel.urlopen = original_urlopen
+
     new_channel._REQUEST_MODEL = "gemini-3-pro-image-preview"
     payload = new_channel._chat_payload("test", [], "2560x1440")
     assert payload["size"] == "2560x1440"

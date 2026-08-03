@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.45] - 2026-08-03
+
+### Fixed
+
+- Save a complete canvas snapshot before returning to the home page, so newly
+  created nodes and freshly completed image results cannot be lost.
+- Prefer a newer renderer snapshot over an older disk snapshot when reopening
+  a canvas, then repair the durable copy in the background.
+- Prevent rapid repeated clicks on one node from creating duplicate tasks.
+- Treat WinError 10053/10054 connection resets as submission-uncertain and do
+  not automatically retry through a second protocol, avoiding duplicate jobs
+  and possible duplicate billing.
+
 ## [0.1.44] - 2026-07-31
 
 ### Fixed

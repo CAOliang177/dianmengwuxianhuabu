@@ -62,6 +62,28 @@ class SubmissionTimeout(RuntimeError):
     """The relay did not acknowledge a generation submission in time."""
 
 
+class SubmissionUncertain(RuntimeError):
+    """The connection died after submission may have reached the relay."""
+
+
+def _is_connection_reset(exc: BaseException) -> bool:
+    return isinstance(
+        exc,
+        (ConnectionResetError, ConnectionAbortedError, BrokenPipeError),
+    ) or (
+        isinstance(exc, OSError)
+        and getattr(exc, "winerror", None) in {10053, 10054}
+    )
+
+
+def _submission_uncertain(url: str, exc: BaseException) -> SubmissionUncertain:
+    return SubmissionUncertain(
+        f"新渠道连接在返回结果前被远端网关强制断开（{url}）：{exc}。"
+        "请求可能尚未创建，也可能已经在中转站处理中。为避免重复生成或重复扣费，"
+        "本次不会自动切换到第二种协议；请稍后查看中转站记录，再决定是否手动重试。"
+    )
+
+
 def _env(name: str, fallback: str = "") -> str:
     return (os.environ.get(name) or fallback).strip()
 
@@ -211,6 +233,10 @@ def _http(
                 f"新渠道在 {seconds} 秒内没有返回响应；这不代表中转站未收到请求，"
                 "中转站可能仍在后台生成。为避免重复扣费，本次不会自动重复提交。"
             ) from exc
+        if isinstance(exc.reason, BaseException) and _is_connection_reset(
+            exc.reason
+        ):
+            raise _submission_uncertain(url, exc.reason) from exc
         raise RuntimeError(f"无法连接新渠道 API ({url}): {exc.reason}") from exc
     except (socket.timeout, TimeoutError) as exc:
         seconds = timeout or _timeout()
@@ -218,6 +244,10 @@ def _http(
             f"新渠道在 {seconds} 秒内没有返回响应；这不代表中转站未收到请求，"
             "中转站可能仍在后台生成。为避免重复扣费，本次不会自动重复提交。"
         ) from exc
+    except OSError as exc:
+        if _is_connection_reset(exc):
+            raise _submission_uncertain(url, exc) from exc
+        raise
 
 
 def _json(body: bytes) -> dict[str, Any]:
@@ -654,9 +684,10 @@ def _run_protocol_fallback(*attempts: tuple[str, Any]):
     for label, operation in attempts:
         try:
             return operation()
-        except SubmissionTimeout:
+        except (SubmissionTimeout, SubmissionUncertain):
             # A timed-out POST may still have reached the upstream. Retrying a
-            # second protocol could create and bill a duplicate image.
+            # second protocol after a timeout or reset could create and bill a
+            # duplicate image.
             raise
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{label}: {exc}")

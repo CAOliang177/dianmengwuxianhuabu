@@ -124,6 +124,9 @@ export function useAbiExecution<F extends NodeSlot>(
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [progressLabel, setProgressLabel] = useState<string | null>(null);
     const [missingPluginOpen, setMissingPluginOpen] = useState(false);
+    // React state does not update synchronously between two rapid clicks. This
+    // ref closes that gap so one node cannot create duplicate billed tasks.
+    const executionLockRef = useRef(false);
 
     /* ---------- spec resolution (memo via feature/sourceSpec ref) ---- */
 
@@ -294,6 +297,10 @@ export function useAbiExecution<F extends NodeSlot>(
     } = useBatchTaskManager();
     const loading = taskLoading || nodeExecutionStatus === "running";
 
+    useEffect(() => {
+        if (!loading) executionLockRef.current = false;
+    }, [loading]);
+
     const { pluginOptions, resolveActivePluginId, resolveActiveModel } =
         useNodePluginResolver(feature);
     // The scanned registry only contains installed plugins; `isLoaded` lets the
@@ -362,7 +369,7 @@ export function useAbiExecution<F extends NodeSlot>(
     /* ---------- run -------------------------------------------------- */
 
     const run = useCallback(async () => {
-        if (!nodeId) return;
+        if (!nodeId || loading || executionLockRef.current) return;
         const spec = specRef.current;
         const { nodes, edges } = storeApi.getState();
 
@@ -428,6 +435,7 @@ export function useAbiExecution<F extends NodeSlot>(
 
         const model = resolveActiveModel();
 
+        executionLockRef.current = true;
         try {
             const taskConfigs = prompts.map((prompt) => ({
                 feature,
@@ -438,6 +446,7 @@ export function useAbiExecution<F extends NodeSlot>(
             }));
             await createBatchTasks(taskConfigs);
         } catch (error) {
+            executionLockRef.current = false;
             logger.error(`[useAbiExecution] Failed to create tasks:`, error);
         }
     }, [
@@ -452,6 +461,7 @@ export function useAbiExecution<F extends NodeSlot>(
         pluginOptions,
         pluginsRegistryLoaded,
         transformPrompts,
+        loading,
     ]);
 
     const canRun = !!nodeId && !disabled && !loading && nodeType !== undefined;

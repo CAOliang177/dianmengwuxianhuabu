@@ -50,7 +50,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.44";
+const RELEASE_VERSION = "0.1.45";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -425,29 +425,29 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                同步生图完整等待生成结果
+                                返回主页不再丢失新节点
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                新渠道同步文生图、图生图和多图参考请求现在使用完整的
-                                600 秒生成超时，不再在第 90 秒主动断开连接。
+                                离开画布前立即保存完整节点、连接线和生成结果；重新进入时，
+                                新的本地快照不会再被旧磁盘记录覆盖。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                异步提交与同步生成分开计时
+                                阻止重复提交与重复扣费
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                90 秒只用于异步接口返回任务 ID；即使真正超时，
-                                提示也会明确说明中转站可能仍在后台生成，避免误判和重复扣费。
+                                同一节点快速连点只会创建一批任务。遇到 WinError 10054
+                                连接重置时停止自动切换第二协议，并给出明确处理提示。
                             </p>
                         </div>
                         {[
-                            "同步 /chat/completions 使用完整生成超时，不再错误套用 90 秒提交窗口。",
-                            "同步 /images/generations 和 /images/edits 同样等待完整生成结果。",
-                            "异步接口仍使用短提交窗口取得任务 ID，之后进入最长 600 秒轮询。",
-                            "超时文案改为“未返回响应但可能仍在生成”，不再声称中转站未收到。",
-                            "移动运行中的画布不中断任务、历史防丢和保存优化继续保留。",
+                            "返回主页前立即保存当前画布，刚新增和刚生成的节点不再丢失。",
+                            "重新进入画布时比较快照时间，禁止旧磁盘数据覆盖较新的本地画布。",
+                            "同一节点增加同步执行锁，快速重复点击不会创建重复任务。",
+                            "WinError 10053 / 10054 不再自动回退到第二协议，降低重复生成和扣费风险。",
+                            "连接重置提示会说明请求状态不确定，便于先核对中转站再手动重试。",
                         ].map((item, index) => (
                             <div
                                 key={item}
