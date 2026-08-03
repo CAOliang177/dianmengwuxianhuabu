@@ -123,6 +123,7 @@ function diagnosticCandidates(root: string): string[] {
         path.join("data", "canvas-history.json.bak.3"),
         path.join("data", "canvas-history.json.bak.4"),
         path.join("data", "canvas-history.json.tmp"),
+        path.join("data", "task-canvas-map.json"),
         path.join("data", "tongflow.db"),
         path.join("data", "tongflow.db-wal"),
         path.join("data", "tongflow.db-shm"),

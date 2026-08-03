@@ -15,6 +15,9 @@ export interface Task {
     error?: string;
     createdAt: Date;
     updatedAt: Date;
+    pluginId?: string;
+    model?: string;
+    canvasId?: string;
 }
 
 export interface CreateTaskRequest {
@@ -25,6 +28,7 @@ export interface CreateTaskRequest {
     prompt: Record<string, unknown>;
     nodeId: string;
     workflowId?: number;
+    canvasId?: string;
 }
 
 export interface CreateTaskResponse {

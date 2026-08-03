@@ -6,6 +6,7 @@ import {
     Layers3,
     Pencil,
     Plus,
+    RotateCcw,
     SlidersHorizontal,
     Sparkles,
     Trash2,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -41,6 +43,7 @@ import {
     renameCanvas,
     setActiveCanvasId,
 } from "@/lib/canvas-history";
+import { recoverMissingGeneratedNodes } from "@/lib/canvas-recovery";
 import { getFileUrl } from "@/lib/file/url";
 
 const LETTER_COLORS = [
@@ -51,7 +54,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.48";
+const RELEASE_VERSION = "0.1.49";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -88,6 +91,7 @@ export default function Home() {
         null,
     );
     const [releaseNoticeOpen, setReleaseNoticeOpen] = useState(false);
+    const [isRecovering, setIsRecovering] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -131,6 +135,31 @@ export default function Home() {
     };
 
     const newCanvas = () => openCanvas(createCanvas());
+
+    const recoverGeneratedNodes = async () => {
+        if (isRecovering) return;
+        setIsRecovering(true);
+        try {
+            const result = await recoverMissingGeneratedNodes();
+            setHistory(getCanvasHistory());
+            if (result.recoveredNodes === 0) {
+                toast.success("没有发现需要找回的生成节点");
+                return;
+            }
+            toast.success(
+                `已找回 ${result.recoveredNodes} 个节点、${result.recoveredImages} 张生成图片`,
+            );
+            if (result.openCanvasId) openCanvas(result.openCanvasId);
+        } catch (error) {
+            toast.error(
+                error instanceof Error
+                    ? `找回失败：${error.message}`
+                    : "找回失败，请稍后重试",
+            );
+        } finally {
+            setIsRecovering(false);
+        }
+    };
 
     const beginRenameCanvas = (
         event: React.MouseEvent,
@@ -199,6 +228,19 @@ export default function Home() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            title="从成功任务中找回丢失的生成节点"
+                            aria-label="找回丢失节点"
+                            disabled={isRecovering}
+                            onClick={() => void recoverGeneratedNodes()}
+                            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[.07] px-3 text-sm text-slate-200 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-emerald-300/30 hover:bg-white/[.12] hover:text-white disabled:cursor-wait disabled:opacity-60"
+                        >
+                            <RotateCcw
+                                className={`h-4 w-4 ${isRecovering ? "animate-spin" : ""}`}
+                            />
+                            <span className="hidden xl:inline">找回节点</span>
+                        </button>
                         <DiagnosticExportButton className="h-10 w-10 rounded-xl border border-white/10 bg-white/[.07] text-slate-200 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-violet-300/30 hover:bg-white/[.12] hover:text-white" />
                         <UpdateButton className="h-10 w-10 rounded-xl border border-white/10 bg-white/[.07] text-slate-200 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-blue-300/30 hover:bg-white/[.12] hover:text-white" />
                         <button
@@ -415,10 +457,10 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                画布数据安全升级
+                                画布数据安全与节点找回
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                修复生成成功后返回主页或重启应用，部分节点与生成记录可能消失的问题。
+                                修复节点丢失问题，并支持从成功任务中重建此前没有保存下来的生成节点。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -426,11 +468,11 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                防止旧快照覆盖
+                                一键找回节点
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                每个画布现在拥有独立的保存队列，切换画布、返回主页或关闭应用时，
-                                不会再把上一份延迟数据保存到其他画布。
+                                首页右上角新增“找回节点”。它会扫描本机成功任务，
+                                把仍有生成结果但画布中已经不存在的节点重新建立出来。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
@@ -444,6 +486,9 @@ export default function Home() {
                             </p>
                         </div>
                         {[
+                            "首页新增“找回节点”，可从任务数据库重建丢失的图片生成节点。",
+                            "新生成任务会记录所属画布，后续可以准确找回到原画布。",
+                            "旧版任务无法确认原画布时，会集中放进“恢复的生成记录”画布。",
                             "修复跨画布延迟保存可能写入错误画布的问题。",
                             "修复生成完成后旧节点快照覆盖新节点的问题。",
                             "返回主页、最小化或关闭应用前会取消旧保存并写入最新完整画布。",

@@ -1,5 +1,6 @@
 import type { Node } from "@xyflow/react";
 import {
+    GENERATION_HISTORY_RETENTION_MS,
     readGenerationHistory,
     withGenerationHistory,
 } from "@/lib/generation-history";
@@ -20,6 +21,16 @@ export interface ReconcileImageTask {
     data?: Record<string, unknown>;
     result?: unknown;
     createdAt?: Date | string | number;
+    prompt?: Record<string, unknown>;
+    pluginId?: string;
+    model?: string;
+    canvasId?: string;
+}
+
+export interface RecoveredImageNode {
+    node: Node;
+    canvasId?: string;
+    imageCount: number;
 }
 
 function taskCreatedAt(task: ReconcileImageTask): number {
@@ -102,4 +113,76 @@ export function reconcileCompletedImageTasks(
     });
 
     return { nodes: nextNodes, changed };
+}
+
+/**
+ * Rebuild generation nodes whose durable tasks still contain image results but
+ * whose node ids no longer exist in any saved canvas. The caller decides
+ * whether to restore a mapped node into its original canvas or place legacy
+ * unmapped tasks into a separate recovery canvas.
+ */
+export function buildRecoveredImageNodes(
+    existingNodeIds: ReadonlySet<string>,
+    tasks: ReconcileImageTask[],
+    now = Date.now(),
+): RecoveredImageNode[] {
+    const cutoff = now - GENERATION_HISTORY_RETENTION_MS;
+    const grouped = new Map<string, ReconcileImageTask[]>();
+    for (const task of tasks) {
+        if (
+            task.status.toLowerCase() !== "completed" ||
+            !task.nodeId ||
+            existingNodeIds.has(task.nodeId) ||
+            taskCreatedAt(task) < cutoff ||
+            (task.feature && task.feature !== "image-fusion") ||
+            imageValues(task).length === 0
+        ) {
+            continue;
+        }
+        const list = grouped.get(task.nodeId) ?? [];
+        list.push(task);
+        grouped.set(task.nodeId, list);
+    }
+
+    return [...grouped.entries()].map(
+        ([nodeId, nodeTasks], index): RecoveredImageNode => {
+            nodeTasks.sort((a, b) => taskCreatedAt(b) - taskCreatedAt(a));
+            const newest = nodeTasks[0];
+            const records = readGenerationHistory({
+                generationHistoryVersion: 2,
+                generationHistoryRecords: nodeTasks.flatMap((task) =>
+                    imageValues(task).map((fileKey) => ({
+                        fileKey,
+                        createdAt: taskCreatedAt(task),
+                    })),
+                ),
+            });
+            const latestValues = imageValues(newest);
+            const columns = 4;
+            const data: Record<string, unknown> = {
+                ...(newest.prompt ?? {}),
+                ...withGenerationHistory({}, records),
+                fileKeys: latestValues,
+                recoveredFromTaskIds: nodeTasks.map((task) => task.id),
+                recoveredAt: now,
+            };
+            if (newest.pluginId) data.pluginId = newest.pluginId;
+            if (newest.model) data.pluginModel = newest.model;
+
+            return {
+                node: {
+                    id: nodeId,
+                    type: "textGenImageNode",
+                    position: {
+                        x: 320 + (index % columns) * 560,
+                        y: 280 + Math.floor(index / columns) * 560,
+                    },
+                    origin: [0.5, 0.5],
+                    data,
+                },
+                canvasId: nodeTasks.find((task) => task.canvasId)?.canvasId,
+                imageCount: records.length,
+            };
+        },
+    );
 }

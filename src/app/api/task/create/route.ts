@@ -6,6 +6,7 @@ import { ABI_NODES, type NodeSlot } from "@/generated/abi";
 import { logger } from "@/lib/logger";
 import { getPluginConfig } from "@/lib/plugins/plugins-registry.server";
 import { getAbiNodeBySlot } from "@/lib/schema/tongflow-abi";
+import { recordTaskCanvas } from "@/lib/task/task-canvas-map.server";
 
 function isAbiNodeSlot(s: string): s is NodeSlot {
     return Object.hasOwn(ABI_NODES, s);
@@ -28,8 +29,17 @@ export async function POST(request: NextRequest) {
             prompt: Record<string, unknown>;
             nodeId: string;
             workflowId?: number;
+            canvasId?: string;
         };
-        const { feature, pluginId, model, prompt, nodeId, workflowId } = body;
+        const {
+            feature,
+            pluginId,
+            model,
+            prompt,
+            nodeId,
+            workflowId,
+            canvasId,
+        } = body;
 
         if (!feature || typeof feature !== "string") {
             return NextResponse.json(
@@ -127,6 +137,20 @@ export async function POST(request: NextRequest) {
                 { error: "Failed to create task; please retry later" },
                 { status: 500 },
             );
+        }
+
+        if (typeof canvasId === "string" && canvasId.trim()) {
+            try {
+                await recordTaskCanvas(taskId, canvasId.trim(), nodeId);
+            } catch (mapError) {
+                // Task creation remains valid even if the optional recovery
+                // index cannot be written. The normal node save path still
+                // owns the result.
+                logger.warn(
+                    "[Task] Canvas recovery index write failed:",
+                    mapError,
+                );
+            }
         }
 
         logger.debug("[Task] Task created:", {

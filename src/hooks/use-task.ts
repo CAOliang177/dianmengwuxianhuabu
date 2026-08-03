@@ -20,6 +20,7 @@ import {
     type Task as PersistedTask,
     updateTaskStatus,
 } from "@/lib/api/task";
+import { getActiveCanvasId } from "@/lib/canvas-history";
 import { logger } from "@/lib/logger";
 import { getTaskStopUrl, getTaskWaitUrl } from "@/lib/task/api-url";
 import {
@@ -179,6 +180,7 @@ export interface TaskCreationConfig {
     prompt: Record<string, unknown>;
     nodeId: string;
     workflowId?: number;
+    canvasId?: string;
 }
 
 // Batch task options
@@ -751,7 +753,10 @@ export function useCreateTask(options?: TaskSubscriptionOptions) {
             setError(null);
 
             try {
-                const { taskId } = await apiCreateTask(config);
+                const { taskId } = await apiCreateTask({
+                    ...config,
+                    canvasId: config.canvasId ?? getActiveCanvasId(),
+                });
                 trackUsageTask(taskId, config);
 
                 // Persisted id kicks off SSE subscription
@@ -841,7 +846,11 @@ export function useBatchTaskManager(
                 const createPromises = taskConfigs.map(async (taskConfig) => {
                     let taskId: string;
                     try {
-                        ({ taskId } = await apiCreateTask(taskConfig));
+                        ({ taskId } = await apiCreateTask({
+                            ...taskConfig,
+                            canvasId:
+                                taskConfig.canvasId ?? getActiveCanvasId(),
+                        }));
                     } catch (error) {
                         reportUsageCreateFailure(taskConfig, error);
                         throw error;

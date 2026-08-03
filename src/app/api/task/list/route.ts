@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { tasks } from "@/db/schema";
 import { logger } from "@/lib/logger";
+import { taskCanvasIds } from "@/lib/task/task-canvas-map.server";
 import { safeJsonParse } from "@/utils/json-utils";
 
 /**
@@ -28,10 +29,12 @@ export async function GET(request: NextRequest) {
             .limit(pageSize)
             .offset(offset);
 
+        const canvasIds = taskCanvasIds();
         const taskList = result.map((task) => ({
             ...task,
             prompt: safeJsonParse(task.prompt, {}),
             result: safeJsonParse(task.result, null),
+            canvasId: canvasIds[task.id]?.canvasId,
         }));
 
         return NextResponse.json({ tasks: taskList });
