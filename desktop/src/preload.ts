@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("tongflowDesktop", {
         ipcRenderer.invoke("tongflow:download-directory-set", directory),
     saveImage: (request: { url: string; suggestedName?: string }) =>
         ipcRenderer.invoke("tongflow:image-save", request),
+    exportDiagnostics: (request?: {
+        rendererCanvasStorage?: Record<string, string>;
+    }) => ipcRenderer.invoke("tongflow:diagnostics-export", request),
     onUpdateState: (callback: (state: unknown) => void) => {
         const listener = (_event: unknown, state: unknown) => callback(state);
         ipcRenderer.on("tongflow:update-state", listener);

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.47] - 2026-08-03
+
+### Added
+
+- Add a one-click diagnostic ZIP export button to the home-page toolbar.
+- Include desktop/server logs, canvas snapshots, task SQLite state, renderer
+  canvas storage, application version, OS details, and a skipped-file report.
+- Explicitly exclude settings/API keys, plugins, environments, uploads, and
+  generated image files from diagnostic packages.
+
 ## [0.1.46] - 2026-08-03
 
 ### Changed

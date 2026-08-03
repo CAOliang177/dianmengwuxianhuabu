@@ -30,6 +30,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { DiagnosticExportButton } from "@/components/workspace/diagnostic-export-button";
 import { UpdateButton } from "@/components/workspace/update-button";
 import {
     type CanvasHistoryItem,
@@ -50,7 +51,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.46";
+const RELEASE_VERSION = "0.1.47";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -198,6 +199,7 @@ export default function Home() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <DiagnosticExportButton className="h-10 w-10 rounded-xl border border-white/10 bg-white/[.07] text-slate-200 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-violet-300/30 hover:bg-white/[.12] hover:text-white" />
                         <UpdateButton className="h-10 w-10 rounded-xl border border-white/10 bg-white/[.07] text-slate-200 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-blue-300/30 hover:bg-white/[.12] hover:text-white" />
                         <button
                             type="button"
@@ -413,10 +415,10 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                参数选择更紧凑，大图预览更沉浸
+                                一键导出诊断包
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                常用生成参数不再挤占画布空间，生成图和上传图现在都能真正全屏查看。
+                                当其他电脑发生画布或生成异常时，可以直接导出完整诊断资料进行分析。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -424,29 +426,30 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                生成按钮始终触手可及
+                                首页直接导出
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                比例与分辨率改为紧凑排列，高级设置以浮层展开，
-                                无需再把节点向下拖动才能点击生成。
+                                首页右上角新增诊断包按钮。点击后选择保存位置，
+                                应用会自动生成一个可以直接发送的 ZIP 文件。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                图片真正全屏查看
+                                自动保护密钥与图片
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                生成图片和上传图片都可占满整个屏幕预览，支持滚轮缩放、
-                                拖动画面、下载原图，并可点击右上角关闭或按 Esc 退出。
+                                诊断包只收集运行日志、画布快照、任务数据库和版本信息，
+                                不包含 API
+                                Key、插件、虚拟环境、上传图片或生成原图。
                             </p>
                         </div>
                         {[
-                            "比例选项横向紧凑排列，分辨率选择合并为一行，减少面板高度。",
-                            "高级参数浮层不会再把底部生成按钮顶出可视区域。",
-                            "双击节点图片，或点击节点上的放大按钮，即可进入全屏预览。",
-                            "全屏预览支持滚轮缩放、拖拽移动、下载、Esc 和右上角关闭。",
-                            "继续包含画布保存防丢失、重复提交保护和网络异常防重复扣费修复。",
+                            "首页右上角新增“一键导出诊断包”按钮。",
+                            "自动收集主进程日志、画布主快照与备份快照。",
+                            "自动收集任务数据库及本地画布缓存，便于交叉定位数据丢失原因。",
+                            "诊断包内附应用版本、系统版本、文件清单和读取失败说明。",
+                            "API Key、设置文件、插件、原始图片和运行环境均不会被打包。",
                         ].map((item, index) => (
                             <div
                                 key={item}

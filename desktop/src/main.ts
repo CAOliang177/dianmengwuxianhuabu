@@ -1,7 +1,8 @@
 import { app, type BrowserWindow, dialog } from "electron";
+import { registerDiagnosticsIpc } from "./diagnostics";
+import { registerDownloadIpc } from "./downloads";
 import { findFreePort } from "./free-port";
 import { ensureUserDirs } from "./fs-setup";
-import { registerDownloadIpc } from "./downloads";
 import { initLogFile, logFilePath, logLine, recentLogs } from "./logging";
 import { ensurePythonEnv } from "./python-manager";
 import { startServer, stopServer } from "./server-manager";
@@ -57,6 +58,7 @@ async function boot(): Promise<void> {
             logLine(`[updater] initialization failed: ${message}`);
         });
         registerDownloadIpc(() => mainWindow);
+        registerDiagnosticsIpc(() => mainWindow);
 
         mainWindow = createMainWindow(`http://127.0.0.1:${port}`);
         mainWindow.on("closed", () => {

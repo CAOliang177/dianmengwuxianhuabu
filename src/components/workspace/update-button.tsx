@@ -53,6 +53,14 @@ interface TongflowDesktopBridge {
         url: string;
         suggestedName?: string;
     }) => Promise<{ saved: boolean; path: string | null }>;
+    exportDiagnostics: (request?: {
+        rendererCanvasStorage?: Record<string, string>;
+    }) => Promise<{
+        saved: boolean;
+        path: string | null;
+        included: number;
+        skipped: string[];
+    }>;
     onUpdateState: (
         callback: (state: DesktopUpdateState) => void,
     ) => () => void;
