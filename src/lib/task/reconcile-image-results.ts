@@ -56,6 +56,26 @@ function imageValues(task: ReconcileImageTask): string[] {
     return output?.values ?? [];
 }
 
+const VIDEO_FEATURES = new Set([
+    "text-gen-video",
+    "images-gen-video",
+    "image-gen-video",
+    "image-image-gen-video",
+]);
+
+function videoValues(task: ReconcileImageTask): string[] {
+    if (!task.feature || !VIDEO_FEATURES.has(task.feature)) return [];
+    const payload =
+        normalizeTaskPayloadData({ data: task.data, result: task.result }) ??
+        task.data;
+    const abiNode = getAbiNodeBySlot(task.feature);
+    const routes = abiNode ? resolveAbiOutputMappings(abiNode) : [];
+    const output = Object.values(computeOutputView(routes, payload)).find(
+        (channel) => channel.nodeType === "videoNode",
+    );
+    return output?.values ?? [];
+}
+
 /**
  * Reconciles durable completed image tasks into their original in-place image
  * generation nodes. This does not depend on the React node component being
@@ -67,38 +87,63 @@ export function reconcileCompletedImageTasks(
 ): { nodes: Node[]; changed: boolean } {
     const completedByNode = new Map<
         string,
-        Array<{ values: string[]; createdAt: number }>
+        Array<{
+            values: string[];
+            createdAt: number;
+            mediaType: "image" | "video";
+        }>
     >();
 
     for (const task of tasks) {
-        if (
-            task.status.toLowerCase() !== "completed" ||
-            !task.nodeId ||
-            (task.feature && task.feature !== "image-fusion")
-        ) {
+        if (task.status.toLowerCase() !== "completed" || !task.nodeId) {
             continue;
         }
-        const values = imageValues(task);
+        const mediaType = VIDEO_FEATURES.has(task.feature ?? "")
+            ? "video"
+            : "image";
+        if (
+            mediaType === "image" &&
+            task.feature &&
+            task.feature !== "image-fusion"
+        )
+            continue;
+        const values =
+            mediaType === "video" ? videoValues(task) : imageValues(task);
         if (values.length === 0) continue;
         const list = completedByNode.get(task.nodeId) ?? [];
-        list.push({ values, createdAt: taskCreatedAt(task) });
+        list.push({ values, createdAt: taskCreatedAt(task), mediaType });
         completedByNode.set(task.nodeId, list);
     }
 
     let changed = false;
     const nextNodes = nodes.map((node) => {
-        if (node.type !== "textGenImageNode") return node;
         const completed = completedByNode.get(node.id);
         if (!completed?.length) return node;
 
         completed.sort((a, b) => b.createdAt - a.createdAt);
+        const newestMediaType = completed[0]?.mediaType;
+        const compatible =
+            (newestMediaType === "image" && node.type === "textGenImageNode") ||
+            (newestMediaType === "video" &&
+                [
+                    "textGenVideoNode",
+                    "imagesGenVideoNode",
+                    "imageGenVideoNode",
+                    "imageImageGenVideoNode",
+                ].includes(node.type ?? ""));
+        if (!compatible) return node;
+
         const data = (node.data ?? {}) as Record<string, unknown>;
         const previous = readGenerationHistory(data);
         const generationHistory = readGenerationHistory({
             generationHistoryVersion: 2,
             generationHistoryRecords: [
-                ...completed.flatMap(({ values, createdAt }) =>
-                    values.map((fileKey) => ({ fileKey, createdAt })),
+                ...completed.flatMap(({ values, createdAt, mediaType }) =>
+                    values.map((fileKey) => ({
+                        fileKey,
+                        createdAt,
+                        mediaType,
+                    })),
                 ),
                 ...previous,
             ],

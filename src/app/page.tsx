@@ -54,7 +54,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.53";
+const RELEASE_VERSION = "0.1.54";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -496,6 +496,8 @@ export default function Home() {
                             "接入火山私域素材库，可浏览素材组、查看图片/视频预览、批量选择并确认引用。",
                             "输入 @ 可选择 @图片、@视频、@音频；点击缩略图也能快速插入精确引用。",
                             "参考缩略图悬停新增 ×：删除素材库引用，或直接断开画布节点连接，并自动修正后续引用编号。",
+                            "生成历史新增视频专区：近 7 天 Seedance 结果可悬停播放、全屏查看、下载、再次放回画布或批量删除。",
+                            "首帧与首尾帧模式全面接通火山素材库，选中素材后显示清晰缩略图，并按首帧/尾帧角色准确参与生成。",
                             "Seedance 专属提示词优化器上线，强化镜头、动作、节奏、声音和参考素材职责描述。",
                             "视频节点性能与交互全面升级，多节点画布加载更轻，编辑、预览和生成更顺滑。",
                         ].map((item, index) => (

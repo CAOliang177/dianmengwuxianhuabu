@@ -47,10 +47,17 @@ export function mergeDurableNodeHistory(
     );
     const merged = (incomingNodes as Node[]).map((incoming) => {
         const existing = existingById.get(incoming.id);
+        const durableGenerationTypes = new Set([
+            "textGenImageNode",
+            "textGenVideoNode",
+            "imagesGenVideoNode",
+            "imageGenVideoNode",
+            "imageImageGenVideoNode",
+        ]);
         if (
             !existing ||
-            incoming.type !== "textGenImageNode" ||
-            existing.type !== "textGenImageNode"
+            incoming.type !== existing.type ||
+            !durableGenerationTypes.has(incoming.type ?? "")
         ) {
             return incoming;
         }

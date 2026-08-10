@@ -37,6 +37,8 @@ export type VolcengineMaterial = {
     url?: string;
     groupId?: string;
     groupType?: string;
+    /** Optional Seedance request role, e.g. first_frame / last_frame. */
+    role?: string;
 };
 
 type MaterialPickerProps = {
@@ -45,6 +47,8 @@ type MaterialPickerProps = {
     occupied?: Partial<Record<MaterialKind, number>>;
     limits?: VolcengineMaterialLimits;
     compact?: boolean;
+    allowedTypes?: MaterialKind[];
+    maxSelected?: number;
 };
 
 export type VolcengineMaterialLimits = {
@@ -150,6 +154,7 @@ function normalizeMaterial(
             groupId ||
             readString(record, ["GroupId", "GroupID", "AssetGroupId"]),
         groupType: readString(record, ["GroupType", "groupType"]),
+        role: readString(record, ["Role", "role"]),
     };
 }
 
@@ -275,6 +280,8 @@ export function VolcengineMaterialPicker({
     occupied = {},
     limits = SEEDANCE_25_LIMITS,
     compact = false,
+    allowedTypes,
+    maxSelected,
 }: MaterialPickerProps) {
     const selected = useMemo(() => parseVolcengineMaterials(value), [value]);
     const selectedLabels = useMemo(
@@ -410,10 +417,12 @@ export function VolcengineMaterialPicker({
         if (open && groups.length === 0) void loadGroups();
     }, [open, groups.length]);
 
-    const filteredAssets = assets.filter((asset) =>
-        `${asset.name || ""} ${asset.id}`
-            .toLowerCase()
-            .includes(search.trim().toLowerCase()),
+    const filteredAssets = assets.filter(
+        (asset) =>
+            (!allowedTypes || allowedTypes.includes(asset.type)) &&
+            `${asset.name || ""} ${asset.id}`
+                .toLowerCase()
+                .includes(search.trim().toLowerCase()),
     );
     const filteredGroups = groups.filter((group) =>
         `${group.name || ""} ${group.id}`
@@ -422,7 +431,11 @@ export function VolcengineMaterialPicker({
     );
 
     const openPicker = () => {
-        setDraftSelected(selected);
+        setDraftSelected(
+            selected.filter(
+                (item) => !allowedTypes || allowedTypes.includes(item.type),
+            ),
+        );
         setError("");
         setOpen(true);
     };
@@ -437,6 +450,10 @@ export function VolcengineMaterialPicker({
             return;
         }
         const next = [...draftSelected, asset];
+        if (maxSelected !== undefined && next.length > maxSelected) {
+            setError(`当前模式最多选择 ${maxSelected} 个素材`);
+            return;
+        }
         const limitError = validateVolcengineMaterials(next, occupied, limits);
         if (limitError) {
             setError(limitError);
@@ -574,7 +591,13 @@ export function VolcengineMaterialPicker({
                 open={open}
                 onOpenChange={(nextOpen) => {
                     if (nextOpen) {
-                        setDraftSelected(selected);
+                        setDraftSelected(
+                            selected.filter(
+                                (item) =>
+                                    !allowedTypes ||
+                                    allowedTypes.includes(item.type),
+                            ),
+                        );
                         setError("");
                     }
                     setOpen(nextOpen);

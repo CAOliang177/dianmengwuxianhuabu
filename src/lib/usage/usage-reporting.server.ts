@@ -29,7 +29,7 @@ export interface UsageEventInput {
     occurredAt: number;
 }
 
-const APP_VERSION = "0.1.53";
+const APP_VERSION = "0.1.54";
 const DEFAULT_ENDPOINT =
     "https://dianmeng-d4g0o715e8e8e422a.service.tcloudbase.com";
 const LEGACY_ENDPOINTS = new Set([

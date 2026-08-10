@@ -9,7 +9,7 @@ class ImageGenVideoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     duration: float
-    image: Asset
+    image: Asset | None = None
     text: str
     asset_ids: str | None = None
     enhance_prompt: bool | None = None

@@ -269,11 +269,20 @@ export async function executeTask(taskId: string): Promise<void> {
                     result: JSON.stringify(result),
                 })
                 .where(eq(tasks.id, taskId));
-            if (taskData.nodeSlot === "image-fusion") {
+            if (
+                [
+                    "image-fusion",
+                    "text-gen-video",
+                    "images-gen-video",
+                    "image-gen-video",
+                    "image-image-gen-video",
+                ].includes(taskData.nodeSlot)
+            ) {
                 await recordCompletedImageTask(
                     taskData.nodeId,
                     taskId,
                     result,
+                    taskData.nodeSlot,
                 );
             }
             notifyTask(

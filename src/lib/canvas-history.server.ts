@@ -100,7 +100,7 @@ export function updateCanvasHistoryStore(
 }
 
 /**
- * Attach a completed image task to the saved canvas before notifying the
+ * Attach a completed image or video task to the saved canvas before notifying the
  * renderer. The task result therefore survives even if the app closes before
  * React can repaint or finish its normal debounced save.
  */
@@ -108,6 +108,7 @@ export function recordCompletedImageTask(
     nodeId: string,
     taskId: string,
     result: unknown,
+    feature = "image-fusion",
 ) {
     return updateCanvasHistoryStore((current) => {
         const changedCanvasIds = new Set<string>();
@@ -121,7 +122,7 @@ export function recordCompletedImageTask(
                     {
                         id: taskId,
                         nodeId,
-                        feature: "image-fusion",
+                        feature,
                         status: "completed",
                         result,
                         createdAt: Date.now(),

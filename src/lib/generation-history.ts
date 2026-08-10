@@ -4,6 +4,8 @@ export const GENERATION_HISTORY_VERSION = 2;
 export interface GenerationHistoryRecord {
     fileKey: string;
     createdAt: number;
+    /** Legacy records are images; new video generators set this explicitly. */
+    mediaType?: "image" | "video";
 }
 
 export function normalizeGenerationTimestamp(value: number): number {
@@ -59,7 +61,11 @@ export function readGenerationHistory(
         ) {
             const createdAt = normalizeGenerationTimestamp(item.createdAt);
             if (createdAt >= cutoff) {
-                records.push({ fileKey: item.fileKey, createdAt });
+                records.push({
+                    fileKey: item.fileKey,
+                    createdAt,
+                    mediaType: item.mediaType === "video" ? "video" : "image",
+                });
             }
         }
     }
@@ -72,7 +78,11 @@ export function readGenerationHistory(
             : [];
         for (const value of legacy) {
             if (typeof value === "string" && value.length > 0) {
-                records.push({ fileKey: value, createdAt: now });
+                records.push({
+                    fileKey: value,
+                    createdAt: now,
+                    mediaType: "image",
+                });
             }
         }
     }

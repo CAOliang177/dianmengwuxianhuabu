@@ -1375,7 +1375,7 @@ export type TextGenSpeechPresetOutput = FromSchema<
 
 const _slot_image_gen_video_inputs = {
     type: "object",
-    required: ["text", "image", "duration"],
+    required: ["text", "duration"],
     properties: {
         duration: {
             type: "number",
@@ -2263,10 +2263,15 @@ export type VideoImageGenVideoMoveOutput = FromSchema<
 
 const _slot_image_image_gen_video_inputs = {
     type: "object",
-    required: ["text", "image", "end_image"],
+    required: ["text"],
     properties: {
         text: {
             type: "string",
+        },
+        asset_ids: {
+            type: "string",
+            description:
+                "Optional Volcano Engine Ark first/last-frame material-library Asset IDs",
         },
         resolution: {
             type: "string",
@@ -4493,7 +4498,7 @@ export const ABI_NODES = {
     "image-gen-video": {
         inputs: {
             type: "object",
-            required: ["text", "image", "duration"],
+            required: ["text", "duration"],
             properties: {
                 duration: {
                     type: "number",
@@ -4993,10 +4998,15 @@ export const ABI_NODES = {
     "image-image-gen-video": {
         inputs: {
             type: "object",
-            required: ["text", "image", "end_image"],
+            required: ["text"],
             properties: {
                 text: {
                     type: "string",
+                },
+                asset_ids: {
+                    type: "string",
+                    description:
+                        "Optional Volcano Engine Ark first/last-frame material-library Asset IDs",
                 },
                 resolution: {
                     type: "string",

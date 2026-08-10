@@ -38,6 +38,20 @@ describe("mergeDurableNodeHistory", () => {
         ]);
     });
 
+    it("prevents a stale renderer snapshot from erasing completed video history", () => {
+        const now = Date.now();
+        const completed = imageNode("video-node", [
+            { fileKey: "tasks/new/output.mp4", createdAt: now },
+        ]);
+        const stale = imageNode("video-node", []);
+        completed.type = "imagesGenVideoNode";
+        stale.type = "imagesGenVideoNode";
+
+        const result = mergeDurableNodeHistory([completed], [stale]) as Node[];
+
+        expect(result[0].data.fileKeys).toEqual(["tasks/new/output.mp4"]);
+    });
+
     it("preserves a node omitted by a stale renderer snapshot", () => {
         const existing = imageNode("newer-node", []);
         expect(mergeDurableNodeHistory([existing], [])).toEqual([existing]);

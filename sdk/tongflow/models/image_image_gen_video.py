@@ -8,9 +8,10 @@ from .asset import Asset, AudioRef, FileRef, ImageRef, ModelRef, VideoRef
 class ImageImageGenVideoInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    end_image: Asset
-    image: Asset
+    end_image: Asset | None = None
+    image: Asset | None = None
     text: str
+    asset_ids: str | None = None
     resolution: str | None = None
     duration: float | None = None
     enhance_prompt: bool | None = None

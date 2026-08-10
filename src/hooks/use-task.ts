@@ -385,11 +385,25 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             });
             if (handlers.length === 0 && task.status === "COMPLETED") {
                 const flow = useFlow.getState();
+                const owner = flow.nodes.find((node) => node.id === nodeId);
+                const storedFeature = (owner?.data as Record<string, unknown>)
+                    ?.feature;
+                const fallbackFeatureByType: Record<string, string> = {
+                    textGenImageNode: "image-fusion",
+                    textGenVideoNode: "text-gen-video",
+                    imagesGenVideoNode: "images-gen-video",
+                    imageGenVideoNode: "image-gen-video",
+                    imageImageGenVideoNode: "image-image-gen-video",
+                };
+                const feature =
+                    (typeof storedFeature === "string" && storedFeature) ||
+                    fallbackFeatureByType[owner?.type ?? ""] ||
+                    "image-fusion";
                 const reconciled = reconcileCompletedImageTasks(flow.nodes, [
                     {
                         id: task.id,
                         nodeId,
-                        feature: "image-fusion",
+                        feature,
                         status: task.status,
                         data: task.data,
                         result: task.result,

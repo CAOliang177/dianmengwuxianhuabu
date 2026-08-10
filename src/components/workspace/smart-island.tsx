@@ -197,6 +197,110 @@ function HistoryImageCard({
     );
 }
 
+function HistoryVideoCard({
+    fileKey,
+    label,
+    checked,
+    selectionMode,
+    onToggle,
+    onView,
+    onUse,
+}: {
+    fileKey: string;
+    label: string;
+    checked: boolean;
+    selectionMode: boolean;
+    onToggle: () => void;
+    onView: (url: string) => void;
+    onUse: () => void;
+}) {
+    const { url, isLoading } = useFileAsyncLoader(fileKey, {
+        priority: "high",
+    });
+
+    const download = useCallback(() => {
+        if (!url) return;
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `dianmeng-video-${new Date().toISOString().replace(/[:.]/g, "-")}.mp4`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    }, [url]);
+
+    return (
+        <div
+            className={cn(
+                "group relative min-h-[220px] overflow-hidden rounded-2xl border bg-black",
+                "transition duration-200 hover:-translate-y-0.5 hover:border-zinc-500 hover:shadow-xl",
+                checked && "border-blue-500 ring-2 ring-blue-500/40",
+            )}
+        >
+            {url ? (
+                <video
+                    src={url}
+                    className="h-full w-full object-contain"
+                    preload="metadata"
+                    muted
+                    playsInline
+                    onMouseEnter={(event) => void event.currentTarget.play()}
+                    onMouseLeave={(event) => {
+                        event.currentTarget.pause();
+                        event.currentTarget.currentTime = 0;
+                    }}
+                />
+            ) : (
+                <div className="flex h-full items-center justify-center text-xs text-zinc-500">
+                    {isLoading ? "正在加载…" : "视频暂不可用"}
+                </div>
+            )}
+            {selectionMode ? (
+                <label className="absolute right-3 top-3 z-20 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-black/70 backdrop-blur">
+                    <input
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer accent-blue-500"
+                        checked={checked}
+                        aria-label={`选择${label}`}
+                        onChange={onToggle}
+                    />
+                </label>
+            ) : null}
+            <div className="absolute inset-0 flex items-center justify-center gap-2.5 bg-black/0 px-4 opacity-0 transition duration-200 group-hover:bg-black/60 group-hover:opacity-100">
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={!url}
+                    className="h-9 min-w-16 rounded-full px-4 text-xs"
+                    onClick={() => url && onView(url)}
+                >
+                    <Eye className="mr-1 h-3.5 w-3.5" />
+                    查看
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    className="h-9 min-w-16 rounded-full bg-white px-4 text-xs text-black hover:bg-zinc-200"
+                    onClick={onUse}
+                >
+                    使用
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={!url}
+                    className="h-9 min-w-16 rounded-full px-4 text-xs"
+                    onClick={download}
+                >
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    下载
+                </Button>
+            </div>
+        </div>
+    );
+}
+
 const selector = (state: FlowState) => ({
     nodes: state.nodes,
     edges: state.edges,
@@ -245,7 +349,11 @@ export default function SmartIsland({
     const [historyOpen, setHistoryOpen] = useState(false);
     const [skillLibraryOpen, setSkillLibraryOpen] = useState(false);
     const [historySelectionMode, setHistorySelectionMode] = useState(false);
+    const [historyTab, setHistoryTab] = useState<"image" | "video">("image");
     const [historyPreview, setHistoryPreview] = useState<string | null>(null);
+    const [historyVideoPreview, setHistoryVideoPreview] = useState<
+        string | null
+    >(null);
     const [historyTaskTimes, setHistoryTaskTimes] = useState<
         Map<string, number>
     >(() => new Map());
@@ -310,17 +418,19 @@ export default function SmartIsland({
             nodeId: string;
             fileKey: string;
             createdAt: number;
+            mediaType: "image" | "video";
         }> = [];
         const now = Date.now();
         for (const node of nodes) {
             const data = node.data as Record<string, unknown>;
             const records = readGenerationHistory(data, now);
-            for (const { fileKey, createdAt } of records) {
+            for (const { fileKey, createdAt, mediaType } of records) {
                 if (!fileKey) continue;
                 const taskId = generationTaskId(fileKey);
                 items.push({
                     nodeId: node.id,
                     fileKey,
+                    mediaType: mediaType === "video" ? "video" : "image",
                     createdAt:
                         (taskId ? historyTaskTimes.get(taskId) : undefined) ??
                         createdAt,
@@ -329,6 +439,11 @@ export default function SmartIsland({
         }
         return sortGenerationHistoryRecords(items);
     }, [nodes, historyTaskTimes]);
+
+    const visibleGenerationHistory = useMemo(
+        () => generationHistory.filter((item) => item.mediaType === historyTab),
+        [generationHistory, historyTab],
+    );
 
     useEffect(() => {
         const available = new Set(
@@ -357,12 +472,12 @@ export default function SmartIsland({
     const selectAllHistory = useCallback(() => {
         setSelectedHistory(
             new Set(
-                generationHistory.map(
+                visibleGenerationHistory.map(
                     (item) => `${item.nodeId}:${item.fileKey}`,
                 ),
             ),
         );
-    }, [generationHistory]);
+    }, [visibleGenerationHistory]);
 
     const deleteSelectedHistory = useCallback(() => {
         if (selectedHistory.size === 0) return;
@@ -423,6 +538,17 @@ export default function SmartIsland({
         (fileKey: string) => {
             addNodeAtViewportCenter({
                 type: "imageNode",
+                data: { fileKeys: [fileKey] },
+            });
+            setHistoryOpen(false);
+        },
+        [addNodeAtViewportCenter],
+    );
+
+    const addHistoryVideoToCanvas = useCallback(
+        (fileKey: string) => {
+            addNodeAtViewportCenter({
+                type: "videoNode",
                 data: { fileKeys: [fileKey] },
             });
             setHistoryOpen(false);
@@ -511,18 +637,54 @@ export default function SmartIsland({
                     className="flex h-[88vh] w-[94vw] max-w-[94vw] flex-col gap-0 overflow-hidden border-zinc-700 bg-zinc-950 p-0 text-zinc-100 sm:!max-w-[1280px]"
                 >
                     <DialogHeader className="sr-only">
-                        <DialogTitle>图片历史</DialogTitle>
+                        <DialogTitle>生成历史</DialogTitle>
                         <DialogDescription>
-                            查看、使用、下载或批量管理近 7 天生成的图片。
+                            查看、使用、下载或批量管理近 7 天生成的图片和视频。
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
                         <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-zinc-900 p-1">
                             <button
                                 type="button"
-                                className="rounded-md bg-zinc-700 px-3 py-1.5 text-sm font-medium"
+                                className={cn(
+                                    "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                                    historyTab === "image"
+                                        ? "bg-zinc-700 text-white"
+                                        : "text-zinc-400 hover:text-white",
+                                )}
+                                onClick={() => {
+                                    setHistoryTab("image");
+                                    setSelectedHistory(new Set());
+                                }}
                             >
-                                图片历史
+                                图片历史（
+                                {
+                                    generationHistory.filter(
+                                        (item) => item.mediaType === "image",
+                                    ).length
+                                }
+                                ）
+                            </button>
+                            <button
+                                type="button"
+                                className={cn(
+                                    "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                                    historyTab === "video"
+                                        ? "bg-zinc-700 text-white"
+                                        : "text-zinc-400 hover:text-white",
+                                )}
+                                onClick={() => {
+                                    setHistoryTab("video");
+                                    setSelectedHistory(new Set());
+                                }}
+                            >
+                                视频历史（
+                                {
+                                    generationHistory.filter(
+                                        (item) => item.mediaType === "video",
+                                    ).length
+                                }
+                                ）
                             </button>
                             <span className="px-3 py-1.5 text-sm text-zinc-500">
                                 近 7 天
@@ -553,11 +715,12 @@ export default function SmartIsland({
                         </div>
                     </div>
 
-                    {historySelectionMode && generationHistory.length > 0 ? (
+                    {historySelectionMode &&
+                    visibleGenerationHistory.length > 0 ? (
                         <div className="flex items-center justify-between border-b border-white/10 bg-zinc-900/60 px-5 py-3">
                             <span className="text-sm text-zinc-400">
-                                共 {generationHistory.length} 张，已选择{" "}
-                                {selectedHistory.size} 张
+                                共 {visibleGenerationHistory.length} 条，已选择{" "}
+                                {selectedHistory.size} 条
                             </span>
                             <div className="flex items-center gap-2">
                                 <Button
@@ -584,9 +747,11 @@ export default function SmartIsland({
                     ) : null}
 
                     <div className="min-h-0 flex-1 overflow-y-auto p-6">
-                        {generationHistory.length === 0 ? (
+                        {visibleGenerationHistory.length === 0 ? (
                             <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-zinc-700 text-sm text-zinc-500">
-                                当前画布还没有生成记录
+                                当前画布还没有
+                                {historyTab === "video" ? "视频" : "图片"}
+                                生成记录
                             </div>
                         ) : (
                             <>
@@ -594,37 +759,89 @@ export default function SmartIsland({
                                     最近生成
                                 </div>
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                                    {generationHistory.map((item, index) => {
-                                        const selectionKey = `${item.nodeId}:${item.fileKey}`;
-                                        return (
-                                            <HistoryImageCard
-                                                key={selectionKey}
-                                                fileKey={item.fileKey}
-                                                label={`历史图片 ${index + 1}`}
-                                                checked={selectedHistory.has(
-                                                    selectionKey,
-                                                )}
-                                                selectionMode={
-                                                    historySelectionMode
-                                                }
-                                                onToggle={() =>
-                                                    toggleHistorySelection(
+                                    {visibleGenerationHistory.map(
+                                        (item, index) => {
+                                            const selectionKey = `${item.nodeId}:${item.fileKey}`;
+                                            return item.mediaType ===
+                                                "video" ? (
+                                                <HistoryVideoCard
+                                                    key={selectionKey}
+                                                    fileKey={item.fileKey}
+                                                    label={`历史视频 ${index + 1}`}
+                                                    checked={selectedHistory.has(
                                                         selectionKey,
-                                                    )
-                                                }
-                                                onView={setHistoryPreview}
-                                                onUse={() =>
-                                                    addHistoryImageToCanvas(
-                                                        item.fileKey,
-                                                    )
-                                                }
-                                            />
-                                        );
-                                    })}
+                                                    )}
+                                                    selectionMode={
+                                                        historySelectionMode
+                                                    }
+                                                    onToggle={() =>
+                                                        toggleHistorySelection(
+                                                            selectionKey,
+                                                        )
+                                                    }
+                                                    onView={
+                                                        setHistoryVideoPreview
+                                                    }
+                                                    onUse={() =>
+                                                        addHistoryVideoToCanvas(
+                                                            item.fileKey,
+                                                        )
+                                                    }
+                                                />
+                                            ) : (
+                                                <HistoryImageCard
+                                                    key={selectionKey}
+                                                    fileKey={item.fileKey}
+                                                    label={`历史图片 ${index + 1}`}
+                                                    checked={selectedHistory.has(
+                                                        selectionKey,
+                                                    )}
+                                                    selectionMode={
+                                                        historySelectionMode
+                                                    }
+                                                    onToggle={() =>
+                                                        toggleHistorySelection(
+                                                            selectionKey,
+                                                        )
+                                                    }
+                                                    onView={setHistoryPreview}
+                                                    onUse={() =>
+                                                        addHistoryImageToCanvas(
+                                                            item.fileKey,
+                                                        )
+                                                    }
+                                                />
+                                            );
+                                        },
+                                    )}
                                 </div>
                             </>
                         )}
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={Boolean(historyVideoPreview)}
+                onOpenChange={(open) => {
+                    if (!open) setHistoryVideoPreview(null);
+                }}
+            >
+                <DialogContent className="flex h-[90vh] max-w-[94vw] items-center justify-center overflow-hidden border-zinc-700 bg-black p-3 text-white">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>查看历史视频</DialogTitle>
+                        <DialogDescription>
+                            全屏播放近 7 天生成的视频。
+                        </DialogDescription>
+                    </DialogHeader>
+                    {historyVideoPreview ? (
+                        <video
+                            src={historyVideoPreview}
+                            controls
+                            autoPlay
+                            className="max-h-full max-w-full object-contain"
+                        />
+                    ) : null}
                 </DialogContent>
             </Dialog>
 

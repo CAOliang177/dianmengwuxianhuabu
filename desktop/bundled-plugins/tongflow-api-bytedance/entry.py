@@ -223,7 +223,9 @@ def _split_asset_ids(value: object) -> list[dict[str, str]]:
                 kind = "video"
             elif "audio" in candidate_kind:
                 kind = "audio"
+            role = str(item.get("role") or item.get("Role") or "").strip()
         else:
+            role = ""
             token = str(item).strip()
             match = re.match(r"^(image|video|audio):(.+)$", token, flags=re.IGNORECASE)
             if match:
@@ -249,7 +251,10 @@ def _split_asset_ids(value: object) -> list[dict[str, str]]:
         key = f"{kind}:{token}"
         if key not in seen:
             seen.add(key)
-            result.append({"id": token, "type": kind})
+            material = {"id": token, "type": kind}
+            if role:
+                material["role"] = role
+            result.append(material)
     return result
 
 
@@ -292,7 +297,7 @@ def _asset_item(material: dict[str, str]) -> dict[str, Any]:
     return {
         "type": field,
         field: {"url": raw},
-        "role": f"reference_{kind}",
+        "role": material.get("role") or f"reference_{kind}",
     }
 
 
@@ -579,13 +584,18 @@ def text_gen_video(input: TextGenVideoInput) -> TextGenVideoOutput:
 
 @node_slot(NodeSlots.IMAGE_GEN_VIDEO)
 def image_gen_video(input: ImageGenVideoInput) -> ImageGenVideoOutput:
+    materials = _split_asset_ids(input.asset_ids)
+    if input.image is None and not any(
+        item["type"] == "image" for item in materials
+    ):
+        raise RuntimeError("首帧模式需要连接图片或从素材库选择一张图片")
     video = _create_task(
         input.text,
         width=input.width,
         height=input.height,
         duration=input.duration,
         resolution=input.resolution,
-        images=[input.image],
+        images=[input.image] if input.image is not None else [],
         asset_ids=input.asset_ids,
         image_role="first_frame",
     )
@@ -612,14 +622,28 @@ def images_gen_video(input: ImagesGenVideoInput) -> ImagesGenVideoOutput:
 def image_image_gen_video(
     input: ImageImageGenVideoInput,
 ) -> ImageImageGenVideoOutput:
+    materials = _split_asset_ids(input.asset_ids)
+    frame_count = int(input.image is not None) + int(input.end_image is not None)
+    frame_count += sum(1 for item in materials if item["type"] == "image")
+    if frame_count < 2:
+        raise RuntimeError("首尾帧模式需要两张图片，可连接图片或从素材库选择")
     video = _create_task(
         input.text,
         width=input.width,
         height=input.height,
         duration=input.duration,
         resolution=input.resolution,
-        images=[input.image, input.end_image],
-        image_roles=["first_frame", "last_frame"],
+        images=[
+            image
+            for image in (input.image, input.end_image)
+            if image is not None
+        ],
+        image_roles=(
+            ["first_frame", "last_frame"]
+            if input.image is not None and input.end_image is not None
+            else ["first_frame"]
+        ),
+        asset_ids=input.asset_ids,
     )
     return ImageImageGenVideoOutput(success=True, video=video)
 

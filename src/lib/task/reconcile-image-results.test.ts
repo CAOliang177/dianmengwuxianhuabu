@@ -74,6 +74,43 @@ describe("reconcileCompletedImageTasks", () => {
         expect(result.changed).toBe(false);
         expect(result.nodes).toEqual([node]);
     });
+
+    it("persists completed Seedance video output and marks it as video history", () => {
+        const videoNode = {
+            id: "video-node-1",
+            type: "imagesGenVideoNode",
+            position: { x: 0, y: 0 },
+            data: {},
+        } satisfies Node;
+        const result = reconcileCompletedImageTasks(
+            [videoNode],
+            [
+                {
+                    id: "video-task-1",
+                    nodeId: "video-node-1",
+                    feature: "images-gen-video",
+                    status: "completed",
+                    createdAt: now,
+                    result: {
+                        success: true,
+                        video: { file_key: "tasks/video-task-1/output.mp4" },
+                    },
+                },
+            ],
+        );
+
+        expect(result.changed).toBe(true);
+        expect(result.nodes[0].data.fileKeys).toEqual([
+            "tasks/video-task-1/output.mp4",
+        ]);
+        expect(result.nodes[0].data.generationHistoryRecords).toEqual([
+            {
+                fileKey: "tasks/video-task-1/output.mp4",
+                createdAt: now,
+                mediaType: "video",
+            },
+        ]);
+    });
 });
 
 describe("buildRecoveredImageNodes", () => {

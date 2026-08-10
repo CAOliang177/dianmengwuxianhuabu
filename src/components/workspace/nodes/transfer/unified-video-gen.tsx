@@ -44,6 +44,10 @@ import type { SourceSpec } from "@/lib/abi/sources";
 import { collectAll, configField, handle } from "@/lib/abi/sources";
 import { logger } from "@/lib/logger";
 import {
+    readGenerationHistory,
+    withGenerationHistory,
+} from "@/lib/generation-history";
+import {
     type ReferenceTokenKind,
     removeAndRenumberReferenceTokens,
 } from "@/lib/reference-tokens";
@@ -369,6 +373,9 @@ function VideoModeEditor<F extends VideoFeature>({
     const materialValue =
         typeof state.asset_ids === "string" ? state.asset_ids : "";
     const materials = parseVolcengineMaterials(materialValue);
+    const frameMaterials = materials.filter(
+        (material) => material.type === "image",
+    );
     const materialLabels = materialReferenceLabels(materials, {
         image: referenceGroups.images.length,
         video: referenceGroups.videos.length,
@@ -478,12 +485,32 @@ function VideoModeEditor<F extends VideoFeature>({
             const current = useFlow
                 .getState()
                 .nodes.find((node) => node.id === nodeId);
+            const currentData = (current?.data ?? {}) as Record<
+                string,
+                unknown
+            >;
+            const now = Date.now();
+            const previousHistory = readGenerationHistory(currentData, now);
+            const generationHistory = readGenerationHistory(
+                {
+                    generationHistoryVersion: 2,
+                    generationHistoryRecords: [
+                        ...output.values.map((fileKey) => ({
+                            fileKey,
+                            createdAt: now,
+                            mediaType: "video" as const,
+                        })),
+                        ...previousHistory,
+                    ],
+                },
+                now,
+            );
             useFlow.getState().updates(
                 nodeId,
                 {
-                    ...((current?.data ?? {}) as Record<string, unknown>),
+                    ...withGenerationHistory(currentData, generationHistory),
                     fileKeys: output.values,
-                    generatedAt: Date.now(),
+                    generatedAt: now,
                 },
                 { immediate: true },
             );
@@ -535,8 +562,10 @@ function VideoModeEditor<F extends VideoFeature>({
             (mode === "reference" &&
                 (allReferences.length > 0 || materials.length > 0) &&
                 referenceCombinationValid) ||
-            (mode === "first" && references.length >= 1) ||
-            (mode === "first-last" && references.length >= 2));
+            (mode === "first" &&
+                references.length + frameMaterials.length >= 1) ||
+            (mode === "first-last" &&
+                references.length + frameMaterials.length >= 2));
 
     const insertReference = useCallback(
         (token: string) => {
@@ -565,6 +594,33 @@ function VideoModeEditor<F extends VideoFeature>({
                           : `图片${index + 1}`,
                   token: `@图片${index + 1}`,
               }));
+    const visibleMaterials = mode === "reference" ? materials : frameMaterials;
+
+    const updateMaterials = useCallback(
+        (value: string) => {
+            if (mode === "reference") {
+                patch({ asset_ids: value });
+                return;
+            }
+            const available = mode === "first-last" ? 2 : 1;
+            const selectedImages = parseVolcengineMaterials(value)
+                .filter((material) => material.type === "image")
+                .slice(0, Math.max(0, available - references.length))
+                .map((material, index) => ({
+                    ...material,
+                    role:
+                        mode === "first-last" && references.length + index > 0
+                            ? "last_frame"
+                            : "first_frame",
+                }));
+            patch({
+                asset_ids: selectedImages.length
+                    ? JSON.stringify(selectedImages)
+                    : "",
+            });
+        },
+        [mode, patch, references.length],
+    );
 
     return (
         <AbiNodeShell
@@ -719,8 +775,7 @@ function VideoModeEditor<F extends VideoFeature>({
                             {mode !== "text" && (
                                 <div className="mb-2 flex min-h-16 flex-wrap items-start gap-2">
                                     {visibleReferences.length > 0 ||
-                                    (mode === "reference" &&
-                                        materials.length > 0) ? (
+                                    visibleMaterials.length > 0 ? (
                                         <>
                                             {visibleReferences.map(
                                                 (reference, index) => (
@@ -789,112 +844,107 @@ function VideoModeEditor<F extends VideoFeature>({
                                                     </button>
                                                 ),
                                             )}
-                                            {mode === "reference" &&
-                                                materials.map(
-                                                    (material, index) => {
-                                                        const token =
-                                                            materialLabels[
-                                                                index
-                                                            ];
-                                                        const label =
-                                                            token?.replace(
-                                                                "@",
-                                                                "",
-                                                            ) ||
-                                                            material.name ||
-                                                            material.id;
-                                                        const MaterialIcon =
-                                                            material.type ===
-                                                            "video"
-                                                                ? Film
-                                                                : material.type ===
-                                                                    "audio"
-                                                                  ? GalleryHorizontalEnd
-                                                                  : ImagePlus;
-                                                        return (
-                                                            <button
-                                                                key={`material:${material.type}:${material.id}:${index}`}
-                                                                type="button"
-                                                                className="group relative rounded-xl border border-cyan-400/70 bg-cyan-500/10 p-0.5 transition hover:-translate-y-0.5 hover:ring-2"
-                                                                title={
-                                                                    material.name ||
-                                                                    material.id
-                                                                }
-                                                                onClick={() =>
-                                                                    insertReference(
-                                                                        token,
-                                                                    )
-                                                                }
-                                                            >
-                                                                {material.url ? (
-                                                                    <MediaThumbnail
-                                                                        fileKey={
-                                                                            material.url
-                                                                        }
-                                                                        label={
-                                                                            label
-                                                                        }
-                                                                        type={
-                                                                            material.type
-                                                                        }
-                                                                    />
-                                                                ) : (
-                                                                    <div className="flex flex-col items-center gap-1.5">
-                                                                        <div className="flex h-16 w-16 items-center justify-center rounded-md border-2 border-cyan-300 bg-cyan-50 text-cyan-700">
-                                                                            <MaterialIcon className="h-6 w-6" />
-                                                                        </div>
-                                                                        <div className="max-w-20 truncate rounded bg-cyan-100 px-1.5 py-0.5 text-xs font-medium text-cyan-700">
-                                                                            {
-                                                                                label
-                                                                            }
-                                                                        </div>
+                                            {visibleMaterials.map(
+                                                (material, index) => {
+                                                    const token =
+                                                        materialLabels[index];
+                                                    const label =
+                                                        token?.replace(
+                                                            "@",
+                                                            "",
+                                                        ) ||
+                                                        material.name ||
+                                                        material.id;
+                                                    const MaterialIcon =
+                                                        material.type ===
+                                                        "video"
+                                                            ? Film
+                                                            : material.type ===
+                                                                "audio"
+                                                              ? GalleryHorizontalEnd
+                                                              : ImagePlus;
+                                                    return (
+                                                        <button
+                                                            key={`material:${material.type}:${material.id}:${index}`}
+                                                            type="button"
+                                                            className="group relative rounded-xl border border-cyan-400/70 bg-cyan-500/10 p-0.5 transition hover:-translate-y-0.5 hover:ring-2"
+                                                            title={
+                                                                material.name ||
+                                                                material.id
+                                                            }
+                                                            onClick={() =>
+                                                                insertReference(
+                                                                    token,
+                                                                )
+                                                            }
+                                                        >
+                                                            {material.url ? (
+                                                                <MediaThumbnail
+                                                                    fileKey={
+                                                                        material.url
+                                                                    }
+                                                                    label={
+                                                                        label
+                                                                    }
+                                                                    type={
+                                                                        material.type
+                                                                    }
+                                                                />
+                                                            ) : (
+                                                                <div className="flex flex-col items-center gap-1.5">
+                                                                    <div className="flex h-16 w-16 items-center justify-center rounded-md border-2 border-cyan-300 bg-cyan-50 text-cyan-700">
+                                                                        <MaterialIcon className="h-6 w-6" />
                                                                     </div>
-                                                                )}
-                                                                {/* biome-ignore lint/a11y/useSemanticElements: a nested button would be invalid inside the clickable reference card */}
-                                                                <span
-                                                                    role="button"
-                                                                    tabIndex={0}
-                                                                    aria-label={`移除${label}`}
-                                                                    title="移除素材库参考"
-                                                                    className="nodrag nopan absolute right-1 top-1 z-20 hidden h-5 w-5 items-center justify-center rounded-full bg-black/80 text-white shadow-md transition hover:bg-red-500 group-hover:flex"
-                                                                    onPointerDown={(
-                                                                        event,
-                                                                    ) => {
-                                                                        event.preventDefault();
-                                                                        event.stopPropagation();
-                                                                    }}
-                                                                    onClick={(
-                                                                        event,
-                                                                    ) => {
+                                                                    <div className="max-w-20 truncate rounded bg-cyan-100 px-1.5 py-0.5 text-xs font-medium text-cyan-700">
+                                                                        {label}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {/* biome-ignore lint/a11y/useSemanticElements: a nested button would be invalid inside the clickable reference card */}
+                                                            <span
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                aria-label={`移除${label}`}
+                                                                title="移除素材库参考"
+                                                                className="nodrag nopan absolute right-1 top-1 z-20 hidden h-5 w-5 items-center justify-center rounded-full bg-black/80 text-white shadow-md transition hover:bg-red-500 group-hover:flex"
+                                                                onPointerDown={(
+                                                                    event,
+                                                                ) => {
+                                                                    event.preventDefault();
+                                                                    event.stopPropagation();
+                                                                }}
+                                                                onClick={(
+                                                                    event,
+                                                                ) => {
+                                                                    event.preventDefault();
+                                                                    event.stopPropagation();
+                                                                    removeMaterialReference(
+                                                                        index,
+                                                                    );
+                                                                }}
+                                                                onKeyDown={(
+                                                                    event,
+                                                                ) => {
+                                                                    if (
+                                                                        event.key ===
+                                                                            "Enter" ||
+                                                                        event.key ===
+                                                                            " "
+                                                                    ) {
                                                                         event.preventDefault();
                                                                         event.stopPropagation();
                                                                         removeMaterialReference(
                                                                             index,
                                                                         );
-                                                                    }}
-                                                                    onKeyDown={(
-                                                                        event,
-                                                                    ) => {
-                                                                        if (
-                                                                            event.key ===
-                                                                                "Enter" ||
-                                                                            event.key ===
-                                                                                " "
-                                                                        ) {
-                                                                            event.preventDefault();
-                                                                            event.stopPropagation();
-                                                                            removeMaterialReference(
-                                                                                index,
-                                                                            );
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    <X className="h-3 w-3" />
-                                                                </span>
-                                                            </button>
-                                                        );
-                                                    },
-                                                )}
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <X className="h-3 w-3" />
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                },
+                                            )}
                                         </>
                                     ) : (
                                         <div className="flex h-16 items-center gap-2 rounded-xl border border-dashed px-4 text-xs text-muted-foreground">
@@ -1031,12 +1081,28 @@ function VideoModeEditor<F extends VideoFeature>({
                                     />
                                 </button>
                                 <div className="flex-1" />
-                                {isVolcengine && mode !== "first-last" && (
+                                {isVolcengine && mode !== "text" && (
                                     <VolcengineMaterialPicker
                                         compact
                                         value={materialValue}
-                                        onChange={(value) =>
-                                            patch({ asset_ids: value })
+                                        onChange={updateMaterials}
+                                        allowedTypes={
+                                            mode === "reference"
+                                                ? undefined
+                                                : ["image"]
+                                        }
+                                        maxSelected={
+                                            mode === "first-last"
+                                                ? Math.max(
+                                                      0,
+                                                      2 - references.length,
+                                                  )
+                                                : mode === "first"
+                                                  ? Math.max(
+                                                        0,
+                                                        1 - references.length,
+                                                    )
+                                                  : undefined
                                         }
                                         occupied={{
                                             image: referenceGroups.images
