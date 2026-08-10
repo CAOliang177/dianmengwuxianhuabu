@@ -54,7 +54,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.54";
+const RELEASE_VERSION = "0.1.55";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -457,12 +457,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                Seedance 全模态视频创作正式登场
+                                视频素材工作流，终于完整了
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                从灵感、参考素材到原生音画视频，dianmeng
-                                无限画布现已接入火山方舟 Seedance 2.0 与
-                                Seedance 2.5，开启真正的画布式 AI 视频工作流。
+                                本地视频、火山私域视频素材与 Seedance
+                                多参考生成现已在同一张画布打通，视频不再需要绕路导入。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -470,36 +469,33 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                Seedance 视频引擎
+                                视频直接进入无限画布
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                新增火山方舟官方渠道，覆盖文生视频、多参考视频、首帧生成与首尾帧生成；
-                                支持 Seedance 2.0、Fast 与全新的 Seedance 2.5
-                                模型线路。
+                                右键上传、从电脑拖入或从火山素材库选择，视频都能直接成为可连接、可预览、可引用的画布节点。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                全模态参考素材系统
+                                火山素材库视频全面开放
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                图片、视频、音频和火山素材库统一进入参考区；输入
-                                @ 即可精确引用素材，
-                                素材缩略图、连续编号、提示词优化和引用关系一目了然。
+                                新增跨素材组的“全部视频”入口，图片、视频、音频统一进入参考区；输入
+                                @ 即可精确引用，素材缩略图和引用关系一目了然。
                             </p>
                         </div>
                         {[
-                            "火山方舟官方 API 插件上线，支持异步任务、进度显示、取消生成、结果播放、全屏与下载。",
-                            "新增 Seedance 2.5，并保留 Seedance 2.0、Seedance 2.0 Fast 等模型选择。模型需在对应火山账号中开通后使用。",
-                            "统一视频节点：一个节点即可切换文生视频、多参考视频、首帧和首尾帧工作流。",
-                            "接入火山私域素材库，可浏览素材组、查看图片/视频预览、批量选择并确认引用。",
-                            "输入 @ 可选择 @图片、@视频、@音频；点击缩略图也能快速插入精确引用。",
-                            "参考缩略图悬停新增 ×：删除素材库引用，或直接断开画布节点连接，并自动修正后续引用编号。",
-                            "生成历史新增视频专区：近 7 天 Seedance 结果可悬停播放、全屏查看、下载、再次放回画布或批量删除。",
-                            "首帧与首尾帧模式全面接通火山素材库，选中素材后显示清晰缩略图，并按首帧/尾帧角色准确参与生成。",
-                            "Seedance 专属提示词优化器上线，强化镜头、动作、节奏、声音和参考素材职责描述。",
-                            "视频节点性能与交互全面升级，多节点画布加载更轻，编辑、预览和生成更顺滑。",
+                            "画布右键菜单新增“上传视频”，支持 MP4、MOV、M4V、WebM、AVI 与 MKV。",
+                            "支持从电脑直接拖入一个或多个视频；图片和视频混合拖入时会自动创建对应节点。",
+                            "火山素材库新增“全部视频、全部图片、全部音频”快捷入口，可跨素材组搜索和选择。",
+                            "强化素材类型识别：根据火山 AssetType、媒体类型、文件名和链接综合判断，避免视频被误显示为图片。",
+                            "文生视频和多参考视频均可直接打开全类型素材库；选择素材后自动切换到多参考工作流。",
+                            "图片、视频、音频继续统一支持可视化缩略图、@ 精确引用和悬停删除。",
+                            "首帧与首尾帧模式保持仅选择图片，避免向 Seedance 提交不符合模式要求的视频素材。",
+                            "素材库临时预览地址会自动刷新，长时间打开节点后仍能继续查看与使用。",
+                            "视频下载保持火山方舟返回的原始文件，不在画布端进行二次转码或降质。",
+                            "完成桌面端构建与素材接口验证，跨素材组已可读取并筛选火山视频资产。",
                         ].map((item, index) => (
                             <div
                                 key={item}

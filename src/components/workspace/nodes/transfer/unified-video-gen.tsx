@@ -42,11 +42,11 @@ import { useNodePluginModels } from "@/hooks/use-plugins-registry";
 import type { Task } from "@/hooks/use-task";
 import type { SourceSpec } from "@/lib/abi/sources";
 import { collectAll, configField, handle } from "@/lib/abi/sources";
-import { logger } from "@/lib/logger";
 import {
     readGenerationHistory,
     withGenerationHistory,
 } from "@/lib/generation-history";
+import { logger } from "@/lib/logger";
 import {
     type ReferenceTokenKind,
     removeAndRenumberReferenceTokens,
@@ -594,11 +594,12 @@ function VideoModeEditor<F extends VideoFeature>({
                           : `图片${index + 1}`,
                   token: `@图片${index + 1}`,
               }));
-    const visibleMaterials = mode === "reference" ? materials : frameMaterials;
+    const visibleMaterials =
+        mode === "reference" || mode === "text" ? materials : frameMaterials;
 
     const updateMaterials = useCallback(
         (value: string) => {
-            if (mode === "reference") {
+            if (mode === "reference" || mode === "text") {
                 patch({ asset_ids: value });
                 return;
             }
@@ -1081,15 +1082,16 @@ function VideoModeEditor<F extends VideoFeature>({
                                     />
                                 </button>
                                 <div className="flex-1" />
-                                {isVolcengine && mode !== "text" && (
+                                {isVolcengine && (
                                     <VolcengineMaterialPicker
                                         compact
                                         value={materialValue}
                                         onChange={updateMaterials}
                                         allowedTypes={
-                                            mode === "reference"
-                                                ? undefined
-                                                : ["image"]
+                                            mode === "first" ||
+                                            mode === "first-last"
+                                                ? ["image"]
+                                                : undefined
                                         }
                                         maxSelected={
                                             mode === "first-last"

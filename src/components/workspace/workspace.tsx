@@ -80,10 +80,17 @@ const selector = (state: FlowState) => ({
 });
 
 const IMAGE_FILE_EXTENSION = /\.(?:png|jpe?g|jfif|webp|gif|avif)$/i;
+const VIDEO_FILE_EXTENSION = /\.(?:mp4|mov|m4v|webm|avi|mkv)$/i;
 
 function isSupportedImageFile(file: File): boolean {
     return (
         file.type.startsWith("image/") || IMAGE_FILE_EXTENSION.test(file.name)
+    );
+}
+
+function isSupportedVideoFile(file: File): boolean {
+    return (
+        file.type.startsWith("video/") || VIDEO_FILE_EXTENSION.test(file.name)
     );
 }
 
@@ -200,10 +207,13 @@ function WorkspaceInner({
     } | null>(null);
     const suppressNextPaneClickRef = useRef(false);
     const imageUploadInputRef = useRef<HTMLInputElement>(null);
+    const videoUploadInputRef = useRef<HTMLInputElement>(null);
     const pendingUploadPositionRef = useRef<{ x: number; y: number } | null>(
         null,
     );
     const [isUploadingContextImage, setIsUploadingContextImage] =
+        useState(false);
+    const [isUploadingContextVideo, setIsUploadingContextVideo] =
         useState(false);
     const [isDraggingImages, setIsDraggingImages] = useState(false);
     const [isUploadingDroppedImages, setIsUploadingDroppedImages] =
@@ -522,7 +532,7 @@ function WorkspaceInner({
             event.preventDefault();
 
             const menuWidth = 224;
-            const menuHeight = 148;
+            const menuHeight = 190;
             setPaneContextMenu({
                 left: Math.min(
                     event.clientX,
@@ -718,6 +728,13 @@ function WorkspaceInner({
         imageUploadInputRef.current?.click();
     }, [paneContextMenu, isUploadingContextImage]);
 
+    const chooseContextVideo = useCallback(() => {
+        if (!paneContextMenu || isUploadingContextVideo) return;
+        pendingUploadPositionRef.current = paneContextMenu.position;
+        setPaneContextMenu(null);
+        videoUploadInputRef.current?.click();
+    }, [paneContextMenu, isUploadingContextVideo]);
+
     const uploadContextImage = useCallback(
         async (event: React.ChangeEvent<HTMLInputElement>) => {
             const file = event.target.files?.[0];
@@ -746,6 +763,39 @@ function WorkspaceInner({
                 });
             } finally {
                 setIsUploadingContextImage(false);
+            }
+        },
+        [],
+    );
+
+    const uploadContextVideo = useCallback(
+        async (event: React.ChangeEvent<HTMLInputElement>) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            const position = pendingUploadPositionRef.current;
+            pendingUploadPositionRef.current = null;
+            if (!file || !position) return;
+
+            setIsUploadingContextVideo(true);
+            try {
+                const uploaded = await getPresignedUploadUrl(file);
+                useFlow.getState().addNode(
+                    {
+                        type: "videoNode",
+                        data: { fileKeys: [uploaded.fileKey] },
+                    },
+                    position,
+                );
+            } catch (error) {
+                logger.error("Failed to upload video from canvas menu:", error);
+                showErrorToast({
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "上传视频失败，请重试",
+                });
+            } finally {
+                setIsUploadingContextVideo(false);
             }
         },
         [],
@@ -796,11 +846,14 @@ function WorkspaceInner({
             event.stopPropagation();
             setPaneContextMenu(null);
 
-            const images = files.filter(isSupportedImageFile);
-            const rejectedCount = files.length - images.length;
-            if (images.length === 0) {
+            const mediaFiles = files.filter(
+                (file) =>
+                    isSupportedImageFile(file) || isSupportedVideoFile(file),
+            );
+            const rejectedCount = files.length - mediaFiles.length;
+            if (mediaFiles.length === 0) {
                 showErrorToast({
-                    message: "请拖入 PNG、JPG、WebP、GIF 或 AVIF 图片",
+                    message: "请拖入图片，或 MP4、MOV、WebM、AVI、MKV 视频",
                 });
                 return;
             }
@@ -812,20 +865,26 @@ function WorkspaceInner({
             setIsUploadingDroppedImages(true);
             try {
                 const uploads = await Promise.allSettled(
-                    images.map((file) => getPresignedUploadUrl(file)),
+                    mediaFiles.map(async (file) => ({
+                        uploaded: await getPresignedUploadUrl(file),
+                        kind: isSupportedVideoFile(file) ? "video" : "image",
+                    })),
                 );
                 let failedCount = rejectedCount;
                 const uploadedFileKeys: string[] = [];
+                const uploadedVideoKeys: string[] = [];
                 for (const upload of uploads) {
                     if (upload.status === "rejected") {
                         failedCount += 1;
                         logger.error(
-                            "Failed to upload dropped image:",
+                            "Failed to upload dropped media:",
                             upload.reason,
                         );
                         continue;
                     }
-                    uploadedFileKeys.push(upload.value.fileKey);
+                    if (upload.value.kind === "video")
+                        uploadedVideoKeys.push(upload.value.uploaded.fileKey);
+                    else uploadedFileKeys.push(upload.value.uploaded.fileKey);
                 }
 
                 if (uploadedFileKeys.length > 0) {
@@ -845,9 +904,24 @@ function WorkspaceInner({
                     );
                 }
 
+                if (uploadedVideoKeys.length > 0) {
+                    useFlow.getState().addNode(
+                        {
+                            type: "videoNode",
+                            data: { fileKeys: uploadedVideoKeys },
+                        },
+                        {
+                            x: dropPosition.x,
+                            y:
+                                dropPosition.y +
+                                (uploadedFileKeys.length > 0 ? 320 : 0),
+                        },
+                    );
+                }
+
                 if (failedCount > 0) {
                     showErrorToast({
-                        message: `已导入 ${uploadedFileKeys.length} 张图片，另有 ${failedCount} 个文件导入失败`,
+                        message: `已导入 ${uploadedFileKeys.length} 张图片、${uploadedVideoKeys.length} 个视频，另有 ${failedCount} 个文件导入失败`,
                     });
                 }
             } finally {
@@ -1285,11 +1359,11 @@ function WorkspaceInner({
                         <div>
                             <div className="font-medium">
                                 {isUploadingDroppedImages
-                                    ? "正在导入图片…"
-                                    : "松开鼠标，将图片放入画布"}
+                                    ? "正在导入图片或视频…"
+                                    : "松开鼠标，将图片或视频放入画布"}
                             </div>
                             <div className="text-xs text-zinc-400">
-                                支持一次拖入多张图片
+                                支持一次拖入多张图片或多个视频
                             </div>
                         </div>
                     </div>
@@ -1316,6 +1390,16 @@ function WorkspaceInner({
                     >
                         <Upload className="h-4 w-4" />
                         {isUploadingContextImage ? "正在上传图片…" : "上传图片"}
+                    </button>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        disabled={isUploadingContextVideo}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground disabled:cursor-wait disabled:opacity-50"
+                        onClick={chooseContextVideo}
+                    >
+                        <Video className="h-4 w-4" />
+                        {isUploadingContextVideo ? "正在上传视频…" : "上传视频"}
                     </button>
                     <button
                         type="button"
@@ -1384,6 +1468,13 @@ function WorkspaceInner({
                 accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
                 className="hidden"
                 onChange={uploadContextImage}
+            />
+            <input
+                ref={videoUploadInputRef}
+                type="file"
+                accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,video/x-matroska,.mp4,.mov,.m4v,.webm,.avi,.mkv"
+                className="hidden"
+                onChange={uploadContextVideo}
             />
 
             {referenceMenu && (

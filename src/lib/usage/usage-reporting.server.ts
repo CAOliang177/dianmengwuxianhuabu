@@ -1,8 +1,8 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { dataDir } from "@/lib/runtime/paths.server";
 
 export interface UsageReportingSettings {
@@ -29,7 +29,7 @@ export interface UsageEventInput {
     occurredAt: number;
 }
 
-const APP_VERSION = "0.1.54";
+const APP_VERSION = "0.1.55";
 const DEFAULT_ENDPOINT =
     "https://dianmeng-d4g0o715e8e8e422a.service.tcloudbase.com";
 const LEGACY_ENDPOINTS = new Set([
@@ -65,8 +65,13 @@ function clean(value: unknown, max: number, fallback = "") {
 
 export function loadUsageSettings(): UsageReportingSettings {
     const stored = readJson<Partial<UsageReportingSettings>>(SETTINGS_FILE, {});
-    const storedEndpoint = clean(stored.endpoint, 500, DEFAULT_ENDPOINT).replace(/\/+$/, "");
-    const migrateEndpoint = !stored.endpoint || LEGACY_ENDPOINTS.has(storedEndpoint);
+    const storedEndpoint = clean(
+        stored.endpoint,
+        500,
+        DEFAULT_ENDPOINT,
+    ).replace(/\/+$/, "");
+    const migrateEndpoint =
+        !stored.endpoint || LEGACY_ENDPOINTS.has(storedEndpoint);
     const settings: UsageReportingSettings = {
         enabled: stored.enabled ?? true,
         endpoint: migrateEndpoint ? DEFAULT_ENDPOINT : storedEndpoint,
@@ -83,11 +88,15 @@ export function loadUsageSettings(): UsageReportingSettings {
 export function saveUsageSettings(input: Partial<UsageReportingSettings>) {
     const current = loadUsageSettings();
     const next: UsageReportingSettings = {
-        enabled: typeof input.enabled === "boolean" ? input.enabled : current.enabled,
+        enabled:
+            typeof input.enabled === "boolean"
+                ? input.enabled
+                : current.enabled,
         endpoint: clean(input.endpoint, 500, current.endpoint),
         token: clean(input.token, 500, current.token),
         clientId: current.clientId,
-        clientName: clean(input.clientName, 120, current.clientName) || "我的电脑",
+        clientName:
+            clean(input.clientName, 120, current.clientName) || "我的电脑",
     };
     writeJson(SETTINGS_FILE, next);
     return next;
@@ -98,7 +107,12 @@ export function usageQueueSize() {
 }
 
 function sanitizeEvent(input: UsageEventInput): UsageEventInput | null {
-    const statuses = new Set(["completed", "failed", "cancelled", "create_failed"]);
+    const statuses = new Set([
+        "completed",
+        "failed",
+        "cancelled",
+        "create_failed",
+    ]);
     const status = clean(input.status, 32) as UsageEventInput["status"];
     if (!statuses.has(status)) return null;
     const taskId = clean(input.taskId, 128);
@@ -112,7 +126,10 @@ function sanitizeEvent(input: UsageEventInput): UsageEventInput | null {
         pluginId: clean(input.pluginId, 160, "unknown"),
         model: clean(input.model, 160, "默认模型"),
         status,
-        durationMs: Math.max(0, Math.min(Number(input.durationMs) || 0, 86_400_000)),
+        durationMs: Math.max(
+            0,
+            Math.min(Number(input.durationMs) || 0, 86_400_000),
+        ),
         outputCount: Math.max(0, Math.min(Number(input.outputCount) || 0, 100)),
         errorCode: clean(input.errorCode, 120),
         errorMessage: clean(input.errorMessage, 800),
@@ -150,21 +167,33 @@ async function send(settings: UsageReportingSettings, event: UsageEventInput) {
 
 async function deliver(input: UsageEventInput) {
     const settings = loadUsageSettings();
-    if (!settings.enabled) return { accepted: false, queued: false, enabled: false };
+    if (!settings.enabled)
+        return { accepted: false, queued: false, enabled: false };
     const current = readJson<UsageEventInput[]>(QUEUE_FILE, []);
     const event = sanitizeEvent(input);
-    if (event && !current.some((item) => item.id === event.id)) current.push(event);
+    if (event && !current.some((item) => item.id === event.id))
+        current.push(event);
 
     const pending: UsageEventInput[] = [];
     for (const item of current.slice(-MAX_QUEUE)) {
         if (!(await send(settings, item))) pending.push(item);
     }
     writeJson(QUEUE_FILE, pending);
-    return { accepted: true, queued: pending.some((item) => item.id === event?.id), enabled: true };
+    return {
+        accepted: true,
+        queued: pending.some((item) => item.id === event?.id),
+        enabled: true,
+    };
 }
 
 export function reportUsageEvent(input: UsageEventInput) {
-    const run = operation.then(() => deliver(input), () => deliver(input));
-    operation = run.then(() => undefined, () => undefined);
+    const run = operation.then(
+        () => deliver(input),
+        () => deliver(input),
+    );
+    operation = run.then(
+        () => undefined,
+        () => undefined,
+    );
     return run;
 }

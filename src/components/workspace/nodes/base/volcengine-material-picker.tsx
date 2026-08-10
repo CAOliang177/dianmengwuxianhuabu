@@ -27,19 +27,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { apiGet } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
+import {
+    type MaterialKind,
+    normalizeVolcengineMaterial,
+    parseVolcengineMaterials,
+    type VolcengineMaterial,
+} from "@/lib/volcengine-material";
 
-type MaterialKind = "image" | "video" | "audio";
-
-export type VolcengineMaterial = {
-    id: string;
-    name?: string;
-    type: MaterialKind;
-    url?: string;
-    groupId?: string;
-    groupType?: string;
-    /** Optional Seedance request role, e.g. first_frame / last_frame. */
-    role?: string;
-};
+export type { VolcengineMaterial } from "@/lib/volcengine-material";
+export { parseVolcengineMaterials } from "@/lib/volcengine-material";
 
 type MaterialPickerProps = {
     value?: string;
@@ -71,6 +67,8 @@ const SEEDANCE_20_LIMITS: VolcengineMaterialLimits = {
     audio: 3,
 };
 
+const ALL_ASSETS_SCOPE = "__all_assets__";
+
 export function volcengineMaterialLimitsForModel(
     model?: string,
 ): VolcengineMaterialLimits {
@@ -84,104 +82,6 @@ type ApiListResponse = {
     items?: unknown[];
     error?: string;
 };
-
-function readString(
-    item: Record<string, unknown>,
-    keys: string[],
-): string | undefined {
-    for (const key of keys) {
-        const value = item[key];
-        if (typeof value === "string" && value.trim()) return value.trim();
-        if (typeof value === "number") return String(value);
-    }
-    return undefined;
-}
-
-function materialKind(item: Record<string, unknown>): MaterialKind {
-    const raw = (
-        readString(item, ["Type", "AssetType", "MediaType", "Kind", "type"]) ||
-        "image"
-    ).toLowerCase();
-    if (raw.includes("video")) return "video";
-    if (raw.includes("audio")) return "audio";
-    return "image";
-}
-
-function normalizeMaterial(
-    item: unknown,
-    groupId?: string,
-): VolcengineMaterial | null {
-    if (!item || typeof item !== "object") return null;
-    const record = item as Record<string, unknown>;
-    const id = readString(record, [
-        "Id",
-        "ID",
-        "AssetId",
-        "AssetID",
-        "GroupId",
-        "GroupID",
-        "assetId",
-        "id",
-    ]);
-    if (!id) return null;
-    return {
-        id,
-        name: readString(record, [
-            "Name",
-            "GroupName",
-            "AssetGroupName",
-            "AssetName",
-            "DisplayName",
-            "Title",
-            "FileName",
-            "OriginalName",
-            "ObjectName",
-            "name",
-        ]),
-        type: materialKind(record),
-        url: readString(record, [
-            "PreviewUrl",
-            "PreviewURL",
-            "CoverUrl",
-            "CoverURL",
-            "Url",
-            "URL",
-            "FileUrl",
-            "fileUrl",
-            "url",
-        ]),
-        groupId:
-            groupId ||
-            readString(record, ["GroupId", "GroupID", "AssetGroupId"]),
-        groupType: readString(record, ["GroupType", "groupType"]),
-        role: readString(record, ["Role", "role"]),
-    };
-}
-
-export function parseVolcengineMaterials(value?: string): VolcengineMaterial[] {
-    const raw = (value || "").trim();
-    if (!raw) return [];
-    if (raw.startsWith("[")) {
-        try {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-                return parsed
-                    .map((item) => normalizeMaterial(item))
-                    .filter((item): item is VolcengineMaterial => !!item);
-            }
-        } catch {
-            // Fall back to the legacy comma/newline format below.
-        }
-    }
-    return raw
-        .split(/[\s,;]+/)
-        .filter(Boolean)
-        .map((id) => {
-            const match = /^(image|video|audio):(.+)$/i.exec(id);
-            const type = (match?.[1]?.toLowerCase() || "image") as MaterialKind;
-            return { id: match?.[2] || id, type };
-        });
-}
 
 function serializeSelected(items: VolcengineMaterial[]): string {
     return items.length ? JSON.stringify(items, null, 0) : "";
@@ -297,6 +197,9 @@ export function VolcengineMaterialPicker({
     const [assets, setAssets] = useState<VolcengineMaterial[]>([]);
     const [groupId, setGroupId] = useState<string | null>(null);
     const [groupType, setGroupType] = useState("AIGC");
+    const [assetKindFilter, setAssetKindFilter] = useState<
+        MaterialKind | "all"
+    >("all");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
@@ -338,7 +241,9 @@ export function VolcengineMaterialPicker({
                     { showErrorToast: false },
                 );
                 return (response.items || [])
-                    .map((item) => normalizeMaterial(item, nextGroupId))
+                    .map((item) =>
+                        normalizeVolcengineMaterial(item, nextGroupId),
+                    )
                     .filter((item): item is VolcengineMaterial => !!item)
                     .map((item) => ({ ...item, groupType }));
             }),
@@ -375,7 +280,7 @@ export function VolcengineMaterialPicker({
             );
             setGroups(
                 (response.items || [])
-                    .map((item) => normalizeMaterial(item))
+                    .map((item) => normalizeVolcengineMaterial(item))
                     .filter((item): item is VolcengineMaterial => !!item),
             );
             setGroupId(null);
@@ -387,17 +292,32 @@ export function VolcengineMaterialPicker({
         }
     };
 
-    const loadAssets = async (nextGroupId: string, nextGroupType = "AIGC") => {
+    const loadAssets = async (
+        nextGroupId: string,
+        nextGroupType = "AIGC",
+        nextKindFilter: MaterialKind | "all" = "all",
+    ) => {
         setLoading(true);
         setError("");
         try {
+            const scopeQuery =
+                nextGroupId === ALL_ASSETS_SCOPE
+                    ? "scope=all"
+                    : `groupId=${encodeURIComponent(nextGroupId)}`;
             const response = await apiGet<ApiListResponse>(
-                `/api/volcengine/materials?view=assets&groupId=${encodeURIComponent(nextGroupId)}&groupType=${encodeURIComponent(nextGroupType)}`,
+                `/api/volcengine/materials?view=assets&${scopeQuery}&groupType=${encodeURIComponent(nextGroupType)}`,
                 { showErrorToast: false },
             );
             setAssets(
                 (response.items || [])
-                    .map((item) => normalizeMaterial(item, nextGroupId))
+                    .map((item) =>
+                        normalizeVolcengineMaterial(
+                            item,
+                            nextGroupId === ALL_ASSETS_SCOPE
+                                ? undefined
+                                : nextGroupId,
+                        ),
+                    )
                     .filter((item): item is VolcengineMaterial => !!item)
                     .map((item) => ({
                         ...item,
@@ -406,6 +326,7 @@ export function VolcengineMaterialPicker({
             );
             setGroupId(nextGroupId);
             setGroupType(nextGroupType);
+            setAssetKindFilter(nextKindFilter);
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : "素材读取失败");
         } finally {
@@ -420,6 +341,7 @@ export function VolcengineMaterialPicker({
     const filteredAssets = assets.filter(
         (asset) =>
             (!allowedTypes || allowedTypes.includes(asset.type)) &&
+            (assetKindFilter === "all" || asset.type === assetKindFilter) &&
             `${asset.name || ""} ${asset.id}`
                 .toLowerCase()
                 .includes(search.trim().toLowerCase()),
@@ -618,6 +540,7 @@ export function VolcengineMaterialPicker({
                                     onClick={() => {
                                         setGroupId(null);
                                         setGroupType("AIGC");
+                                        setAssetKindFilter("all");
                                         setSearch("");
                                     }}
                                 >
@@ -625,7 +548,11 @@ export function VolcengineMaterialPicker({
                                 </Button>
                             )}
                             <div>
-                                <DialogTitle>素材库</DialogTitle>
+                                <DialogTitle>
+                                    {groupId === ALL_ASSETS_SCOPE
+                                        ? `素材库 · 全部${assetKindFilter === "video" ? "视频" : assetKindFilter === "audio" ? "音频" : assetKindFilter === "image" ? "图片" : "素材"}`
+                                        : "素材库"}
+                                </DialogTitle>
                                 <DialogDescription>
                                     选择后会作为当前火山方舟视频模型的参考素材发送。
                                 </DialogDescription>
@@ -650,7 +577,11 @@ export function VolcengineMaterialPicker({
                                 className="nodrag shrink-0"
                                 onClick={() =>
                                     void (groupId
-                                        ? loadAssets(groupId, groupType)
+                                        ? loadAssets(
+                                              groupId,
+                                              groupType,
+                                              assetKindFilter,
+                                          )
                                         : loadGroups())
                                 }
                                 disabled={loading}
@@ -718,71 +649,131 @@ export function VolcengineMaterialPicker({
 
                         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                             {!groupId ? (
-                                <div
-                                    className={cn(
-                                        viewMode === "list"
-                                            ? "grid grid-cols-1 gap-2 lg:grid-cols-2"
-                                            : "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4",
-                                    )}
-                                >
-                                    {filteredGroups.map((group) => (
-                                        <button
-                                            type="button"
-                                            key={group.id}
-                                            className={cn(
-                                                "nodrag border bg-muted/20 text-left transition hover:border-primary hover:bg-muted",
-                                                viewMode === "list"
-                                                    ? "flex min-h-20 items-center gap-4 rounded-xl p-3"
-                                                    : "min-h-40 rounded-2xl p-4",
-                                            )}
-                                            title={group.name || group.id}
-                                            onClick={() =>
-                                                void loadAssets(
-                                                    group.id,
-                                                    group.groupType || "AIGC",
-                                                )
-                                            }
-                                        >
-                                            <div
-                                                className={cn(
-                                                    "flex shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary",
-                                                    viewMode === "list"
-                                                        ? "size-14"
-                                                        : "mb-4 size-16",
-                                                )}
-                                            >
-                                                <FolderOpen
-                                                    className={
-                                                        viewMode === "list"
-                                                            ? "size-8"
-                                                            : "size-10"
-                                                    }
-                                                />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <span className="block whitespace-normal break-words text-sm font-semibold leading-5">
-                                                    {group.name || group.id}
-                                                </span>
-                                                <span className="mt-1 block break-all text-[11px] leading-4 text-muted-foreground">
-                                                    {group.groupType ===
-                                                    "LivenessFace"
-                                                        ? "真人人像素材组"
-                                                        : "AIGC 素材组"}
-                                                    {viewMode === "list"
-                                                        ? ` · ${group.id}`
-                                                        : ""}
-                                                </span>
-                                            </div>
-                                        </button>
-                                    ))}
-                                    {!loading &&
-                                        filteredGroups.length === 0 && (
-                                            <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
-                                                {groups.length === 0
-                                                    ? "暂无素材组，请检查 AK/SK 或先在火山方舟创建素材组。"
-                                                    : "没有匹配的素材组。"}
-                                            </p>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                        {(
+                                            [
+                                                {
+                                                    type: "video" as const,
+                                                    label: "全部视频",
+                                                    icon: FileVideo,
+                                                },
+                                                {
+                                                    type: "image" as const,
+                                                    label: "全部图片",
+                                                    icon: ImageIcon,
+                                                },
+                                                {
+                                                    type: "audio" as const,
+                                                    label: "全部音频",
+                                                    icon: FileAudio,
+                                                },
+                                            ] as const
+                                        )
+                                            .filter(
+                                                (entry) =>
+                                                    !allowedTypes ||
+                                                    allowedTypes.includes(
+                                                        entry.type,
+                                                    ),
+                                            )
+                                            .map((entry) => {
+                                                const Icon = entry.icon;
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        key={entry.type}
+                                                        className="nodrag flex items-center gap-3 rounded-xl border bg-primary/5 p-3 text-left transition hover:border-primary hover:bg-primary/10"
+                                                        onClick={() =>
+                                                            void loadAssets(
+                                                                ALL_ASSETS_SCOPE,
+                                                                "AIGC",
+                                                                entry.type,
+                                                            )
+                                                        }
+                                                    >
+                                                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                            <Icon className="size-5" />
+                                                        </span>
+                                                        <span>
+                                                            <span className="block text-sm font-semibold">
+                                                                {entry.label}
+                                                            </span>
+                                                            <span className="text-[11px] text-muted-foreground">
+                                                                跨素材组快速查找
+                                                            </span>
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                    </div>
+                                    <div
+                                        className={cn(
+                                            viewMode === "list"
+                                                ? "grid grid-cols-1 gap-2 lg:grid-cols-2"
+                                                : "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4",
                                         )}
+                                    >
+                                        {filteredGroups.map((group) => (
+                                            <button
+                                                type="button"
+                                                key={group.id}
+                                                className={cn(
+                                                    "nodrag border bg-muted/20 text-left transition hover:border-primary hover:bg-muted",
+                                                    viewMode === "list"
+                                                        ? "flex min-h-20 items-center gap-4 rounded-xl p-3"
+                                                        : "min-h-40 rounded-2xl p-4",
+                                                )}
+                                                title={group.name || group.id}
+                                                onClick={() =>
+                                                    void loadAssets(
+                                                        group.id,
+                                                        group.groupType ||
+                                                            "AIGC",
+                                                    )
+                                                }
+                                            >
+                                                <div
+                                                    className={cn(
+                                                        "flex shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary",
+                                                        viewMode === "list"
+                                                            ? "size-14"
+                                                            : "mb-4 size-16",
+                                                    )}
+                                                >
+                                                    <FolderOpen
+                                                        className={
+                                                            viewMode === "list"
+                                                                ? "size-8"
+                                                                : "size-10"
+                                                        }
+                                                    />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <span className="block whitespace-normal break-words text-sm font-semibold leading-5">
+                                                        {group.name || group.id}
+                                                    </span>
+                                                    <span className="mt-1 block break-all text-[11px] leading-4 text-muted-foreground">
+                                                        {group.groupType ===
+                                                        "LivenessFace"
+                                                            ? "真人人像素材组"
+                                                            : "AIGC 素材组"}
+                                                        {viewMode === "list"
+                                                            ? ` · ${group.id}`
+                                                            : ""}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        ))}
+                                        {!loading &&
+                                            filteredGroups.length === 0 && (
+                                                <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
+                                                    {groups.length === 0
+                                                        ? "暂无素材组，请检查 AK/SK 或先在火山方舟创建素材组。"
+                                                        : "没有匹配的素材组。"}
+                                                </p>
+                                            )}
+                                    </div>
                                 </div>
                             ) : (
                                 <div

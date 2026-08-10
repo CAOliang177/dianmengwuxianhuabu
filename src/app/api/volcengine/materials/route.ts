@@ -265,13 +265,16 @@ export async function GET(request: NextRequest) {
 
     const env = loadEnvStore();
     const groupId = request.nextUrl.searchParams.get("groupId")?.trim();
+    const allAssets =
+        view === "assets" &&
+        request.nextUrl.searchParams.get("scope") === "all";
     const requestedGroupType =
         request.nextUrl.searchParams.get("groupType") === "LivenessFace"
             ? "LivenessFace"
             : "AIGC";
-    if (view === "assets" && !groupId) {
+    if (view === "assets" && !groupId && !allAssets) {
         return NextResponse.json(
-            { error: "groupId is required for assets" },
+            { error: "groupId is required for assets unless scope=all" },
             { status: 400 },
         );
     }
@@ -290,7 +293,7 @@ export async function GET(request: NextRequest) {
                 const filter: Record<string, unknown> = {
                     GroupType: groupType,
                 };
-                if (groupId) filter.GroupIds = [groupId];
+                if (groupId && !allAssets) filter.GroupIds = [groupId];
                 if (view === "assets") filter.Statuses = ["Active"];
                 let loadedForType = 0;
                 for (let pageNumber = 1; pageNumber <= 20; pageNumber += 1) {
