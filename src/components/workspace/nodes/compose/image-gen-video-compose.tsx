@@ -19,7 +19,19 @@ import type { TongflowPluginNodeProps } from "@/types/tongflow-flow";
 
 import { AbiNodeShell } from "../base/abi-node-shell";
 import { AspectRatioPicker } from "../base/aspect-ratio-picker";
+import { useResolvedPluginId } from "../base/node-plugin-id-select";
 import { VideoDurationSlider } from "../base/video-duration-slider";
+import {
+    isSeedance25Model,
+    normalizeVideoResolution,
+    VideoResolutionPicker,
+} from "../base/video-resolution-picker";
+import {
+    parseVolcengineMaterials,
+    VolcengineMaterialPicker,
+    validateVolcengineMaterials,
+    volcengineMaterialLimitsForModel,
+} from "../base/volcengine-material-picker";
 
 /** Same ABI slot as transfer image-gen-video; both inputs from upstream handles. */
 const IMAGE_GEN_VIDEO_COMPOSE_SOURCE_SPEC =
@@ -34,6 +46,10 @@ const ImageGenVideoComposeNode = ({
     const form = useAbiForm(
         "image-gen-video",
         IMAGE_GEN_VIDEO_COMPOSE_SOURCE_SPEC,
+    );
+    const { resolved: activePluginId } = useResolvedPluginId(
+        "image-gen-video",
+        data,
     );
 
     const nodeId = useNodeId();
@@ -69,11 +85,50 @@ const ImageGenVideoComposeNode = ({
     const height = (form.state.height as number | undefined) ?? 576;
     const durationSeconds =
         (form.state.duration as number | undefined) ?? VIDEO_DURATION_DEFAULT;
+    const activeModel = String(data.pluginModel || "").trim();
+    const isVolcengine = activePluginId === "tongflow-api-bytedance";
+    const isSeedance25 = isVolcengine && isSeedance25Model(activeModel);
+    const durationMax = isSeedance25 ? 30 : 15;
+    const storedMaterialValue =
+        (form.state.asset_ids as string | undefined) ?? "";
+    const materialValue = isVolcengine ? storedMaterialValue : "";
+    const materialLimits = volcengineMaterialLimitsForModel(activeModel);
+    const materialError = validateVolcengineMaterials(
+        parseVolcengineMaterials(materialValue),
+        { image: 1 },
+        materialLimits,
+    );
+    const storedResolution = form.state.resolution as string | undefined;
+    const resolution = normalizeVideoResolution(storedResolution, activeModel);
 
     useEffect(() => {
         if (form.state.duration === undefined)
             form.set("duration", VIDEO_DURATION_DEFAULT);
     }, [form.state.duration, form.set]);
+
+    useEffect(() => {
+        const clampedDuration = Math.max(
+            4,
+            Math.min(durationMax, durationSeconds),
+        );
+        if (clampedDuration !== durationSeconds)
+            form.set("duration", clampedDuration);
+    }, [durationMax, durationSeconds, form.set]);
+
+    useEffect(() => {
+        if (!activePluginId) return;
+        if (!isVolcengine && storedMaterialValue) form.set("asset_ids", "");
+    }, [activePluginId, isVolcengine, storedMaterialValue, form.set]);
+
+    useEffect(() => {
+        if (!activePluginId) return;
+        if (isVolcengine) {
+            if (storedResolution !== resolution)
+                form.set("resolution", resolution);
+            return;
+        }
+        if (storedResolution !== undefined) form.set("resolution", undefined);
+    }, [activePluginId, isVolcengine, storedResolution, resolution, form.set]);
 
     const currentRatio: AspectRatio =
         VIDEO_ASPECT_RATIOS.find(
@@ -91,9 +146,18 @@ const ImageGenVideoComposeNode = ({
             title={t("titles.imageGenVideoCompose")}
             icon={<Atom className="h-5 w-5" />}
             executeLabel={tActions("generateVideo")}
-            executeDisabled={!hasText || !hasImage}
+            executeDisabled={!hasText || !hasImage || !!materialError}
         >
             <div className="p-4 space-y-4">
+                {isVolcengine && (
+                    <VolcengineMaterialPicker
+                        value={materialValue}
+                        onChange={(value) => form.set("asset_ids", value)}
+                        occupied={{ image: 1 }}
+                        limits={materialLimits}
+                    />
+                )}
+
                 <Card className="p-3">
                     <div className="space-y-2">
                         <Label className="text-sm font-medium text-muted-foreground">
@@ -150,9 +214,19 @@ const ImageGenVideoComposeNode = ({
                     showSize
                 />
 
+                {isVolcengine && (
+                    <VideoResolutionPicker
+                        model={activeModel}
+                        value={resolution}
+                        onChange={(value) => form.set("resolution", value)}
+                    />
+                )}
+
                 <VideoDurationSlider
                     value={durationSeconds}
                     onChange={(dur) => form.set("duration", dur)}
+                    min={4}
+                    max={durationMax}
                 />
             </div>
         </AbiNodeShell>

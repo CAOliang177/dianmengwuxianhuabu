@@ -266,7 +266,27 @@
                         "type": "string",
                         "minLength": 1
                     },
+                    "asset_ids": {
+                        "type": "string",
+                        "description": "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines"
+                    },
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["480p", "720p", "1080p", "4k"]
+                    },
                     "images": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/$defs/Asset"
+                        }
+                    },
+                    "videos": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/$defs/Asset"
+                        }
+                    },
+                    "audios": {
                         "type": "array",
                         "items": {
                             "$ref": "#/$defs/Asset"
@@ -922,6 +942,14 @@
                     "text": {
                         "type": "string"
                     },
+                    "asset_ids": {
+                        "type": "string",
+                        "description": "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines"
+                    },
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["480p", "720p", "1080p", "4k"]
+                    },
                     "seed": {
                         "type": "number"
                     },
@@ -1422,6 +1450,10 @@
                     "text": {
                         "type": "string"
                     },
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["480p", "720p", "1080p", "4k"]
+                    },
                     "duration": {
                         "type": "number"
                     },
@@ -1474,6 +1506,14 @@
                 "properties": {
                     "text": {
                         "type": "string"
+                    },
+                    "asset_ids": {
+                        "type": "string",
+                        "description": "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines"
+                    },
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["480p", "720p", "1080p", "4k"]
                     },
                     "duration": {
                         "type": "number"

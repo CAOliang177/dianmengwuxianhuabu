@@ -11,10 +11,12 @@ class ImageGenVideoInput(BaseModel):
     duration: float
     image: Asset
     text: str
+    asset_ids: str | None = None
     enhance_prompt: bool | None = None
     height: int | None = None
     image_frame_idx: int | None = None
     image_strength: float | None = None
+    resolution: str | None = None
     seed: float | None = None
     width: int | None = None
 

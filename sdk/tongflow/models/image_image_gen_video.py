@@ -11,6 +11,7 @@ class ImageImageGenVideoInput(BaseModel):
     end_image: Asset
     image: Asset
     text: str
+    resolution: str | None = None
     duration: float | None = None
     enhance_prompt: bool | None = None
     height: int | None = None

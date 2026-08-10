@@ -32,7 +32,7 @@ export const NODE_TYPE_TO_ABI_FEATURE: Readonly<Record<string, NodeSlot>> = {
     // transfer/
     genTextNode: "gen-text",
     imageGenVideoNode: "image-gen-video",
-    textGenVideoNode: "text-gen-video",
+    textGenVideoNode: "images-gen-video",
     imageGenModelNode: "image-gen-model",
     speechGenVideoNode: "speech-text-gen-video",
     imageGenImageNode: "image-edit",
@@ -105,14 +105,17 @@ export const NODE_TYPE_SOURCE_SPEC: Partial<
     Record<string, Record<string, FieldSourceOverride>>
 > = {
     textGenVideoNode: {
-        text: batchOn({ nodeType: "textNode", path: "texts" }),
+        images: collectAll({ nodeType: "imageNode" }),
+        videos: collectAll({ nodeType: "videoNode" }),
+        audios: collectAll({ nodeType: "audioNode" }),
+        text: configField(),
     },
     textGenImageNode: {
         images: collectAll({ nodeType: "imageNode" }),
         text: configField(),
     },
     imageGenVideoNode: {
-        image: batchOn(),
+        image: handle({ nodeType: "imageNode" }),
         text: configField(),
     },
     imageGenVideoComposeNode: {
@@ -157,9 +160,16 @@ export const NODE_TYPE_SOURCE_SPEC: Partial<
         text: handle({ nodeType: "textNode", path: "texts[0]", manual: true }),
     },
     imagesGenVideoNode: {
-        images: collectAll(),
-        text: handle({ nodeType: "textNode", path: "texts[0]", manual: true }),
+        images: collectAll({ nodeType: "imageNode" }),
+        videos: collectAll({ nodeType: "videoNode" }),
+        audios: collectAll({ nodeType: "audioNode" }),
+        text: configField(),
         duration: configField(),
+    },
+    imageImageGenVideoNode: {
+        image: handle({ nodeType: "imageNode" }),
+        end_image: handle({ nodeType: "imageNode" }),
+        text: configField(),
     },
     // `url` is a plain string (not a $ref), so force it to a linkNode-sourced
     // handle instead of the default config/text classification. batchOn fans

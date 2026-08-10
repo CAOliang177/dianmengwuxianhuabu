@@ -34,8 +34,12 @@ import {
     readGenerationHistory,
     withGenerationHistory,
 } from "@/lib/generation-history";
-import { collectConnectedImageReferences } from "@/lib/image-references";
+import {
+    collectConnectedImageReferenceEntries,
+    collectConnectedImageReferences,
+} from "@/lib/image-references";
 import { logger } from "@/lib/logger";
+import { removeAndRenumberReferenceTokens } from "@/lib/reference-tokens";
 import {
     getAbiNodeBySlot,
     resolveAbiOutputMappings,
@@ -67,6 +71,11 @@ type TextGenImageNodeProps = TongflowPluginNodeProps<
     "image-fusion",
     "textGenImageNode"
 >;
+type ImageReferenceEntry = {
+    fileKey: string;
+    edgeId?: string;
+    bootstrapIndex?: number;
+};
 
 // One LibTV-style image node handles all modes:
 // no reference -> image generation; one reference -> image edit;
@@ -126,6 +135,7 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
     const [viewerOpen, setViewerOpen] = useState(false);
     const nodeLookup = useStore((state) => state.nodeLookup);
     const edges = useStore((state) => state.edges as Edge[]);
+    const localText = (form.state.text as string | undefined) ?? "";
 
     useEffect(() => {
         if (!viewerOpen) return;
@@ -141,9 +151,18 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
         };
     }, [viewerOpen]);
 
-    const { referenceCount, referenceImages } = useMemo(() => {
-        if (!nodeId) return { referenceCount: 0, referenceImages: [] };
-        const connectedPreviews = collectConnectedImageReferences(
+    const { referenceCount, referenceEntries, referenceImages } = useMemo<{
+        referenceCount: number;
+        referenceEntries: ImageReferenceEntry[];
+        referenceImages: string[];
+    }>(() => {
+        if (!nodeId)
+            return {
+                referenceCount: 0,
+                referenceEntries: [],
+                referenceImages: [],
+            };
+        const connectedEntries = collectConnectedImageReferenceEntries(
             nodeId,
             edges,
             (sourceId) => nodeLookup.get(sourceId),
@@ -156,15 +175,64 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                       .referenceBootstrapFileKeys as string[]
               ).filter(Boolean)
             : [];
-        const previews =
-            connectedPreviews.length > 0
-                ? connectedPreviews
-                : bootstrapPreviews;
+        const entries =
+            connectedEntries.length > 0
+                ? connectedEntries
+                : bootstrapPreviews.map((fileKey, bootstrapIndex) => ({
+                      fileKey,
+                      bootstrapIndex,
+                  }));
         return {
-            referenceCount: previews.length,
-            referenceImages: previews,
+            referenceCount: entries.length,
+            referenceEntries: entries,
+            referenceImages: entries.map((entry) => entry.fileKey),
         };
     }, [nodeId, edges, nodeLookup, data]);
+
+    const removeImageReference = useCallback(
+        (index: number) => {
+            if (!nodeId) return;
+            const entry = referenceEntries[index];
+            if (!entry) return;
+            const removedNumbers = new Set<number>();
+            if (entry.edgeId) {
+                referenceEntries.forEach((candidate, candidateIndex) => {
+                    if (candidate.edgeId === entry.edgeId)
+                        removedNumbers.add(candidateIndex + 1);
+                });
+                useFlow.getState().removeEdges([entry.edgeId]);
+            } else {
+                removedNumbers.add(index + 1);
+                const current = useFlow
+                    .getState()
+                    .nodes.find((node) => node.id === nodeId);
+                const currentData = (current?.data ?? {}) as Record<
+                    string,
+                    unknown
+                >;
+                const bootstrap = Array.isArray(
+                    currentData.referenceBootstrapFileKeys,
+                )
+                    ? (currentData.referenceBootstrapFileKeys as string[])
+                    : [];
+                useFlow.getState().updates(nodeId, {
+                    ...currentData,
+                    referenceBootstrapFileKeys: bootstrap.filter(
+                        (_fileKey, bootstrapIndex) =>
+                            bootstrapIndex !== entry.bootstrapIndex,
+                    ),
+                });
+            }
+            form.patch({
+                text: removeAndRenumberReferenceTokens(
+                    localText,
+                    "图片",
+                    removedNumbers,
+                ),
+            });
+        },
+        [form, localText, nodeId, referenceEntries],
+    );
 
     useEffect(() => {
         if (!nodeId || referenceImages.length === 0) return;
@@ -211,8 +279,6 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
             image.onerror = null;
         };
     }, [firstReferenceUrl]);
-
-    const localText = (form.state.text as string | undefined) ?? "";
 
     const insertReferenceToken = useCallback(
         (index: number) => {
@@ -569,7 +635,7 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                                         <button
                                             key={`${fileKey}:${index}`}
                                             type="button"
-                                            className={`nodrag relative rounded-xl border bg-muted/50 p-0.5 text-left transition hover:-translate-y-0.5 hover:ring-2 ${REFERENCE_STYLES[index % REFERENCE_STYLES.length]} ${activeReference === index ? "scale-105 ring-2 ring-current" : ""}`}
+                                            className={`nodrag group relative rounded-xl border bg-muted/50 p-0.5 text-left transition hover:-translate-y-0.5 hover:ring-2 ${REFERENCE_STYLES[index % REFERENCE_STYLES.length]} ${activeReference === index ? "scale-105 ring-2 ring-current" : ""}`}
                                             title={`点击引用图片${index + 1}`}
                                             onClick={() =>
                                                 insertReferenceToken(index)
@@ -580,6 +646,37 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                                                 label={`图片${index + 1}`}
                                                 type="image"
                                             />
+                                            {/* biome-ignore lint/a11y/useSemanticElements: a nested button would be invalid inside the clickable reference card */}
+                                            <span
+                                                role="button"
+                                                tabIndex={0}
+                                                aria-label={`移除图片${index + 1}`}
+                                                title="移除参考素材"
+                                                className="nodrag nopan absolute right-1 top-1 z-20 hidden h-5 w-5 items-center justify-center rounded-full bg-black/80 text-white shadow-md transition hover:bg-red-500 group-hover:flex"
+                                                onPointerDown={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                }}
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    removeImageReference(index);
+                                                }}
+                                                onKeyDown={(event) => {
+                                                    if (
+                                                        event.key === "Enter" ||
+                                                        event.key === " "
+                                                    ) {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        removeImageReference(
+                                                            index,
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </span>
                                         </button>
                                     ))
                                 ) : (
@@ -617,6 +714,14 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                                     showCard={false}
                                     enableVoiceInput={false}
                                     enableFullscreen
+                                    referenceMentions={referenceImages.map(
+                                        (fileKey, index) => ({
+                                            token: `@图片${index + 1}`,
+                                            label: `参考图片${index + 1}`,
+                                            description: fileKey,
+                                            type: "image" as const,
+                                        }),
+                                    )}
                                     placeholder="描述想生成或修改的画面，点击参考图可插入图片编号…"
                                     className="nodrag nopan nowheel min-h-12 resize-none select-text border-0 bg-transparent px-0 py-2 text-sm shadow-none focus-visible:ring-0"
                                     {...form.bind("text")}

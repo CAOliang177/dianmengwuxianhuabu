@@ -106,6 +106,7 @@ export const VIDEO_ASPECT_RATIOS: AspectRatio[] = [
     { value: "1:1", label: "square", width: 1024, height: 1024 },
     { value: "4:3", label: "standard", width: 1024, height: 768 },
     { value: "3:4", label: "verticalStandard", width: 768, height: 1024 },
+    { value: "21:9", label: "cinemaWide", width: 1344, height: 576 },
 ];
 
 export const VIDEO_DURATIONS: Duration[] = [
@@ -121,9 +122,13 @@ export const VIDEO_DURATION_MIN = 1;
 export const VIDEO_DURATION_MAX = 30;
 export const VIDEO_DURATION_DEFAULT = 5;
 
-export function clampVideoDuration(raw: number): number {
+export function clampVideoDuration(
+    raw: number,
+    min = VIDEO_DURATION_MIN,
+    max = VIDEO_DURATION_MAX,
+): number {
     const v = Math.round(raw);
-    return Math.max(VIDEO_DURATION_MIN, Math.min(VIDEO_DURATION_MAX, v));
+    return Math.max(min, Math.min(max, v));
 }
 
 /** Icon sizing lookup for aspect ratio thumbnails */

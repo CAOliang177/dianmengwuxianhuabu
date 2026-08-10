@@ -54,7 +54,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.49";
+const RELEASE_VERSION = "0.1.53";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -457,10 +457,12 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                画布数据安全与节点找回
+                                Seedance 全模态视频创作正式登场
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                修复节点丢失问题，并支持从成功任务中重建此前没有保存下来的生成节点。
+                                从灵感、参考素材到原生音画视频，dianmeng
+                                无限画布现已接入火山方舟 Seedance 2.0 与
+                                Seedance 2.5，开启真正的画布式 AI 视频工作流。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -468,32 +470,34 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                一键找回节点
+                                Seedance 视频引擎
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                首页右上角新增“找回节点”。它会扫描本机成功任务，
-                                把仍有生成结果但画布中已经不存在的节点重新建立出来。
+                                新增火山方舟官方渠道，覆盖文生视频、多参考视频、首帧生成与首尾帧生成；
+                                支持 Seedance 2.0、Fast 与全新的 Seedance 2.5
+                                模型线路。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                多重数据保护
+                                全模态参考素材系统
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                普通保存不能再静默删除已有节点；只有用户明确删除时才会移除节点，
-                                同时画布快照备份从一份增加到五份。
+                                图片、视频、音频和火山素材库统一进入参考区；输入
+                                @ 即可精确引用素材，
+                                素材缩略图、连续编号、提示词优化和引用关系一目了然。
                             </p>
                         </div>
                         {[
-                            "首页新增“找回节点”，可从任务数据库重建丢失的图片生成节点。",
-                            "新生成任务会记录所属画布，后续可以准确找回到原画布。",
-                            "旧版任务无法确认原画布时，会集中放进“恢复的生成记录”画布。",
-                            "修复跨画布延迟保存可能写入错误画布的问题。",
-                            "修复生成完成后旧节点快照覆盖新节点的问题。",
-                            "返回主页、最小化或关闭应用前会取消旧保存并写入最新完整画布。",
-                            "节点删除改为明确删除协议，异常的节点骤减快照会被自动拦截。",
-                            "保留最近五代画布备份，诊断包也会一并收集这些备份。",
+                            "火山方舟官方 API 插件上线，支持异步任务、进度显示、取消生成、结果播放、全屏与下载。",
+                            "新增 Seedance 2.5，并保留 Seedance 2.0、Seedance 2.0 Fast 等模型选择。模型需在对应火山账号中开通后使用。",
+                            "统一视频节点：一个节点即可切换文生视频、多参考视频、首帧和首尾帧工作流。",
+                            "接入火山私域素材库，可浏览素材组、查看图片/视频预览、批量选择并确认引用。",
+                            "输入 @ 可选择 @图片、@视频、@音频；点击缩略图也能快速插入精确引用。",
+                            "参考缩略图悬停新增 ×：删除素材库引用，或直接断开画布节点连接，并自动修正后续引用编号。",
+                            "Seedance 专属提示词优化器上线，强化镜头、动作、节奏、声音和参考素材职责描述。",
+                            "视频节点性能与交互全面升级，多节点画布加载更轻，编辑、预览和生成更顺滑。",
                         ].map((item, index) => (
                             <div
                                 key={item}

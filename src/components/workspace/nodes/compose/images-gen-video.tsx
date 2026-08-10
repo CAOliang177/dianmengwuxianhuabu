@@ -1,7 +1,7 @@
 import { useNodesData } from "@xyflow/react";
 import { Film, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 
 import {
     type AspectRatio,
@@ -17,10 +17,26 @@ import { AbiNodeShell } from "../base/abi-node-shell";
 import { AspectRatioPicker } from "../base/aspect-ratio-picker";
 import { DurationPicker } from "../base/duration-picker";
 import { MediaThumbnail } from "../base/media-thumbnail";
+import { useResolvedPluginId } from "../base/node-plugin-id-select";
 import { NodeTextarea } from "../base/node-textarea";
+import { SeedancePromptOptimizer } from "../base/seedance-prompt-optimizer";
+import {
+    isSeedance25Model,
+    normalizeVideoResolution,
+    VideoResolutionPicker,
+} from "../base/video-resolution-picker";
+import {
+    materialReferenceLabels,
+    parseVolcengineMaterials,
+    VolcengineMaterialPicker,
+    validateVolcengineMaterials,
+    volcengineMaterialLimitsForModel,
+} from "../base/volcengine-material-picker";
 
-// Seedance multimodal reference accepts up to 9 reference images.
-const MAX_IMAGES = 9;
+// Seedance 2.5 accepts up to 30 image references; older Seedance routes keep
+// the conservative 9-image limit. The plugin enforces the same limit server
+// side, so the picker cannot accidentally submit an oversized request.
+const MAX_IMAGES_DEFAULT = 9;
 
 // `images` collects every connected image edge. `text` may come from an upstream
 // textNode (via the auto-rendered `in:text` handle) or be typed manually — the
@@ -36,14 +52,26 @@ const ImagesGenVideoNode = ({
 }: TongflowPluginNodeProps<"images-gen-video", "imagesGenVideoNode">) => {
     const t = useTranslations("Workspace.nodes");
     const form = useAbiForm("images-gen-video", sourceSpec);
+    const { resolved: activePluginId } = useResolvedPluginId(
+        "images-gen-video",
+        data,
+    );
+
+    const activeModel = String(data.pluginModel || "").trim();
+    const isVolcengine = activePluginId === "tongflow-api-bytedance";
+    const isSeedance25 = isVolcengine && isSeedance25Model(activeModel);
+    const maxImages = isSeedance25 ? 30 : MAX_IMAGES_DEFAULT;
+    const durationMax = isSeedance25 ? 30 : 15;
+    const allowedDurations = VIDEO_DURATIONS.filter(
+        ({ value }) => Number(value) >= 4 && Number(value) <= durationMax,
+    );
 
     const ids = data.ids ?? [];
     const fromNodes = useNodesData(ids);
 
     const allImages = fromNodes
         .filter((node) => node.type === "imageNode")
-        .map((node) => coerceBaseNodeData(node.data).fileKeys)
-        .filter((keys): keys is string[] => !!keys && keys.length > 0);
+        .flatMap((node) => coerceBaseNodeData(node.data).fileKeys ?? []);
 
     const textNode = fromNodes.find((node) => node.type === "textNode");
     const upstreamTexts: string[] = useMemo(() => {
@@ -61,7 +89,49 @@ const ImagesGenVideoNode = ({
         ) ?? VIDEO_ASPECT_RATIOS[1];
 
     const userPrompt = (form.state.text as string | undefined) ?? "";
+    const storedMaterialAssetIds =
+        (form.state.asset_ids as string | undefined)?.trim() ?? "";
+    const materialAssetIds = isVolcengine ? storedMaterialAssetIds : "";
+    const materialItems = parseVolcengineMaterials(materialAssetIds);
+    const materialLimits = volcengineMaterialLimitsForModel(activeModel);
+    const materialValidationError = validateVolcengineMaterials(
+        materialItems,
+        { image: allImages.length },
+        materialLimits,
+    );
+    const storedResolution = form.state.resolution as string | undefined;
+    const resolution = normalizeVideoResolution(storedResolution, activeModel);
+    const imageLimitError =
+        allImages.length > maxImages
+            ? `当前模型最多支持 ${maxImages} 张连接图片，请删除多余连接后再生成`
+            : "";
+    const materialLabels = materialReferenceLabels(materialItems, {
+        image: allImages.length,
+    });
+    const connectedImageLabels = allImages
+        .slice(0, maxImages)
+        .map((_, index) => `@图片${index + 1}`);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        const clampedDuration = Math.max(4, Math.min(durationMax, duration));
+        if (duration !== clampedDuration) form.set("duration", clampedDuration);
+    }, [duration, durationMax, form.set]);
+
+    useEffect(() => {
+        if (!activePluginId) return;
+        if (!isVolcengine && storedMaterialAssetIds) form.set("asset_ids", "");
+    }, [activePluginId, isVolcengine, storedMaterialAssetIds, form.set]);
+
+    useEffect(() => {
+        if (!activePluginId) return;
+        if (isVolcengine) {
+            if (storedResolution !== resolution)
+                form.set("resolution", resolution);
+            return;
+        }
+        if (storedResolution !== undefined) form.set("resolution", undefined);
+    }, [activePluginId, isVolcengine, storedResolution, resolution, form.set]);
 
     const insertImageRef = useCallback(
         (imageRef: string) => {
@@ -94,7 +164,11 @@ const ImagesGenVideoNode = ({
             title={t("titles.imagesGenVideo")}
             icon={<Film className="h-5 w-5" />}
             executeLabel={t("actions.generateVideo")}
-            executeDisabled={!allImages || allImages.length < 2}
+            executeDisabled={
+                (allImages.length < 2 && !materialAssetIds) ||
+                !!imageLimitError ||
+                !!materialValidationError
+            }
         >
             <div className="p-4 space-y-4">
                 <AspectRatioPicker
@@ -106,8 +180,16 @@ const ImagesGenVideoNode = ({
                     showSize
                 />
 
+                {isVolcengine && (
+                    <VideoResolutionPicker
+                        model={activeModel}
+                        value={resolution}
+                        onChange={(value) => form.set("resolution", value)}
+                    />
+                )}
+
                 <DurationPicker
-                    durations={VIDEO_DURATIONS}
+                    durations={allowedDurations}
                     value={String(duration)}
                     onChange={(dur) => form.set("duration", Number(dur))}
                 />
@@ -116,14 +198,14 @@ const ImagesGenVideoNode = ({
                     <span className="text-sm font-medium text-muted-foreground">
                         {t("imageFusion.imageReference")}
                         <span className="ml-2 text-xs font-normal">
-                            ({allImages.length}/{MAX_IMAGES})
+                            ({allImages.length}/{maxImages})
                         </span>
                     </span>
                     <div className="flex gap-3 flex-wrap">
-                        {allImages.slice(0, MAX_IMAGES).map((images, index) => (
+                        {allImages.slice(0, maxImages).map((fileKey, index) => (
                             <MediaThumbnail
-                                key={index}
-                                fileKey={images[0]}
+                                key={`${fileKey}:${index}`}
+                                fileKey={fileKey}
                                 label={`${t("imageFusion.imageLabel")}${index + 1}`}
                                 type="image"
                                 onClick={() =>
@@ -137,7 +219,33 @@ const ImagesGenVideoNode = ({
                     <p className="text-xs text-muted-foreground">
                         {t("imageFusion.imageReferenceHint")}
                     </p>
+                    {imageLimitError && (
+                        <p className="text-xs text-destructive">
+                            {imageLimitError}
+                        </p>
+                    )}
                 </div>
+
+                {isVolcengine && (
+                    <VolcengineMaterialPicker
+                        value={materialAssetIds}
+                        onChange={(value) => form.set("asset_ids", value)}
+                        occupied={{ image: allImages.length }}
+                        limits={materialLimits}
+                    />
+                )}
+
+                {isSeedance25 && !hasUpstreamTexts && (
+                    <SeedancePromptOptimizer
+                        value={userPrompt}
+                        onChange={(value) => form.set("text", value)}
+                        duration={duration}
+                        referenceLabels={[
+                            ...connectedImageLabels,
+                            ...materialLabels,
+                        ]}
+                    />
+                )}
 
                 {hasUpstreamTexts ? (
                     <div className="space-y-2">

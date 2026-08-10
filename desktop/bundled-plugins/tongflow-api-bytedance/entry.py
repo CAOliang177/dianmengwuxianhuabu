@@ -1,0 +1,653 @@
+from __future__ import annotations
+
+import base64
+import http.client
+import json
+import os
+import re
+import socket
+import ssl
+import sys
+import time
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from tongflow.models.asset import Asset
+from tongflow.models.image_gen_video import ImageGenVideoInput, ImageGenVideoOutput
+from tongflow.models.image_image_gen_video import (
+    ImageImageGenVideoInput,
+    ImageImageGenVideoOutput,
+)
+from tongflow.models.images_gen_video import ImagesGenVideoInput, ImagesGenVideoOutput
+from tongflow.models.text_gen_video import TextGenVideoInput, TextGenVideoOutput
+from tongflow.node_slots import NodeSlots
+from tongflow.protocol import asset, prompt_media_to_bytes
+from tongflow.slots import node_slot
+
+DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+SEEDANCE_25_MODEL = "doubao-seedance-2-5-260628"
+DEFAULT_MODEL = SEEDANCE_25_MODEL
+
+TONGFLOW_SLOT_MODELS = {
+    "text-gen-video": [
+        "doubao-seedance-2-5-260628",
+        "doubao-seedance-2-0-260128",
+        "doubao-seedance-2-0-fast-260128",
+    ],
+    "image-gen-video": [
+        "doubao-seedance-2-5-260628",
+        "doubao-seedance-2-0-260128",
+        "doubao-seedance-2-0-fast-260128",
+    ],
+    "images-gen-video": [
+        "doubao-seedance-2-5-260628",
+        "doubao-seedance-2-0-260128",
+        "doubao-seedance-2-0-fast-260128",
+    ],
+    "image-image-gen-video": [
+        "doubao-seedance-2-5-260628",
+        "doubao-seedance-2-0-260128",
+        "doubao-seedance-2-0-fast-260128",
+    ],
+}
+
+_REQUEST_MODEL = ""
+
+
+def _env(name: str, fallback: str = "") -> str:
+    return (os.environ.get(name) or fallback).strip()
+
+
+def _api_key() -> str:
+    key = _env("ARK_API_KEY", _env("VOLCENGINE_API_KEY"))
+    if not key:
+        raise RuntimeError("请在设置中填写 ARK_API_KEY（火山方舟 API Key）")
+    return key
+
+
+def _base_url() -> str:
+    return _env("VOLCENGINE_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+
+
+def _model() -> str:
+    configured = _env("VOLCENGINE_VIDEO_MODEL", DEFAULT_MODEL)
+    # The canvas exposes official model aliases. When the user configured a
+    # custom Ark endpoint ID, keep using that endpoint while the default 2.5
+    # option is selected; explicit 2.0/2.0 Fast selections still win.
+    official_models = set(TONGFLOW_SLOT_MODELS["text-gen-video"])
+    if configured not in official_models and _REQUEST_MODEL in {"", DEFAULT_MODEL}:
+        return configured
+    return _REQUEST_MODEL or configured
+
+
+def _is_seedance_25(model: str) -> bool:
+    if model == SEEDANCE_25_MODEL:
+        return True
+    if model in {
+        "doubao-seedance-2-0-260128",
+        "doubao-seedance-2-0-fast-260128",
+    }:
+        return False
+    # Custom endpoint IDs do not encode their model family. Default to the 2.5
+    # request schema and let advanced users opt into the legacy schema.
+    schema = _env("VOLCENGINE_VIDEO_SCHEMA", "2.5").lower()
+    return schema not in {"2.0", "2", "legacy"}
+
+
+def _timeout() -> int:
+    try:
+        return max(60, int(_env("VOLCENGINE_TIMEOUT", "900")))
+    except ValueError:
+        return 900
+
+
+def _redact(value: object, limit: int = 1200) -> str:
+    text = str(value)
+    for name in (
+        "ARK_API_KEY",
+        "VOLCENGINE_API_KEY",
+        "VOLCENGINE_ACCESS_KEY_ID",
+        "VOLCENGINE_SECRET_ACCESS_KEY",
+    ):
+        secret = _env(name)
+        if secret:
+            text = text.replace(secret, "***")
+    return text[:limit]
+
+
+def _http(
+    url: str,
+    *,
+    method: str = "GET",
+    body: bytes | None = None,
+) -> bytes:
+    request = Request(
+        url,
+        data=body,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {_api_key()}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Connection": "close",
+            "User-Agent": "dianmeng-infinite-canvas/0.1",
+        },
+    )
+    try:
+        with urlopen(request, timeout=_timeout()) as response:  # noqa: S310
+            return response.read()
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"火山方舟 API HTTP {exc.code} ({url}): {_redact(detail or exc.reason)}"
+        ) from exc
+    except (
+        URLError,
+        ssl.SSLError,
+        socket.timeout,
+        TimeoutError,
+        ConnectionError,
+        http.client.RemoteDisconnected,
+    ) as exc:
+        reason = exc.reason if isinstance(exc, URLError) else exc
+        raise RuntimeError(
+            f"无法连接火山方舟 API ({url}): {_redact(reason)}"
+        ) from exc
+
+
+def _json(body: bytes) -> dict[str, Any]:
+    try:
+        value = json.loads(body.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError as exc:
+        preview = body.decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"火山方舟 API 返回的不是 JSON：{preview}") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError("火山方舟 API 返回格式错误：顶层不是对象")
+    return value
+
+
+def _ratio(width: int | None, height: int | None) -> str:
+    if not width or not height or width <= 0 or height <= 0:
+        return "adaptive"
+    known = {
+        (576, 1024): "9:16",
+        (1024, 576): "16:9",
+        (1024, 1024): "1:1",
+        (1024, 768): "4:3",
+        (768, 1024): "3:4",
+        (1344, 576): "21:9",
+    }
+    return known.get((int(width), int(height)), "adaptive")
+
+
+def _clean_prompt(prompt: str) -> str:
+    # Seedance 2.5 receives ratio and duration as top-level request fields.
+    # Remove controls copied from older prompt-suffix examples so they cannot
+    # contradict the values selected in the canvas.
+    cleaned = re.sub(r"\s*--ratio\s+\S+", "", prompt, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*--dur(?:ation)?\s+\S+", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
+def _split_asset_ids(value: object) -> list[dict[str, str]]:
+    raw: list[object] = []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("["):
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    raw.extend(parsed)
+            except json.JSONDecodeError:
+                raw.extend(re.split(r"[\s,;]+", stripped))
+        else:
+            raw.extend(re.split(r"[\s,;]+", stripped))
+    elif isinstance(value, list):
+        raw.extend(value)
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in raw:
+        kind = "image"
+        if isinstance(item, dict):
+            token = str(
+                item.get("id")
+                or item.get("assetId")
+                or item.get("asset_id")
+                or ""
+            ).strip()
+            candidate_kind = str(
+                item.get("type") or item.get("mediaType") or item.get("kind") or ""
+            ).lower()
+            if "video" in candidate_kind:
+                kind = "video"
+            elif "audio" in candidate_kind:
+                kind = "audio"
+        else:
+            token = str(item).strip()
+            match = re.match(r"^(image|video|audio):(.+)$", token, flags=re.IGNORECASE)
+            if match:
+                kind = match.group(1).lower()
+                token = match.group(2).strip()
+            elif token.lower().startswith("video://"):
+                kind, token = "video", token[8:]
+            elif token.lower().startswith("audio://"):
+                kind, token = "audio", token[8:]
+        if not token:
+            continue
+        if re.fullmatch(
+            r"(?:SID\[)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\]?",
+            token,
+            flags=re.IGNORECASE,
+        ):
+            raise RuntimeError(
+                "所选火山素材只有内部 SID，不能直接用于方舟生成。"
+                "请将该素材上传到画布后连接，或换用有效的 asset://asset-... 素材。"
+            )
+        if not token.startswith("asset://"):
+            token = f"asset://{token}"
+        key = f"{kind}:{token}"
+        if key not in seen:
+            seen.add(key)
+            result.append({"id": token, "type": kind})
+    return result
+
+
+def _mime(value: object) -> str:
+    if isinstance(value, Asset) and value.mime:
+        return value.mime
+    if isinstance(value, dict) and isinstance(value.get("mime"), str):
+        return str(value["mime"])
+    return "image/png"
+
+
+def _data_url(value: object) -> str:
+    encoded = base64.b64encode(prompt_media_to_bytes(value)).decode("ascii")
+    return f"data:{_mime(value)};base64,{encoded}"
+
+
+def _image_item(value: object, *, role: str = "reference_image") -> dict[str, Any]:
+    return {
+        "type": "image_url",
+        "image_url": {"url": _data_url(value)},
+        "role": role,
+    }
+
+
+def _media_item(value: object, *, kind: str) -> dict[str, Any]:
+    field = f"{kind}_url"
+    return {
+        "type": field,
+        field: {"url": _data_url(value)},
+        "role": f"reference_{kind}",
+    }
+
+
+def _asset_item(material: dict[str, str]) -> dict[str, Any]:
+    kind = material.get("type", "image")
+    raw = material.get("id", "")
+    if not raw.startswith("asset://"):
+        raw = f"asset://{raw}"
+    field = f"{kind}_url"
+    return {
+        "type": field,
+        field: {"url": raw},
+        "role": f"reference_{kind}",
+    }
+
+
+def _response_payload(response: dict[str, Any]) -> dict[str, Any]:
+    data = response.get("data")
+    return data if isinstance(data, dict) else response
+
+
+def _find_video_url(value: object, depth: int = 0) -> str | None:
+    if depth > 6:
+        return None
+    if isinstance(value, dict):
+        for key in ("video_url", "videoUrl", "file_url", "fileUrl", "url"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate:
+                return candidate
+            if isinstance(candidate, dict):
+                nested_url = candidate.get("url")
+                if isinstance(nested_url, str) and nested_url:
+                    return nested_url
+        for key in ("content", "output", "result", "data", "results"):
+            candidate = _find_video_url(value.get(key), depth + 1)
+            if candidate:
+                return candidate
+    elif isinstance(value, list):
+        for item in value:
+            candidate = _find_video_url(item, depth + 1)
+            if candidate:
+                return candidate
+    return None
+
+
+def _create_task(
+    prompt: str,
+    *,
+    width: int | None,
+    height: int | None,
+    duration: float | None,
+    resolution: str | None = None,
+    images: list[object] | None = None,
+    videos: list[object] | None = None,
+    audios: list[object] | None = None,
+    asset_ids: object = None,
+    image_role: str = "reference_image",
+    image_roles: list[str] | None = None,
+) -> Asset:
+    model = _model()
+    is_seedance_25 = _is_seedance_25(model)
+    max_images = 30 if is_seedance_25 else 9
+    provided_images = [image for image in images or [] if image is not None]
+    provided_videos = [video for video in videos or [] if video is not None]
+    provided_audios = [audio for audio in audios or [] if audio is not None]
+    materials = _split_asset_ids(asset_ids)
+    image_materials = sum(1 for item in materials if item["type"] == "image")
+    video_materials = sum(1 for item in materials if item["type"] == "video")
+    audio_materials = sum(1 for item in materials if item["type"] == "audio")
+    if len(provided_images) + image_materials > max_images:
+        raise RuntimeError(
+            f"当前模型最多支持 {max_images} 张参考图片，现有 {len(provided_images) + image_materials} 张"
+        )
+    if is_seedance_25 and (
+        len(provided_videos) + video_materials > 10
+        or len(provided_audios) + audio_materials > 10
+    ):
+        raise RuntimeError("Seedance 2.5 最多支持 10 个视频素材和 10 个音频素材")
+    if is_seedance_25 and (
+        len(provided_images)
+        + len(provided_videos)
+        + len(provided_audios)
+        + len(materials)
+        > 50
+    ):
+        raise RuntimeError("Seedance 2.5 单次最多支持 50 个参考素材")
+    if not is_seedance_25 and (
+        len(provided_videos) + video_materials > 3
+        or len(provided_audios) + audio_materials > 3
+    ):
+        raise RuntimeError("Seedance 2.0 最多支持 3 个视频素材和 3 个音频素材")
+    if (
+        len(provided_audios) + audio_materials > 0
+        and len(provided_images)
+        + image_materials
+        + len(provided_videos)
+        + video_materials
+        == 0
+    ):
+        raise RuntimeError("使用音频参考时，请至少同时连接一张图片或一个视频")
+
+    content: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": _clean_prompt(prompt),
+        }
+    ]
+    for index, image in enumerate(provided_images):
+        role = (
+            image_roles[index]
+            if image_roles is not None and index < len(image_roles)
+            else image_role
+        )
+        content.append(_image_item(image, role=role))
+    for video in provided_videos:
+        content.append(_media_item(video, kind="video"))
+    for audio in provided_audios:
+        content.append(_media_item(audio, kind="audio"))
+    for material in materials:
+        content.append(_asset_item(material))
+
+    duration_max = 30 if is_seedance_25 else 15
+    seconds = max(4, min(duration_max, int(round(duration or 5))))
+    request_body: dict[str, Any] = {
+        "model": model,
+        "content": content,
+        "ratio": _ratio(width, height),
+        "duration": seconds,
+        "return_last_frame": False,
+    }
+    requested_resolution = (
+        resolution or _env("VOLCENGINE_VIDEO_RESOLUTION", "720p")
+    ).strip().lower()
+    if is_seedance_25 or "fast" in model.lower():
+        allowed_resolutions = {"480p", "720p"}
+    else:
+        allowed_resolutions = {"480p", "720p", "1080p", "4k"}
+    request_body["resolution"] = (
+        requested_resolution
+        if requested_resolution in allowed_resolutions
+        else "720p"
+    )
+    request_body["generate_audio"] = _env(
+        "VOLCENGINE_GENERATE_AUDIO", "true"
+    ).lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+    if is_seedance_25:
+        output_format = _env("VOLCENGINE_OUTPUT_FORMAT", "mp4").lower()
+        request_body["output_format"] = output_format if output_format in {"mp4", "mov"} else "mp4"
+
+    endpoint = f"{_base_url()}/contents/generations/tasks"
+    response = _json(
+        _http(
+            endpoint,
+            method="POST",
+            body=json.dumps(request_body, ensure_ascii=False).encode("utf-8"),
+        )
+    )
+    payload = _response_payload(response)
+    task_id = (
+        response.get("id")
+        or response.get("task_id")
+        or payload.get("id")
+        or payload.get("task_id")
+    )
+    if not isinstance(task_id, str) or not task_id:
+        raise RuntimeError(
+            f"火山方舟未返回视频任务 ID：{json.dumps(response, ensure_ascii=False)[:500]}"
+        )
+    return _poll_task(endpoint, task_id, str(request_body.get("output_format", "mp4")))
+
+
+def _poll_task(endpoint: str, task_id: str, output_format: str = "mp4") -> Asset:
+    deadline = time.monotonic() + _timeout()
+    transient_failures = 0
+    while time.monotonic() < deadline:
+        try:
+            response = _json(_http(f"{endpoint}/{task_id}"))
+            transient_failures = 0
+        except RuntimeError as exc:
+            message = str(exc)
+            is_transient = (
+                "无法连接火山方舟 API" in message
+                or re.search(r"API HTTP (?:429|5\d\d)\b", message) is not None
+            )
+            if not is_transient:
+                raise
+            transient_failures += 1
+            delay = min(15.0, 1.5 * (2 ** min(transient_failures - 1, 4)))
+            print(
+                f"[tongflow] 火山方舟任务 {task_id} 查询暂时失败，{delay:.1f} 秒后重试：{_redact(message, 400)}",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+            continue
+        payload = _response_payload(response)
+        status = str(payload.get("status") or response.get("status") or "").lower()
+        video_url = _find_video_url(payload) or _find_video_url(response)
+        if status in {"succeeded", "completed", "success"} and video_url:
+            return _download_video(video_url, output_format=output_format)
+        if status in {"failed", "cancelled", "canceled", "expired"}:
+            error = payload.get("error") or response.get("error")
+            if isinstance(error, dict):
+                error = error.get("message") or error.get("code")
+            raise RuntimeError(f"火山方舟视频任务失败：{error or status}")
+        print(
+            f"[tongflow] 火山方舟视频任务 {task_id} 状态：{status or 'pending'}",
+            file=sys.stderr,
+        )
+        time.sleep(3)
+    raise RuntimeError(f"火山方舟视频任务超时（{_timeout()} 秒），任务 ID：{task_id}")
+
+
+def _download_video(url: str, *, output_format: str = "mp4") -> Asset:
+    last_error: Exception | None = None
+    for attempt in range(3):
+        request = Request(
+            url,
+            headers={
+                "Accept": "video/mp4,video/webm,application/octet-stream,*/*",
+                "Connection": "close",
+                "User-Agent": "dianmeng-infinite-canvas/0.1",
+            },
+        )
+        try:
+            with urlopen(request, timeout=_timeout()) as response:  # noqa: S310
+                mime = (
+                    response.headers.get("Content-Type", "")
+                    .split(";", 1)[0]
+                    .strip()
+                    .lower()
+                )
+                if mime and not (
+                    mime.startswith("video/") or mime == "application/octet-stream"
+                ):
+                    raise RuntimeError(
+                        f"火山方舟下载地址返回了非视频内容：{mime}"
+                    )
+                max_bytes = 512 * 1024 * 1024
+                content_length = response.headers.get("Content-Length")
+                if content_length and int(content_length) > max_bytes:
+                    raise RuntimeError("生成视频超过 512 MB 安全下载上限")
+                chunks: list[bytes] = []
+                total = 0
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise RuntimeError("生成视频超过 512 MB 安全下载上限")
+                    chunks.append(chunk)
+                body = b"".join(chunks)
+                if not body:
+                    raise RuntimeError("火山方舟下载地址返回了空文件")
+                resolved_format = "mov" if output_format.lower() == "mov" else "mp4"
+                resolved_mime = mime or (
+                    "video/quicktime" if resolved_format == "mov" else "video/mp4"
+                )
+                return asset(
+                    body,
+                    mime=resolved_mime,
+                    filename=f"seedance.{resolved_format}",
+                )
+        except (
+            HTTPError,
+            URLError,
+            ssl.SSLError,
+            socket.timeout,
+            TimeoutError,
+            ConnectionError,
+            http.client.IncompleteRead,
+            http.client.RemoteDisconnected,
+        ) as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.5 * (2**attempt))
+    raise RuntimeError(f"下载火山方舟生成视频失败：{last_error}") from last_error
+
+
+@node_slot(NodeSlots.TEXT_GEN_VIDEO)
+def text_gen_video(input: TextGenVideoInput) -> TextGenVideoOutput:
+    video = _create_task(
+        input.text,
+        width=input.width,
+        height=input.height,
+        duration=input.duration,
+        resolution=input.resolution,
+        asset_ids=input.asset_ids,
+    )
+    return TextGenVideoOutput(success=True, video=video)
+
+
+@node_slot(NodeSlots.IMAGE_GEN_VIDEO)
+def image_gen_video(input: ImageGenVideoInput) -> ImageGenVideoOutput:
+    video = _create_task(
+        input.text,
+        width=input.width,
+        height=input.height,
+        duration=input.duration,
+        resolution=input.resolution,
+        images=[input.image],
+        asset_ids=input.asset_ids,
+        image_role="first_frame",
+    )
+    return ImageGenVideoOutput(success=True, video=video)
+
+
+@node_slot(NodeSlots.IMAGES_GEN_VIDEO)
+def images_gen_video(input: ImagesGenVideoInput) -> ImagesGenVideoOutput:
+    video = _create_task(
+        input.text,
+        width=input.width,
+        height=input.height,
+        duration=input.duration,
+        resolution=input.resolution,
+        images=list(input.images or []),
+        videos=list(input.videos or []),
+        audios=list(input.audios or []),
+        asset_ids=input.asset_ids,
+    )
+    return ImagesGenVideoOutput(success=True, video=video)
+
+
+@node_slot(NodeSlots.IMAGE_IMAGE_GEN_VIDEO)
+def image_image_gen_video(
+    input: ImageImageGenVideoInput,
+) -> ImageImageGenVideoOutput:
+    video = _create_task(
+        input.text,
+        width=input.width,
+        height=input.height,
+        duration=input.duration,
+        resolution=input.resolution,
+        images=[input.image, input.end_image],
+        image_roles=["first_frame", "last_frame"],
+    )
+    return ImageImageGenVideoOutput(success=True, video=video)
+
+
+_HANDLERS: dict[str, Any] = {
+    NodeSlots.TEXT_GEN_VIDEO: text_gen_video,
+    NodeSlots.IMAGE_GEN_VIDEO: image_gen_video,
+    NodeSlots.IMAGES_GEN_VIDEO: images_gen_video,
+    NodeSlots.IMAGE_IMAGE_GEN_VIDEO: image_image_gen_video,
+}
+
+
+def main() -> int:
+    global _REQUEST_MODEL
+    try:
+        request = json.loads(sys.stdin.read() or "{}")
+        requested_model = str(request.get("model") or "").strip()
+        _REQUEST_MODEL = requested_model
+        handler = _HANDLERS.get(str(request.get("nodeSlot") or ""))
+        if handler is None:
+            raise RuntimeError(f"不支持的视频节点类型：{request.get('nodeSlot')}")
+        result = handler(request.get("prompt") or {})
+    except Exception as exc:  # noqa: BLE001
+        result = {"success": False, "error": str(exc)}
+    sys.stdout.write(json.dumps(result, ensure_ascii=False))
+    sys.stdout.flush()
+    return 0 if not isinstance(result, dict) or result.get("success", True) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

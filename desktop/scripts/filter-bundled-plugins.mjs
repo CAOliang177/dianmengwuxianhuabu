@@ -13,6 +13,7 @@ const allowedPluginIds = new Set([
     "tongflow-api-img2-relay",
     "tongflow-api-banana-relay",
     "tongflow-api-new-channel",
+    "tongflow-api-bytedance",
 ]);
 
 if (fs.existsSync(bundledPluginsDir)) {
@@ -26,6 +27,6 @@ if (fs.existsSync(bundledPluginsDir)) {
 }
 
 console.log(
-    "[assemble] retained bundled image providers:",
+    "[assemble] retained bundled providers:",
     [...allowedPluginIds].join(", "),
 );

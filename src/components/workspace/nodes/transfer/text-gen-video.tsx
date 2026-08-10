@@ -21,8 +21,21 @@ import { coerceBaseNodeData } from "@/lib/workflow/flow-node-data";
 import type { TongflowPluginNodeProps } from "@/types/tongflow-flow";
 import { AbiNodeShell } from "../base/abi-node-shell";
 import { AspectRatioPicker } from "../base/aspect-ratio-picker";
+import { useResolvedPluginId } from "../base/node-plugin-id-select";
 import { NodeTextarea } from "../base/node-textarea";
+import { SeedancePromptOptimizer } from "../base/seedance-prompt-optimizer";
 import { VideoDurationSlider } from "../base/video-duration-slider";
+import {
+    isSeedance25Model,
+    normalizeVideoResolution,
+    VideoResolutionPicker,
+} from "../base/video-resolution-picker";
+import {
+    materialReferenceLabels,
+    parseVolcengineMaterials,
+    VolcengineMaterialPicker,
+    volcengineMaterialLimitsForModel,
+} from "../base/volcengine-material-picker";
 
 const TEXT_GEN_VIDEO_SOURCE_SPEC =
     NODE_TYPE_SOURCE_SPEC.textGenVideoNode as SourceSpec<"text-gen-video">;
@@ -34,6 +47,10 @@ const TextGenVideoNode = ({
     const t = useTranslations("Workspace.nodes");
     const tActions = useTranslations("Workspace.nodes.actions");
     const form = useAbiForm("text-gen-video");
+    const { resolved: activePluginId } = useResolvedPluginId(
+        "text-gen-video",
+        data,
+    );
 
     const nodeId = useNodeId();
     const nodeLookup = useStore((state) => state.nodeLookup);
@@ -81,6 +98,19 @@ const TextGenVideoNode = ({
     const height = (form.state.height as number | undefined) ?? 576;
     const durationSeconds =
         (form.state.duration as number | undefined) ?? VIDEO_DURATION_DEFAULT;
+    const activeModel = String(data.pluginModel || "").trim();
+    const isVolcengine = activePluginId === "tongflow-api-bytedance";
+    const isSeedance25 = isVolcengine && isSeedance25Model(activeModel);
+    const durationMax = isSeedance25 ? 30 : 15;
+    const storedMaterialValue =
+        (form.state.asset_ids as string | undefined) ?? "";
+    const materialValue = isVolcengine ? storedMaterialValue : "";
+    const materialLabels = materialReferenceLabels(
+        parseVolcengineMaterials(materialValue),
+    );
+    const storedResolution = form.state.resolution as string | undefined;
+    const resolution = normalizeVideoResolution(storedResolution, activeModel);
+    const materialLimits = volcengineMaterialLimitsForModel(activeModel);
 
     // `duration` is ABI-required; persist the displayed default so execution
     // sends the same seconds the slider shows (otherwise plugins fall back to
@@ -89,6 +119,21 @@ const TextGenVideoNode = ({
         if (form.state.duration === undefined)
             form.set("duration", VIDEO_DURATION_DEFAULT);
     }, [form.state.duration, form.set]);
+
+    useEffect(() => {
+        if (!activePluginId) return;
+        if (!isVolcengine && storedMaterialValue) form.set("asset_ids", "");
+    }, [activePluginId, isVolcengine, storedMaterialValue, form.set]);
+
+    useEffect(() => {
+        if (!activePluginId) return;
+        if (isVolcengine) {
+            if (storedResolution !== resolution)
+                form.set("resolution", resolution);
+            return;
+        }
+        if (storedResolution !== undefined) form.set("resolution", undefined);
+    }, [activePluginId, isVolcengine, storedResolution, resolution, form.set]);
 
     const currentRatio: AspectRatio =
         VIDEO_ASPECT_RATIOS.find(
@@ -109,6 +154,21 @@ const TextGenVideoNode = ({
             executeDisabled={executeDisabled}
         >
             <div className="p-4 space-y-4">
+                {isVolcengine && (
+                    <VolcengineMaterialPicker
+                        value={materialValue}
+                        onChange={(value) => form.set("asset_ids", value)}
+                        limits={materialLimits}
+                    />
+                )}
+                {isSeedance25 && !hasUpstreamTexts && (
+                    <SeedancePromptOptimizer
+                        value={localText}
+                        onChange={(value) => form.set("text", value)}
+                        duration={durationSeconds}
+                        referenceLabels={materialLabels}
+                    />
+                )}
                 {hasUpstreamTexts ? (
                     <Card className="p-3 bg-muted/50">
                         <div className="space-y-2">
@@ -145,9 +205,19 @@ const TextGenVideoNode = ({
                     showSize
                 />
 
+                {isVolcengine && (
+                    <VideoResolutionPicker
+                        model={activeModel}
+                        value={resolution}
+                        onChange={(value) => form.set("resolution", value)}
+                    />
+                )}
+
                 <VideoDurationSlider
                     value={durationSeconds}
                     onChange={(dur) => form.set("duration", dur)}
+                    min={4}
+                    max={durationMax}
                 />
             </div>
         </AbiNodeShell>

@@ -14,14 +14,18 @@ import {
 export interface VideoDurationSliderProps {
     value: number;
     onChange: (duration: number) => void;
+    min?: number;
+    max?: number;
 }
 
 export function VideoDurationSlider({
     value,
     onChange,
+    min = VIDEO_DURATION_MIN,
+    max = VIDEO_DURATION_MAX,
 }: VideoDurationSliderProps) {
     const t = useTranslations("Workspace.nodes");
-    const clamped = clampVideoDuration(value);
+    const clamped = clampVideoDuration(value, min, max);
 
     useEffect(() => {
         if (clamped !== value) onChange(clamped);
@@ -39,15 +43,17 @@ export function VideoDurationSlider({
                 </div>
                 <Slider
                     value={[clamped]}
-                    onValueChange={([v]) => onChange(clampVideoDuration(v))}
-                    min={VIDEO_DURATION_MIN}
-                    max={VIDEO_DURATION_MAX}
+                    onValueChange={([v]) =>
+                        onChange(clampVideoDuration(v, min, max))
+                    }
+                    min={min}
+                    max={max}
                     step={1}
                     className="w-full"
                 />
                 <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>{VIDEO_DURATION_MIN}s</span>
-                    <span>{VIDEO_DURATION_MAX}s</span>
+                    <span>{min}s</span>
+                    <span>{max}s</span>
                 </div>
             </div>
         </Card>

@@ -23,9 +23,17 @@ const NEW_CHANNEL_MODEL_LABELS: Record<string, string> = {
     "gpt-image-2-pro": "GPT Image 2 Pro",
 };
 
+const BYTEDANCE_MODEL_LABELS: Record<string, string> = {
+    "doubao-seedance-2-5-260628": "Seedance 2.5",
+    "doubao-seedance-2-0-260128": "Seedance 2.0",
+    "doubao-seedance-2-0-fast-260128": "Seedance 2.0 Fast",
+};
+
 export function modelDisplayName(pluginId: string, model: string): string {
     if (pluginId === "tongflow-api-new-channel")
         return NEW_CHANNEL_MODEL_LABELS[model] ?? model;
+    if (pluginId === "tongflow-api-bytedance")
+        return BYTEDANCE_MODEL_LABELS[model] ?? model;
     return model;
 }
 

@@ -87,6 +87,72 @@ function isSupportedImageFile(file: File): boolean {
     );
 }
 
+const UNIFIED_VIDEO_NODE_TYPES = new Set([
+    "textGenVideoNode",
+    "imageGenVideoNode",
+    "imagesGenVideoNode",
+    "imageImageGenVideoNode",
+]);
+
+function defaultVideoModeForType(type: string | undefined) {
+    if (type === "imagesGenVideoNode") return "reference";
+    if (type === "imageGenVideoNode") return "first";
+    if (type === "imageImageGenVideoNode") return "first-last";
+    return "text";
+}
+
+function mediaKindForConnection(
+    sourceType: string | undefined,
+    sourceHandle: string | null | undefined,
+) {
+    if (sourceType === "imageNode" || sourceHandle === "out:image")
+        return "image";
+    if (sourceType === "videoNode" || sourceHandle === "out:video")
+        return "video";
+    if (sourceType === "audioNode" || sourceHandle === "out:audio")
+        return "audio";
+    return undefined;
+}
+
+function normalizeUnifiedVideoConnection(
+    connection: Connection,
+    nodes: Node[],
+    edges: Edge[],
+    reconnectingEdgeId?: string | null,
+): Connection {
+    if (connection.targetHandle !== "in:references") return connection;
+    const target = nodes.find((node) => node.id === connection.target);
+    if (!target || !UNIFIED_VIDEO_NODE_TYPES.has(target.type ?? ""))
+        return connection;
+    const source = nodes.find((node) => node.id === connection.source);
+    const kind = mediaKindForConnection(source?.type, connection.sourceHandle);
+    if (!kind) return connection;
+
+    const storedMode = (target.data as Record<string, unknown>).videoMode;
+    const mode =
+        typeof storedMode === "string"
+            ? storedMode
+            : defaultVideoModeForType(target.type);
+    let targetHandle = "in:references";
+    if (mode === "text" || mode === "reference") {
+        targetHandle = `in:${kind}s`;
+    } else if (kind === "image" && mode === "first") {
+        targetHandle = "in:image";
+    } else if (kind === "image" && mode === "first-last") {
+        const occupied = new Set(
+            edges
+                .filter(
+                    (edge) =>
+                        edge.target === target.id &&
+                        edge.id !== reconnectingEdgeId,
+                )
+                .map((edge) => edge.targetHandle),
+        );
+        targetHandle = occupied.has("in:image") ? "in:end_image" : "in:image";
+    }
+    return { ...connection, targetHandle };
+}
+
 /**
  * Workspace inner component
  * Must be used inside a ReactFlowProvider
@@ -155,20 +221,36 @@ function WorkspaceInner({
     const onNodesChange = useFlow.getState().onNodesChange;
     const onEdgesChange = useFlow.getState().onEdgesChange;
     const onSelectionChange = useFlow.getState().onSelectionChange;
-    const onConnect = useFlow.getState().onConnect;
+    const storeOnConnect = useFlow.getState().onConnect;
     const reactFlowInstance = useReactFlow();
 
     const isValidConnection = useCallback<IsValidConnection<Edge>>(
         (connection) => {
             const { nodes, edges, reconnectingEdgeId } = useFlow.getState();
-            return isValidFlowConnection(
+            const normalized = normalizeUnifiedVideoConnection(
                 connection as Connection,
+                nodes,
+                edges,
+                reconnectingEdgeId,
+            );
+            return isValidFlowConnection(
+                normalized,
                 nodes,
                 edges,
                 reconnectingEdgeId ?? undefined,
             );
         },
         [],
+    );
+
+    const onConnect = useCallback(
+        (connection: Connection) => {
+            const { nodes, edges } = useFlow.getState();
+            storeOnConnect(
+                normalizeUnifiedVideoConnection(connection, nodes, edges),
+            );
+        },
+        [storeOnConnect],
     );
 
     const tEdges = useTranslations("Workspace.edges");
@@ -185,8 +267,14 @@ function WorkspaceInner({
 
     const onReconnect = useCallback<OnReconnect<Edge>>(
         (oldEdge, newConnection) => {
-            const { edges, setEdges } = useFlow.getState();
-            setEdges(reconnectEdge(oldEdge, newConnection, edges));
+            const { nodes, edges, setEdges } = useFlow.getState();
+            const normalized = normalizeUnifiedVideoConnection(
+                newConnection,
+                nodes,
+                edges,
+                oldEdge.id,
+            );
+            setEdges(reconnectEdge(oldEdge, normalized, edges));
         },
         [],
     );
@@ -560,11 +648,21 @@ function WorkspaceInner({
     const createReferencedNode = useCallback(
         (type: "text" | "image" | "video") => {
             if (!referenceMenu) return;
+            const source = useFlow
+                .getState()
+                .nodes.find((node) => node.id === referenceMenu.sourceId);
+            const sourceType = source?.type;
+            const needsMultimodalVideoNode =
+                sourceType === "videoNode" ||
+                sourceType === "audioNode" ||
+                referenceMenu.fileKeys.length > 1;
             const targetType =
                 type === "image"
                     ? "textGenImageNode"
                     : type === "video"
-                      ? "imageGenVideoNode"
+                      ? needsMultimodalVideoNode
+                          ? "imagesGenVideoNode"
+                          : "imageGenVideoNode"
                       : "imageGenTextNode";
             const data: Record<string, unknown> =
                 type === "image"
@@ -578,17 +676,24 @@ function WorkspaceInner({
             const targetId = useFlow
                 .getState()
                 .addNode({ type: targetType, data }, referenceMenu.position);
-            const source = useFlow
-                .getState()
-                .nodes.find((node) => node.id === referenceMenu.sourceId);
             const resolvedSourceHandle =
                 referenceMenu.sourceHandle ??
-                (source?.type === "imageNode" ? "out:imageNode" : null);
+                (sourceType ? `out:${sourceType}` : null);
             useFlow.getState().onConnect({
                 source: referenceMenu.sourceId,
                 sourceHandle: resolvedSourceHandle,
                 target: targetId,
-                targetHandle: type === "image" ? "in:images" : "in:image",
+                targetHandle:
+                    type === "image"
+                        ? "in:images"
+                        : type === "video" && sourceType === "videoNode"
+                          ? "in:videos"
+                          : type === "video" && sourceType === "audioNode"
+                            ? "in:audios"
+                            : type === "video" &&
+                                referenceMenu.fileKeys.length > 1
+                              ? "in:images"
+                              : "in:image",
             });
             setReferenceMenu(null);
         },

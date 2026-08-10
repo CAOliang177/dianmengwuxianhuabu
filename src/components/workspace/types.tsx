@@ -27,8 +27,6 @@ import ConcatVideoNode from "./nodes/compose/concat-video";
 import ConcatVideoComposeNode from "./nodes/compose/concat-video";
 import ImageFusionNode from "./nodes/compose/image-fusion";
 import ImageGenVideoComposeNode from "./nodes/compose/image-gen-video-compose";
-import ImageImageGenVideoNode from "./nodes/compose/image-image-gen-video";
-import ImagesGenVideoNode from "./nodes/compose/images-gen-video";
 import MergeVideoAudioNode from "./nodes/compose/merge-video-audio";
 import SpeechImageGenVideoNode from "./nodes/compose/speech-image-gen-video";
 import SpeechTextGenVideoNode from "./nodes/compose/speech-text-gen-video";
@@ -62,7 +60,6 @@ import ImageGenImageUpscaleNode from "./nodes/transfer/image-gen-image-upscale";
 import ImageGenModelNode from "./nodes/transfer/image-gen-model";
 import ImageGenTextNode from "./nodes/transfer/image-gen-text";
 // Transform nodes
-import ImageGenVideoNode from "./nodes/transfer/image-gen-video";
 import LinkGenTextNode from "./nodes/transfer/link-gen-text";
 import RemoveVideoSubtitleNode from "./nodes/transfer/remove-subtitle";
 import RemoveVideoAudioNode from "./nodes/transfer/remove-video-audio";
@@ -76,7 +73,7 @@ import TextGenSpeechCloneNode from "./nodes/transfer/text-gen-speech-clone";
 import TextGenSpeechInstructNode from "./nodes/transfer/text-gen-speech-instruct";
 import TextGenSpeechPresetNode from "./nodes/transfer/text-gen-speech-preset";
 import GenTextNode from "./nodes/transfer/text-gen-text";
-import TextGenVideoNode from "./nodes/transfer/text-gen-video";
+import UnifiedVideoGenNode from "./nodes/transfer/unified-video-gen";
 import VideoEditNode from "./nodes/transfer/video-edit";
 import VideoGenTextNode from "./nodes/transfer/video-gen-text";
 import VideoGenTextSpeechRecognizeNode from "./nodes/transfer/video-gen-text-speech-recognize";
@@ -106,9 +103,9 @@ export const NODE_TYPES: NodeTypes = {
     addModelNode: AddModelNode,
 
     // Transform nodes - Implemented
-    imageGenVideoNode: ImageGenVideoNode,
+    imageGenVideoNode: UnifiedVideoGenNode,
     imageGenVideoComposeNode: ImageGenVideoComposeNode,
-    textGenVideoNode: TextGenVideoNode,
+    textGenVideoNode: UnifiedVideoGenNode,
     imageGenModelNode: ImageGenModelNode,
     speechGenVideoNode: SpeechGenVideoNode,
     imageGenImageNode: ImageGenImageNode,
@@ -149,13 +146,13 @@ export const NODE_TYPES: NodeTypes = {
     mergeVideoAudioNode: MergeVideoAudioNode,
     audioVideoLipSyncNode: AudioVideoLipSyncNode,
     imageFusionNode: ImageFusionNode,
-    imagesGenVideoNode: ImagesGenVideoNode,
+    imagesGenVideoNode: UnifiedVideoGenNode,
     speechImageGenVideoNode: SpeechImageGenVideoNode,
     speechTextGenVideoNode: SpeechTextGenVideoNode,
     speechVideoGenVideoNode: speechVideoGenVideoNode,
     videoImageGenVideoMixNode: VideoImageGenVideoMixNode,
     videoImageGenVideoMoveNode: VideoImageGenVideoMoveNode,
-    imageImageGenVideoNode: ImageImageGenVideoNode,
+    imageImageGenVideoNode: UnifiedVideoGenNode,
     textAudioGenSpeechNode: TextAudioGenSpeechNode,
     textsGenTextNode: TextsGenTextNode,
     concatVideoComposeNode: ConcatVideoComposeNode,

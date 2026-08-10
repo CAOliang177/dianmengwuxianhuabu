@@ -1,0 +1,70 @@
+{
+    "plugin": {
+        "name": "火山方舟 Seedance",
+        "description": "火山引擎 Ark 官方 Seedance 2.5/2.0 视频生成接口，支持文生视频、图生视频、多模态参考和素材库选择。",
+        "icon": "/plugins/tongflow-api-bytedance.svg"
+    },
+    "env": [
+        {
+            "key": "ARK_API_KEY",
+            "required": true,
+            "description": "火山方舟 API Key；可在方舟控制台 API Key 页面创建",
+            "url": "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey"
+        },
+        {
+            "key": "VOLCENGINE_BASE_URL",
+            "default": "https://ark.cn-beijing.volces.com/api/v3",
+            "description": "火山方舟 API 地址，默认北京地域"
+        },
+        {
+            "key": "VOLCENGINE_VIDEO_MODEL",
+            "default": "doubao-seedance-2-5-260628",
+            "description": "默认 Seedance 模型；2.5 官方模型 ID 为 doubao-seedance-2-5-260628，也可填写自己的推理接入点 ID"
+        },
+        {
+            "key": "VOLCENGINE_VIDEO_SCHEMA",
+            "default": "2.5",
+            "description": "自定义推理接入点所用的请求能力版本；默认 2.5，旧接入点可填 2.0"
+        },
+        {
+            "key": "VOLCENGINE_ACCESS_KEY_ID",
+            "description": "可选：火山素材库浏览使用的账号 Access Key ID。视频生成本身不需要此项。",
+            "url": "https://console.volcengine.com/iam"
+        },
+        {
+            "key": "VOLCENGINE_SECRET_ACCESS_KEY",
+            "description": "可选：与 Access Key ID 配套的 Secret Access Key；仅在素材库弹窗加载分组/素材时使用。",
+            "url": "https://console.volcengine.com/iam"
+        },
+        {
+            "key": "VOLCENGINE_REGION",
+            "default": "cn-beijing",
+            "description": "素材库 OpenAPI 地域；可填写 cn-beijing 或华北2（北京），画布会自动转换"
+        },
+        {
+            "key": "VOLCENGINE_PROJECT_NAME",
+            "default": "default",
+            "description": "素材所在的火山项目名称，必须与创建素材组时选择的项目一致；例如 WHDDM"
+        },
+        {
+            "key": "VOLCENGINE_VIDEO_RESOLUTION",
+            "default": "720p",
+            "description": "输出清晰度。Seedance 2.5 与 2.0 Fast 支持 480p/720p；2.0 标准版还支持 1080p/4k"
+        },
+        {
+            "key": "VOLCENGINE_GENERATE_AUDIO",
+            "default": "true",
+            "description": "Seedance 2.5 是否生成声音，填写 false 可关闭"
+        },
+        {
+            "key": "VOLCENGINE_OUTPUT_FORMAT",
+            "default": "mp4",
+            "description": "Seedance 2.5 输出格式，可选 mp4 或 mov"
+        },
+        {
+            "key": "VOLCENGINE_TIMEOUT",
+            "default": "900",
+            "description": "视频任务提交、轮询和下载的总超时秒数"
+        }
+    ]
+}

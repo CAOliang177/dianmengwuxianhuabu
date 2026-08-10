@@ -32,15 +32,22 @@ const IMG2_MODELS = [
 ];
 
 const NEW_CHANNEL_MODELS = [
-	"gemini-3-pro-image-preview",
-	"gemini-3.1-flash-image-preview",
-	"gpt-image-2-pro",
+    "gemini-3-pro-image-preview",
+    "gemini-3.1-flash-image-preview",
+    "gpt-image-2-pro",
 ];
 
-const ALLOWED_IMAGE_PLUGIN_IDS = new Set([
+const BYTEDANCE_VIDEO_MODELS = [
+    "doubao-seedance-2-5-260628",
+    "doubao-seedance-2-0-260128",
+    "doubao-seedance-2-0-fast-260128",
+];
+
+const ALLOWED_BUNDLED_PLUGIN_IDS = new Set([
     "tongflow-api-img2-relay",
     "tongflow-api-banana-relay",
     "tongflow-api-new-channel",
+    "tongflow-api-bytedance",
 ]);
 
 const CORE_PLUGIN_CONFIGS: Record<string, PluginConfig> = {
@@ -89,6 +96,25 @@ const CORE_PLUGIN_CONFIGS: Record<string, PluginConfig> = {
         entryFile: "entry.py",
         needsDeploy: false,
     },
+    "tongflow-api-bytedance": {
+        localSubdir: "tongflow-api-bytedance",
+        methodsByNodeSlot: {
+            "text-gen-video": {
+                methodName: "text_gen_video",
+                models: BYTEDANCE_VIDEO_MODELS,
+            },
+            "image-gen-video": {
+                methodName: "image_gen_video",
+                models: BYTEDANCE_VIDEO_MODELS,
+            },
+            "images-gen-video": {
+                methodName: "images_gen_video",
+                models: BYTEDANCE_VIDEO_MODELS,
+            },
+        },
+        entryFile: "entry.py",
+        needsDeploy: false,
+    },
 };
 
 /**
@@ -130,10 +156,9 @@ function withCorePluginFallback(registry: PluginsRegistry): PluginsRegistry {
                     // The Python scanner discovers method names but does not
                     // currently preserve TONGFLOW_SLOT_MODELS. Retain the
                     // installer-bundled model list when discovery returns none.
-                    models:
-                        method.models?.length
-                            ? method.models
-                            : bundledMethod?.models,
+                    models: method.models?.length
+                        ? method.models
+                        : bundledMethod?.models,
                 };
             }
             plugins[pluginId] = {
@@ -152,14 +177,14 @@ function withCorePluginFallback(registry: PluginsRegistry): PluginsRegistry {
 
     const allowedPlugins = Object.fromEntries(
         Object.entries(plugins).filter(([pluginId]) =>
-            ALLOWED_IMAGE_PLUGIN_IDS.has(pluginId),
+            ALLOWED_BUNDLED_PLUGIN_IDS.has(pluginId),
         ),
     );
     const allowedNodePluginMap = Object.fromEntries(
         Object.entries(nodePluginMap).map(([slot, pluginIds]) => [
             slot,
             pluginIds.filter((pluginId) =>
-                ALLOWED_IMAGE_PLUGIN_IDS.has(pluginId),
+                ALLOWED_BUNDLED_PLUGIN_IDS.has(pluginId),
             ),
         ]),
     );

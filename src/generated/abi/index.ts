@@ -212,7 +212,56 @@ const _slot_images_gen_video_inputs = {
             type: "string",
             minLength: 1,
         },
+        asset_ids: {
+            type: "string",
+            description:
+                "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines",
+        },
+        resolution: {
+            type: "string",
+            enum: ["480p", "720p", "1080p", "4k"],
+        },
         images: {
+            type: "array",
+            items: {
+                type: "object",
+                required: ["bytesBase64"],
+                properties: {
+                    bytesBase64: {
+                        type: "string",
+                        minLength: 1,
+                    },
+                    filename: {
+                        type: "string",
+                    },
+                    mime: {
+                        type: "string",
+                    },
+                },
+                additionalProperties: false,
+            },
+        },
+        videos: {
+            type: "array",
+            items: {
+                type: "object",
+                required: ["bytesBase64"],
+                properties: {
+                    bytesBase64: {
+                        type: "string",
+                        minLength: 1,
+                    },
+                    filename: {
+                        type: "string",
+                    },
+                    mime: {
+                        type: "string",
+                    },
+                },
+                additionalProperties: false,
+            },
+        },
+        audios: {
             type: "array",
             items: {
                 type: "object",
@@ -1334,6 +1383,15 @@ const _slot_image_gen_video_inputs = {
         text: {
             type: "string",
         },
+        asset_ids: {
+            type: "string",
+            description:
+                "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines",
+        },
+        resolution: {
+            type: "string",
+            enum: ["480p", "720p", "1080p", "4k"],
+        },
         seed: {
             type: "number",
         },
@@ -2210,6 +2268,10 @@ const _slot_image_image_gen_video_inputs = {
         text: {
             type: "string",
         },
+        resolution: {
+            type: "string",
+            enum: ["480p", "720p", "1080p", "4k"],
+        },
         duration: {
             type: "number",
         },
@@ -2308,6 +2370,15 @@ const _slot_text_gen_video_inputs = {
     properties: {
         text: {
             type: "string",
+        },
+        asset_ids: {
+            type: "string",
+            description:
+                "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines",
+        },
+        resolution: {
+            type: "string",
+            enum: ["480p", "720p", "1080p", "4k"],
         },
         duration: {
             type: "number",
@@ -3770,7 +3841,28 @@ export const ABI_NODES = {
                     type: "string",
                     minLength: 1,
                 },
+                asset_ids: {
+                    type: "string",
+                    description:
+                        "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines",
+                },
+                resolution: {
+                    type: "string",
+                    enum: ["480p", "720p", "1080p", "4k"],
+                },
                 images: {
+                    type: "array",
+                    items: {
+                        $ref: "#/$defs/Asset",
+                    },
+                },
+                videos: {
+                    type: "array",
+                    items: {
+                        $ref: "#/$defs/Asset",
+                    },
+                },
+                audios: {
                     type: "array",
                     items: {
                         $ref: "#/$defs/Asset",
@@ -4409,6 +4501,15 @@ export const ABI_NODES = {
                 text: {
                     type: "string",
                 },
+                asset_ids: {
+                    type: "string",
+                    description:
+                        "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines",
+                },
+                resolution: {
+                    type: "string",
+                    enum: ["480p", "720p", "1080p", "4k"],
+                },
                 seed: {
                     type: "number",
                 },
@@ -4897,6 +4998,10 @@ export const ABI_NODES = {
                 text: {
                     type: "string",
                 },
+                resolution: {
+                    type: "string",
+                    enum: ["480p", "720p", "1080p", "4k"],
+                },
                 duration: {
                     type: "number",
                 },
@@ -4948,6 +5053,15 @@ export const ABI_NODES = {
             properties: {
                 text: {
                     type: "string",
+                },
+                asset_ids: {
+                    type: "string",
+                    description:
+                        "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines",
+                },
+                resolution: {
+                    type: "string",
+                    enum: ["480p", "720p", "1080p", "4k"],
                 },
                 duration: {
                     type: "number",

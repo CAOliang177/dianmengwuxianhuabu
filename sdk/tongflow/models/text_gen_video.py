@@ -10,8 +10,10 @@ class TextGenVideoInput(BaseModel):
 
     duration: float
     text: str
+    asset_ids: str | None = None
     enhance_prompt: bool | None = None
     height: int | None = None
+    resolution: str | None = None
     seed: float | None = None
     width: int | None = None
 

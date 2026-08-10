@@ -3,7 +3,41 @@ import type { Edge, Node } from "@xyflow/react";
 const IMAGE_REFERENCE_SOURCE_TYPES = new Set(["imageNode", "textGenImageNode"]);
 
 type ReferenceNode = Pick<Node, "type" | "data">;
-type ReferenceEdge = Pick<Edge, "source" | "target">;
+type ReferenceEdge = Pick<Edge, "source" | "target"> & { id?: string };
+
+export type ConnectedImageReference = {
+    fileKey: string;
+    edgeId: string;
+};
+
+export function collectConnectedImageReferenceEntries(
+    targetNodeId: string,
+    edges: ReadonlyArray<ReferenceEdge>,
+    getNode: (nodeId: string) => ReferenceNode | undefined,
+): ConnectedImageReference[] {
+    return edges
+        .filter((edge) => edge.target === targetNodeId)
+        .flatMap((edge) => {
+            const source = getNode(edge.source);
+            if (
+                !source?.type ||
+                !IMAGE_REFERENCE_SOURCE_TYPES.has(source.type)
+            ) {
+                return [];
+            }
+            const fileKeys = (source.data as { fileKeys?: unknown })?.fileKeys;
+            if (!Array.isArray(fileKeys)) return [];
+            return fileKeys
+                .filter(
+                    (fileKey): fileKey is string =>
+                        typeof fileKey === "string" && fileKey.length > 0,
+                )
+                .map((fileKey) => ({
+                    fileKey,
+                    edgeId: edge.id || `${edge.source}->${edge.target}`,
+                }));
+        });
+}
 
 /**
  * Collect one reference entry for every connected image-producing node.
@@ -18,21 +52,9 @@ export function collectConnectedImageReferences(
     edges: ReadonlyArray<ReferenceEdge>,
     getNode: (nodeId: string) => ReferenceNode | undefined,
 ): string[] {
-    return edges
-        .filter((edge) => edge.target === targetNodeId)
-        .flatMap((edge) => {
-            const source = getNode(edge.source);
-            if (
-                !source?.type ||
-                !IMAGE_REFERENCE_SOURCE_TYPES.has(source.type)
-            ) {
-                return [];
-            }
-            const fileKeys = (source.data as { fileKeys?: unknown })?.fileKeys;
-            if (!Array.isArray(fileKeys)) return [];
-            return fileKeys.filter(
-                (fileKey): fileKey is string =>
-                    typeof fileKey === "string" && fileKey.length > 0,
-            );
-        });
+    return collectConnectedImageReferenceEntries(
+        targetNodeId,
+        edges,
+        getNode,
+    ).map((entry) => entry.fileKey);
 }

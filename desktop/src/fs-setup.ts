@@ -19,12 +19,16 @@ const PUBLIC_IMAGE_PRESETS: Record<string, string> = {
     NEW_CHANNEL_EDIT_ASYNC: "false",
     NEW_CHANNEL_REQUEST_TIMEOUT: "90",
     NEW_CHANNEL_TIMEOUT: "600",
+    VOLCENGINE_BASE_URL: "https://ark.cn-beijing.volces.com/api/v3",
+    VOLCENGINE_VIDEO_MODEL: "doubao-seedance-2-5-260628",
+    VOLCENGINE_TIMEOUT: "900",
 };
 
-const BUNDLED_IMAGE_PLUGIN_IDS = new Set([
+const BUNDLED_CORE_PLUGIN_IDS = new Set([
     "tongflow-api-img2-relay",
     "tongflow-api-banana-relay",
     "tongflow-api-new-channel",
+    "tongflow-api-bytedance",
 ]);
 
 const RETIRED_BUNDLED_PLUGIN_IDS = [
@@ -91,7 +95,7 @@ export function ensureUserDirs(): void {
     const bundled = bundledPluginsDir();
     if (!fs.existsSync(bundled)) return;
     for (const name of fs.readdirSync(bundled)) {
-        if (!BUNDLED_IMAGE_PLUGIN_IDS.has(name)) continue;
+        if (!BUNDLED_CORE_PLUGIN_IDS.has(name)) continue;
         const source = `${bundled}/${name}`;
         const destination = `${pluginsDir()}/${name}`;
         if (!fs.statSync(source).isDirectory()) continue;

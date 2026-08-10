@@ -97,7 +97,23 @@ export interface NodeTextareaProps
     enableFullscreen?: boolean;
     /** Fullscreen dialog title */
     fullscreenTitle?: string;
+    /** References displayed after typing @ in the prompt. */
+    referenceMentions?: NodeTextareaMention[];
 }
+
+export interface NodeTextareaMention {
+    token: string;
+    label?: string;
+    description?: string;
+    type?: "image" | "video" | "audio";
+}
+
+type MentionState = {
+    start: number;
+    end: number;
+    query: string;
+    fullscreen: boolean;
+};
 
 /**
  * Shared node Textarea component with voice input support
@@ -147,6 +163,7 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
             voiceLang = "zh-CN",
             enableFullscreen = true,
             fullscreenTitle,
+            referenceMentions = [],
             ...props
         },
         ref,
@@ -159,6 +176,10 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
         const [speechSupported, setSpeechSupported] = useState(false);
         const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
         const [fullscreenValue, setFullscreenValue] = useState("");
+        const [mentionState, setMentionState] = useState<MentionState | null>(
+            null,
+        );
+        const [activeMentionIndex, setActiveMentionIndex] = useState(0);
         const recognitionRef = useRef<SpeechRecognition | null>(null);
         const textareaRef = useRef<HTMLTextAreaElement | null>(null);
         const fullscreenTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -353,15 +374,176 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
             };
         }, []);
 
+        const updateMentionState = useCallback(
+            (nextValue: string, caret: number, fullscreen: boolean) => {
+                if (referenceMentions.length === 0) {
+                    setMentionState(null);
+                    return;
+                }
+                const match = nextValue.slice(0, caret).match(/@([^@\s]*)$/);
+                if (!match) {
+                    setMentionState(null);
+                    return;
+                }
+                setMentionState({
+                    start: caret - match[0].length,
+                    end: caret,
+                    query: match[1] || "",
+                    fullscreen,
+                });
+                setActiveMentionIndex(0);
+            },
+            [referenceMentions.length],
+        );
+
+        const mentionOptions = useMemo(() => {
+            if (!mentionState) return [];
+            const query = mentionState.query.toLowerCase();
+            const seen = new Set<string>();
+            return referenceMentions.filter((mention) => {
+                if (!mention.token || seen.has(mention.token)) return false;
+                seen.add(mention.token);
+                if (!query) return true;
+                return `${mention.token} ${mention.label || ""} ${mention.description || ""}`
+                    .toLowerCase()
+                    .includes(query);
+            });
+        }, [mentionState, referenceMentions]);
+
+        const chooseMention = useCallback(
+            (mention: NodeTextareaMention) => {
+                if (!mentionState) return;
+                const currentValue = mentionState.fullscreen
+                    ? fullscreenValueRef.current
+                    : valueRef.current;
+                const inserted = `${mention.token} `;
+                const nextValue = `${currentValue.slice(0, mentionState.start)}${inserted}${currentValue.slice(mentionState.end)}`;
+                const nextCursor = mentionState.start + inserted.length;
+                if (mentionState.fullscreen) {
+                    setFullscreenValue(nextValue);
+                    fullscreenValueRef.current = nextValue;
+                } else {
+                    setLocalValue(nextValue);
+                    valueRef.current = nextValue;
+                    flushToParent(nextValue);
+                }
+                setMentionState(null);
+                requestAnimationFrame(() => {
+                    const target = mentionState.fullscreen
+                        ? fullscreenTextareaRef.current
+                        : textareaRef.current;
+                    target?.focus();
+                    target?.setSelectionRange(nextCursor, nextCursor);
+                });
+            },
+            [flushToParent, mentionState],
+        );
+
+        const handleMentionKeyDown = useCallback(
+            (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+                if (!mentionState || mentionOptions.length === 0) return false;
+                if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setActiveMentionIndex(
+                        (index) => (index + 1) % mentionOptions.length,
+                    );
+                    return true;
+                }
+                if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setActiveMentionIndex(
+                        (index) =>
+                            (index - 1 + mentionOptions.length) %
+                            mentionOptions.length,
+                    );
+                    return true;
+                }
+                if (event.key === "Enter" || event.key === "Tab") {
+                    event.preventDefault();
+                    chooseMention(
+                        mentionOptions[
+                            Math.min(
+                                activeMentionIndex,
+                                mentionOptions.length - 1,
+                            )
+                        ],
+                    );
+                    return true;
+                }
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    setMentionState(null);
+                    return true;
+                }
+                return false;
+            },
+            [activeMentionIndex, chooseMention, mentionOptions, mentionState],
+        );
+
         const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
             isTypingRef.current = true;
             setLocalValue(e.target.value);
             debouncedFlush(e.target.value);
+            updateMentionState(e.target.value, e.target.selectionStart, false);
         };
 
         // Refresh caret on pointer + selection updates
         const handleSelect = () => {
             saveCursorPosition();
+        };
+
+        const MentionMenu = ({ fullscreen }: { fullscreen: boolean }) => {
+            if (
+                !mentionState ||
+                mentionState.fullscreen !== fullscreen ||
+                mentionOptions.length === 0
+            )
+                return null;
+            return (
+                <div
+                    className={cn(
+                        "nodrag nopan absolute z-[160] max-h-56 w-64 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl",
+                        fullscreen ? "left-3 top-3" : "left-2 top-full mt-1",
+                    )}
+                    onPointerDown={(event) => event.stopPropagation()}
+                >
+                    <div className="px-2 py-1 text-[11px] text-muted-foreground">
+                        选择要引用的素材
+                    </div>
+                    {mentionOptions.map((mention, index) => (
+                        <button
+                            key={mention.token}
+                            type="button"
+                            className={cn(
+                                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm",
+                                index === activeMentionIndex
+                                    ? "bg-accent text-accent-foreground"
+                                    : "hover:bg-accent/70",
+                            )}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => chooseMention(mention)}
+                        >
+                            <span
+                                className={cn(
+                                    "rounded-md px-1.5 py-0.5 text-xs font-semibold",
+                                    mention.type === "video"
+                                        ? "bg-orange-100 text-orange-700"
+                                        : mention.type === "audio"
+                                          ? "bg-blue-100 text-blue-700"
+                                          : "bg-purple-100 text-purple-700",
+                                )}
+                            >
+                                {mention.token}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate">
+                                {mention.label ||
+                                    mention.description ||
+                                    "参考素材"}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            );
         };
 
         // Expand composer dialog
@@ -396,8 +578,14 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
         const handleFullscreenChange = useCallback(
             (e: React.ChangeEvent<HTMLTextAreaElement>) => {
                 setFullscreenValue(e.target.value);
+                fullscreenValueRef.current = e.target.value;
+                updateMentionState(
+                    e.target.value,
+                    e.target.selectionStart,
+                    true,
+                );
             },
-            [],
+            [updateMentionState],
         );
 
         const showVoiceButton = enableVoiceInput && speechSupported;
@@ -458,6 +646,11 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
                         onSelect={handleSelect}
                         onClick={handleSelect}
                         onKeyUp={handleSelect}
+                        onKeyDown={(event) => {
+                            if (!handleMentionKeyDown(event)) {
+                                props.onKeyDown?.(event);
+                            }
+                        }}
                         className={cn(
                             // field-sizing-content (ui/textarea) auto-grows with
                             // input; cap it so long prompts scroll instead of
@@ -467,6 +660,7 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
                             className,
                         )}
                     />
+                    <MentionMenu fullscreen={false} />
                     {hasButtons && (
                         <div className="absolute right-2 bottom-2 flex gap-1">
                             {showFullscreenButton && (
@@ -522,12 +716,16 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
                                 onSelect={handleSelect}
                                 onClick={handleSelect}
                                 onKeyUp={handleSelect}
+                                onKeyDown={(event) => {
+                                    handleMentionKeyDown(event);
+                                }}
                                 placeholder={props.placeholder}
                                 className={cn(
                                     "resize-none h-full w-full overflow-y-auto",
                                     showVoiceButton && "pr-12",
                                 )}
                             />
+                            <MentionMenu fullscreen />
                             {showVoiceButton && (
                                 <div className="absolute right-3 bottom-3">
                                     <VoiceButton />
