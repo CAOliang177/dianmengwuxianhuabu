@@ -63,7 +63,7 @@
         },
         {
             "key": "VOLCENGINE_TIMEOUT",
-            "default": "900",
+            "default": "1800",
             "description": "视频任务提交、轮询和下载的总超时秒数"
         }
     ]

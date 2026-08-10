@@ -54,7 +54,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.55";
+const RELEASE_VERSION = "0.1.56";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -457,11 +457,11 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                视频素材工作流，终于完整了
+                                Seedance 视频引用更稳了
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                本地视频、火山私域视频素材与 Seedance
-                                多参考生成现已在同一张画布打通，视频不再需要绕路导入。
+                                修复本地视频连线导致的错误大请求，并把火山任务默认等待时间延长到
+                                30 分钟。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -469,33 +469,32 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                视频直接进入无限画布
+                                不再出现误导性的 TLS EOF
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                右键上传、从电脑拖入或从火山素材库选择，视频都能直接成为可连接、可预览、可引用的画布节点。
+                                火山官方接口要求参考视频使用公网 URL
+                                或素材库资产。本地视频连线现在会在提交前给出明确提示，不再把整个视频错误塞进
+                                JSON。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                火山素材库视频全面开放
+                                长任务等待提升到 30 分钟
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                新增跨素材组的“全部视频”入口，图片、视频、音频统一进入参考区；输入
-                                @ 即可精确引用，素材缩略图和引用关系一目了然。
+                                `VOLCENGINE_TIMEOUT` 默认值从 900 秒调整为 1800
+                                秒，旧版默认值会在升级后自动迁移。
                             </p>
                         </div>
                         {[
-                            "画布右键菜单新增“上传视频”，支持 MP4、MOV、M4V、WebM、AVI 与 MKV。",
-                            "支持从电脑直接拖入一个或多个视频；图片和视频混合拖入时会自动创建对应节点。",
-                            "火山素材库新增“全部视频、全部图片、全部音频”快捷入口，可跨素材组搜索和选择。",
-                            "强化素材类型识别：根据火山 AssetType、媒体类型、文件名和链接综合判断，避免视频被误显示为图片。",
-                            "文生视频和多参考视频均可直接打开全类型素材库；选择素材后自动切换到多参考工作流。",
-                            "图片、视频、音频继续统一支持可视化缩略图、@ 精确引用和悬停删除。",
-                            "首帧与首尾帧模式保持仅选择图片，避免向 Seedance 提交不符合模式要求的视频素材。",
-                            "素材库临时预览地址会自动刷新，长时间打开节点后仍能继续查看与使用。",
-                            "视频下载保持火山方舟返回的原始文件，不在画布端进行二次转码或降质。",
-                            "完成桌面端构建与素材接口验证，跨素材组已可读取并筛选火山视频资产。",
+                            "火山节点检测到本地视频连线时，会阻止不受支持的 Base64 大请求并显示正确操作方法。",
+                            "参考视频请先上传到火山素材库，再从节点下方的“素材库”选择；asset:// 引用保持小体积、稳定提交。",
+                            "补齐 MP4、MOV、M4V、AVI、WebM、MKV 等视频格式的 MIME 类型识别。",
+                            "插件层增加同样的本地视频保护，工作流执行也不会绕过界面校验。",
+                            "VOLCENGINE_TIMEOUT 默认值由 900 秒提升到 1800 秒，减少长时间排队或生成被画布提前判定超时。",
+                            "已有安装若仍使用旧默认值 900 秒，升级后会自动迁移为 1800 秒；手动设置的其他值保持不变。",
+                            "火山素材库中的视频、图片和音频仍支持缩略图、@ 精确引用、跨素材组搜索和悬停删除。",
                         ].map((item, index) => (
                             <div
                                 key={item}

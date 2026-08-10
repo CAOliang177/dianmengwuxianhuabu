@@ -21,7 +21,7 @@ const PUBLIC_IMAGE_PRESETS: Record<string, string> = {
     NEW_CHANNEL_TIMEOUT: "600",
     VOLCENGINE_BASE_URL: "https://ark.cn-beijing.volces.com/api/v3",
     VOLCENGINE_VIDEO_MODEL: "doubao-seedance-2-5-260628",
-    VOLCENGINE_TIMEOUT: "900",
+    VOLCENGINE_TIMEOUT: "1800",
 };
 
 const BUNDLED_CORE_PLUGIN_IDS = new Set([
@@ -61,6 +61,12 @@ function ensurePublicImagePresets(): void {
         // SKU. Remove the stale value; the normal preset pass below then
         // supplies the current default without treating both models as equal.
         delete current.IMG2_IMAGE_MODEL;
+        changed = true;
+    }
+    if (current.VOLCENGINE_TIMEOUT === "900") {
+        // v0.1.56 raises the Seedance task wait default from 15 to 30 minutes.
+        // Migrate the historical seeded value so existing installs benefit too.
+        current.VOLCENGINE_TIMEOUT = "1800";
         changed = true;
     }
     for (const [key, value] of Object.entries(PUBLIC_IMAGE_PRESETS)) {

@@ -5,6 +5,7 @@ import type { JSONSchema7 } from "json-schema";
 
 import { ABI_NODES, type NodeSlot } from "@/generated/abi";
 import { readUploadFileByFileKey } from "@/lib/file/file-utils";
+import { inferUploadMime } from "@/lib/file/infer-upload-mime";
 import { parseUploadFileKeyReference } from "@/lib/file/parse-upload-file-key";
 
 /**
@@ -77,20 +78,11 @@ async function resolveSingleAsset(
     }
     const buf = await readUploadFileByFileKey(fileKey);
     const filename = path.basename(fileKey);
-    const ext = path.extname(filename).slice(1).toLowerCase();
-    const mimeByExt: Record<string, string> = {
-        wav: "audio/wav",
-        mp3: "audio/mpeg",
-        m4a: "audio/mp4",
-        ogg: "audio/ogg",
-        opus: "audio/opus",
-        flac: "audio/flac",
-        webm: "audio/webm",
-    };
+    const mime = inferUploadMime(filename, fieldName);
     return {
         bytesBase64: buf.toString("base64"),
         filename,
-        ...(ext && mimeByExt[ext] ? { mime: mimeByExt[ext] } : {}),
+        ...(mime ? { mime } : {}),
     } satisfies Asset;
 }
 

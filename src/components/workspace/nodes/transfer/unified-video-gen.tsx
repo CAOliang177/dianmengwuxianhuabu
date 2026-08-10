@@ -556,8 +556,11 @@ function VideoModeEditor<F extends VideoFeature>({
         materials.filter((material) => material.type === "audio").length;
     const referenceCombinationValid =
         audioReferenceCount === 0 || visualReferenceCount > 0;
+    const hasUnsupportedLocalVolcengineVideo =
+        isVolcengine && referenceGroups.videos.length > 0;
     const canExecute =
         !!prompt.trim() &&
+        !hasUnsupportedLocalVolcengineVideo &&
         (mode === "text" ||
             (mode === "reference" &&
                 (allReferences.length > 0 || materials.length > 0) &&
@@ -958,6 +961,13 @@ function VideoModeEditor<F extends VideoFeature>({
                                 </div>
                             )}
 
+                            {hasUnsupportedLocalVolcengineVideo && (
+                                <div className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200">
+                                    火山方舟参考视频需要公网 URL
+                                    或素材库资产，桌面端本地视频不能直接提交。请断开本地视频连线，然后点击下方“素材库”选择已上传的视频。
+                                </div>
+                            )}
+
                             <div className="rounded-xl bg-muted/35 px-3 py-1">
                                 <NodeTextarea
                                     ref={promptRef}
@@ -1153,9 +1163,11 @@ function VideoModeEditor<F extends VideoFeature>({
                                         execution.loading
                                     }
                                     title={
-                                        canExecute
-                                            ? "生成视频"
-                                            : "请补充提示词和当前模式所需的参考图"
+                                        hasUnsupportedLocalVolcengineVideo
+                                            ? "请先断开本地视频，并从火山素材库选择视频"
+                                            : canExecute
+                                              ? "生成视频"
+                                              : "请补充提示词和当前模式所需的参考图"
                                     }
                                 >
                                     {execution.loading ? (

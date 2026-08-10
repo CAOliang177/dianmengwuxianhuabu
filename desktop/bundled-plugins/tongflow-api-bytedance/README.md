@@ -8,7 +8,7 @@
 
 ## 素材库
 
-火山方舟的 Seedance 2.5、Seedance 2.0 与 Seedance 2.0 Fast 节点上方都有“选择素材”，可打开素材库分组和素材列表。要浏览私有素材，需要在设置里填写火山账号的 `VOLCENGINE_ACCESS_KEY_ID` 与 `VOLCENGINE_SECRET_ACCESS_KEY`；只配置 `ARK_API_KEY` 仍可生成视频，但不能读取私有素材列表。也可以把 `asset://asset-...` 粘贴到节点数据中，多个 ID 用逗号或换行分隔。默认按图片引用发送；视频或音频素材可写成 `video:asset://asset-...` 或 `audio:asset://asset-...`。画布中连接的本地图片仍会作为普通参考图发送。
+火山方舟的 Seedance 2.5、Seedance 2.0 与 Seedance 2.0 Fast 节点上方都有“选择素材”，可打开素材库分组和素材列表。要浏览私有素材，需要在设置里填写火山账号的 `VOLCENGINE_ACCESS_KEY_ID` 与 `VOLCENGINE_SECRET_ACCESS_KEY`；只配置 `ARK_API_KEY` 仍可生成视频，但不能读取私有素材列表。也可以把 `asset://asset-...` 粘贴到节点数据中，多个 ID 用逗号或换行分隔。默认按图片引用发送；视频或音频素材可写成 `video:asset://asset-...` 或 `audio:asset://asset-...`。画布中连接的本地图片仍会作为普通参考图发送。火山官方视频生成接口要求参考视频使用公网 URL 或素材库资产，因此桌面端本地视频节点仅用于预览和管理；作为 Seedance 参考视频时请先上传到火山素材库，再从节点内选择。
 
 素材库 OpenAPI 只能列出当前账号可通过接口查询的素材组。AK/SK 会保存在这台电脑的本地设置中，请使用仅授予素材库读取权限的子账号密钥，不要填写主账号高权限密钥；安装包不会携带你的任何密钥。
 

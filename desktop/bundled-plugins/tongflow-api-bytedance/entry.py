@@ -9,6 +9,7 @@ import socket
 import ssl
 import sys
 import time
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -97,9 +98,9 @@ def _is_seedance_25(model: str) -> bool:
 
 def _timeout() -> int:
     try:
-        return max(60, int(_env("VOLCENGINE_TIMEOUT", "900")))
+        return max(60, int(_env("VOLCENGINE_TIMEOUT", "1800")))
     except ValueError:
-        return 900
+        return 1800
 
 
 def _redact(value: object, limit: int = 1200) -> str:
@@ -263,7 +264,31 @@ def _mime(value: object) -> str:
         return value.mime
     if isinstance(value, dict) and isinstance(value.get("mime"), str):
         return str(value["mime"])
-    return "image/png"
+    filename = ""
+    if isinstance(value, Asset) and value.filename:
+        filename = value.filename
+    elif isinstance(value, dict) and isinstance(value.get("filename"), str):
+        filename = str(value["filename"])
+    extension = Path(filename).suffix.lower()
+    by_extension = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".mp4": "video/mp4",
+        ".m4v": "video/mp4",
+        ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo",
+        ".webm": "video/webm",
+        ".mkv": "video/x-matroska",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".flac": "audio/flac",
+    }
+    return by_extension.get(extension, "application/octet-stream")
 
 
 def _data_url(value: object) -> str:
@@ -280,10 +305,27 @@ def _image_item(value: object, *, role: str = "reference_image") -> dict[str, An
 
 
 def _media_item(value: object, *, kind: str) -> dict[str, Any]:
+    direct_url = None
+    if isinstance(value, str) and value.startswith(("https://", "http://", "asset://")):
+        direct_url = value
+    elif isinstance(value, dict):
+        candidate = value.get("url")
+        if isinstance(candidate, str) and candidate.startswith(
+            ("https://", "http://", "asset://")
+        ):
+            direct_url = candidate
+
+    if direct_url is None and kind == "video":
+        raise RuntimeError(
+            "火山方舟参考视频不支持直接提交桌面端本地文件。"
+            "请断开本地视频节点，点击视频生成节点的“素材库”，"
+            "选择已上传的视频素材后再生成。"
+        )
+
     field = f"{kind}_url"
     return {
         "type": field,
-        field: {"url": _data_url(value)},
+        field: {"url": direct_url or _data_url(value)},
         "role": f"reference_{kind}",
     }
 
