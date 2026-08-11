@@ -136,6 +136,11 @@ function assembleApp() {
     console.log("[assemble] copying Next standalone bundle");
     const standalone = path.join(repoRoot, ".next", "standalone");
     const topNM = path.join(standalone, "node_modules");
+    if (!fs.existsSync(topNM)) {
+        throw new Error(
+            "Next standalone build is missing node_modules. Build from a workspace with a real node_modules directory (not a Junction/symlink), then assemble again.",
+        );
+    }
     // Belt and braces with next.config's outputFileTracingExcludes: tracing
     // must never ship dev-machine state (SQLite db, uploads, installed
     // plugins) or a previously-assembled desktop bundle.
@@ -154,6 +159,20 @@ function assembleApp() {
 
     console.log("[assemble] hoisting node_modules to a flat layout");
     hoistNodeModules(topNM, path.join(appOut, "node_modules"));
+    const requiredPackages = ["next", "react", "react-dom"];
+    for (const packageName of requiredPackages) {
+        const manifest = path.join(
+            appOut,
+            "node_modules",
+            packageName,
+            "package.json",
+        );
+        if (!fs.existsSync(manifest)) {
+            throw new Error(
+                `Assembled app is missing runtime package ${packageName}: ${manifest}`,
+            );
+        }
+    }
 
     console.log("[assemble] copying static + public");
     copy(

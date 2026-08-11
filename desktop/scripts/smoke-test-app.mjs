@@ -13,12 +13,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const resources = path.resolve(here, "..", "resources");
+const resources = process.env.TONGFLOW_SMOKE_RESOURCES
+    ? path.resolve(process.env.TONGFLOW_SMOKE_RESOURCES)
+    : path.resolve(here, "..", "resources");
 const isWin = process.platform === "win32";
 const bundledNode = path.join(resources, "node", isWin ? "node.exe" : "node");
 const serverEntry = path.join(resources, "app", "server.js");
+const requiredRuntimeFiles = [
+    path.join(resources, "app", "node_modules", "next", "package.json"),
+    path.join(resources, "app", "node_modules", "react", "package.json"),
+    path.join(resources, "app", "node_modules", "react-dom", "package.json"),
+];
 
-for (const p of [bundledNode, serverEntry]) {
+for (const p of [bundledNode, serverEntry, ...requiredRuntimeFiles]) {
     if (!fs.existsSync(p)) {
         console.error(
             `[smoke] missing ${p} — run fetch-runtimes + assemble first`,
