@@ -200,19 +200,23 @@ function HistoryImageCard({
 function HistoryVideoCard({
     fileKey,
     label,
+    prompt,
     checked,
     selectionMode,
     onToggle,
     onView,
     onUse,
+    onRestorePrompt,
 }: {
     fileKey: string;
     label: string;
+    prompt?: string;
     checked: boolean;
     selectionMode: boolean;
     onToggle: () => void;
     onView: (url: string) => void;
     onUse: () => void;
+    onRestorePrompt?: () => void;
 }) {
     const { url, isLoading } = useFileAsyncLoader(fileKey, {
         priority: "high",
@@ -265,7 +269,7 @@ function HistoryVideoCard({
                     />
                 </label>
             ) : null}
-            <div className="absolute inset-0 flex items-center justify-center gap-2.5 bg-black/0 px-4 opacity-0 transition duration-200 group-hover:bg-black/60 group-hover:opacity-100">
+            <div className="absolute inset-0 flex flex-wrap items-center justify-center gap-2 bg-black/0 px-4 opacity-0 transition duration-200 group-hover:bg-black/65 group-hover:opacity-100">
                 <Button
                     type="button"
                     size="sm"
@@ -296,6 +300,19 @@ function HistoryVideoCard({
                     <Download className="mr-1 h-3.5 w-3.5" />
                     下载
                 </Button>
+                {prompt && onRestorePrompt ? (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-9 rounded-full px-4 text-xs"
+                        title={prompt}
+                        onClick={onRestorePrompt}
+                    >
+                        <FileText className="mr-1 h-3.5 w-3.5" />
+                        恢复提示词
+                    </Button>
+                ) : null}
             </div>
         </div>
     );
@@ -419,18 +436,20 @@ export default function SmartIsland({
             fileKey: string;
             createdAt: number;
             mediaType: "image" | "video";
+            prompt?: string;
         }> = [];
         const now = Date.now();
         for (const node of nodes) {
             const data = node.data as Record<string, unknown>;
             const records = readGenerationHistory(data, now);
-            for (const { fileKey, createdAt, mediaType } of records) {
+            for (const { fileKey, createdAt, mediaType, prompt } of records) {
                 if (!fileKey) continue;
                 const taskId = generationTaskId(fileKey);
                 items.push({
                     nodeId: node.id,
                     fileKey,
                     mediaType: mediaType === "video" ? "video" : "image",
+                    ...(prompt ? { prompt } : {}),
                     createdAt:
                         (taskId ? historyTaskTimes.get(taskId) : undefined) ??
                         createdAt,
@@ -554,6 +573,25 @@ export default function SmartIsland({
             setHistoryOpen(false);
         },
         [addNodeAtViewportCenter],
+    );
+
+    const restoreHistoryPrompt = useCallback(
+        (nodeId: string, prompt: string) => {
+            const current = useFlow
+                .getState()
+                .nodes.find((node) => node.id === nodeId);
+            if (!current) return;
+            useFlow.getState().updates(
+                nodeId,
+                {
+                    ...(current.data as Record<string, unknown>),
+                    text: prompt,
+                },
+                { immediate: true },
+            );
+            setHistoryOpen(false);
+        },
+        [],
     );
 
     const {
@@ -768,6 +806,7 @@ export default function SmartIsland({
                                                     key={selectionKey}
                                                     fileKey={item.fileKey}
                                                     label={`历史视频 ${index + 1}`}
+                                                    prompt={item.prompt}
                                                     checked={selectedHistory.has(
                                                         selectionKey,
                                                     )}
@@ -786,6 +825,16 @@ export default function SmartIsland({
                                                         addHistoryVideoToCanvas(
                                                             item.fileKey,
                                                         )
+                                                    }
+                                                    onRestorePrompt={
+                                                        item.prompt
+                                                            ? () =>
+                                                                  restoreHistoryPrompt(
+                                                                      item.nodeId,
+                                                                      item.prompt ??
+                                                                          "",
+                                                                  )
+                                                            : undefined
                                                     }
                                                 />
                                             ) : (

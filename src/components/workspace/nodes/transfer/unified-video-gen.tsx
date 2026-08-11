@@ -12,6 +12,7 @@ import {
     Download,
     Film,
     GalleryHorizontalEnd,
+    History,
     ImagePlus,
     Images,
     Layers3,
@@ -59,6 +60,11 @@ import {
     computeOutputView,
     normalizeTaskPayloadData,
 } from "@/lib/task/payload";
+import {
+    readVideoPromptHistory,
+    type VideoPromptHistoryRecord,
+    withVideoPromptSnapshot,
+} from "@/lib/video-prompt-history";
 import type { BaseNodeData, RfDataNodeProps } from "@/types/nodes";
 import { AbiNodeShell } from "../base/abi-node-shell";
 import { AspectRatioPicker } from "../base/aspect-ratio-picker";
@@ -269,8 +275,10 @@ function VideoModeEditor<F extends VideoFeature>({
     const nodeId = useNodeId();
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [modeMenuOpen, setModeMenuOpen] = useState(false);
+    const [promptHistoryOpen, setPromptHistoryOpen] = useState(false);
     const [viewerOpen, setViewerOpen] = useState(false);
     const promptRef = useRef<HTMLTextAreaElement>(null);
+    const submittedPromptRef = useRef<VideoPromptHistoryRecord | null>(null);
 
     const state = form.state as Record<string, unknown>;
     const patch = useCallback(
@@ -408,6 +416,9 @@ function VideoModeEditor<F extends VideoFeature>({
     const effectiveModel = activeModel || pluginModels[0] || "";
     const isVolcengine = pluginId === "tongflow-api-bytedance";
     const is25 = isVolcengine && isSeedance25Model(effectiveModel);
+    const promptHistory = readVideoPromptHistory(
+        data as Record<string, unknown>,
+    );
     const maxDuration = is25 ? 30 : 15;
     const resolution = normalizeVideoResolution(
         state.resolution,
@@ -549,6 +560,9 @@ function VideoModeEditor<F extends VideoFeature>({
                 unknown
             >;
             const now = Date.now();
+            const persistedPrompt = readVideoPromptHistory(currentData)[0];
+            const promptSnapshot =
+                submittedPromptRef.current ?? persistedPrompt ?? null;
             const previousHistory = readGenerationHistory(currentData, now);
             const generationHistory = readGenerationHistory(
                 {
@@ -558,6 +572,15 @@ function VideoModeEditor<F extends VideoFeature>({
                             fileKey,
                             createdAt: now,
                             mediaType: "video" as const,
+                            ...(promptSnapshot?.text
+                                ? { prompt: promptSnapshot.text }
+                                : {}),
+                            ...(promptSnapshot?.mode
+                                ? { videoMode: promptSnapshot.mode }
+                                : {}),
+                            ...(promptSnapshot?.model
+                                ? { model: promptSnapshot.model }
+                                : {}),
                         })),
                         ...previousHistory,
                     ],
@@ -573,6 +596,7 @@ function VideoModeEditor<F extends VideoFeature>({
                 },
                 { immediate: true },
             );
+            submittedPromptRef.current = null;
             return true;
         },
         [feature, nodeId],
@@ -736,6 +760,47 @@ function VideoModeEditor<F extends VideoFeature>({
             });
         },
         [mode, patch, referenceGroups.videos.length, references.length],
+    );
+
+    const persistPromptSnapshot = useCallback(() => {
+        const text = prompt.trim();
+        if (!nodeId || !text) return;
+        const record: VideoPromptHistoryRecord = {
+            text,
+            createdAt: Date.now(),
+            mode,
+            ...(effectiveModel ? { model: effectiveModel } : {}),
+        };
+        const current = useFlow
+            .getState()
+            .nodes.find((node) => node.id === nodeId);
+        const currentData = (current?.data ?? {}) as Record<string, unknown>;
+        submittedPromptRef.current = record;
+        useFlow
+            .getState()
+            .updates(nodeId, withVideoPromptSnapshot(currentData, record), {
+                immediate: true,
+            });
+    }, [effectiveModel, mode, nodeId, prompt]);
+
+    const restorePromptSnapshot = useCallback(
+        (record: VideoPromptHistoryRecord) => {
+            if (!nodeId) return;
+            const current = useFlow
+                .getState()
+                .nodes.find((node) => node.id === nodeId);
+            useFlow.getState().updates(
+                nodeId,
+                {
+                    ...((current?.data ?? {}) as Record<string, unknown>),
+                    text: record.text,
+                },
+                { immediate: true },
+            );
+            setPromptHistoryOpen(false);
+            requestAnimationFrame(() => promptRef.current?.focus());
+        },
+        [nodeId],
     );
 
     return (
@@ -1198,6 +1263,7 @@ function VideoModeEditor<F extends VideoFeature>({
                                         onClick={() => {
                                             setModeMenuOpen((open) => !open);
                                             setSettingsOpen(false);
+                                            setPromptHistoryOpen(false);
                                         }}
                                         aria-haspopup="menu"
                                         aria-expanded={modeMenuOpen}
@@ -1288,6 +1354,7 @@ function VideoModeEditor<F extends VideoFeature>({
                                     onClick={() =>
                                         setSettingsOpen((open) => {
                                             setModeMenuOpen(false);
+                                            setPromptHistoryOpen(false);
                                             return !open;
                                         })
                                     }
@@ -1341,6 +1408,85 @@ function VideoModeEditor<F extends VideoFeature>({
                                         limits={materialLimits}
                                     />
                                 )}
+                                {promptHistory.length > 0 && (
+                                    <div className="relative shrink-0">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-9 w-9"
+                                            title={`提示词记录（${promptHistory.length}）`}
+                                            onClick={() => {
+                                                setPromptHistoryOpen(
+                                                    (open) => !open,
+                                                );
+                                                setModeMenuOpen(false);
+                                                setSettingsOpen(false);
+                                            }}
+                                        >
+                                            <History className="h-4 w-4" />
+                                        </Button>
+                                        {promptHistoryOpen && (
+                                            <div className="absolute bottom-12 right-0 z-[130] w-80 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/98 text-zinc-100 shadow-2xl backdrop-blur-xl">
+                                                <div className="border-b border-white/10 px-4 py-3">
+                                                    <div className="text-sm font-medium">
+                                                        已提交提示词
+                                                    </div>
+                                                    <div className="mt-0.5 text-[10px] text-zinc-500">
+                                                        最多保留 50
+                                                        个不同版本，点击即可恢复
+                                                    </div>
+                                                </div>
+                                                <div className="max-h-72 space-y-1 overflow-y-auto p-2">
+                                                    {promptHistory.map(
+                                                        (record) => (
+                                                            <button
+                                                                key={`${record.createdAt}:${record.text}`}
+                                                                type="button"
+                                                                className="w-full rounded-xl px-3 py-2 text-left transition hover:bg-white/10"
+                                                                title="恢复这一版提示词"
+                                                                onClick={() =>
+                                                                    restorePromptSnapshot(
+                                                                        record,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <span className="flex items-center justify-between gap-3 text-[10px] text-zinc-500">
+                                                                    <span>
+                                                                        {MODE_OPTIONS.find(
+                                                                            (
+                                                                                option,
+                                                                            ) =>
+                                                                                option.value ===
+                                                                                record.mode,
+                                                                        )
+                                                                            ?.label ??
+                                                                            "视频生成"}
+                                                                    </span>
+                                                                    <span>
+                                                                        {new Date(
+                                                                            record.createdAt,
+                                                                        ).toLocaleString(
+                                                                            "zh-CN",
+                                                                            {
+                                                                                hour12: false,
+                                                                            },
+                                                                        )}
+                                                                    </span>
+                                                                </span>
+                                                                <span className="mt-1 line-clamp-3 block text-xs leading-5 text-zinc-200">
+                                                                    {
+                                                                        record.text
+                                                                    }
+                                                                </span>
+                                                            </button>
+                                                        ),
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 {execution.loading && execution.canCancel && (
                                     <Button
                                         variant="ghost"
@@ -1373,7 +1519,10 @@ function VideoModeEditor<F extends VideoFeature>({
                                 <Button
                                     size="icon"
                                     className="h-10 w-10 rounded-full shadow-md"
-                                    onClick={execution.run}
+                                    onClick={() => {
+                                        persistPromptSnapshot();
+                                        execution.run();
+                                    }}
                                     disabled={
                                         !canExecute ||
                                         !execution.canRun ||

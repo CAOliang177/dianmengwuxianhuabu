@@ -6,6 +6,10 @@ export interface GenerationHistoryRecord {
     createdAt: number;
     /** Legacy records are images; new video generators set this explicitly. */
     mediaType?: "image" | "video";
+    /** Exact prompt submitted for this output, when recorded by the generator. */
+    prompt?: string;
+    videoMode?: string;
+    model?: string;
 }
 
 export function normalizeGenerationTimestamp(value: number): number {
@@ -65,6 +69,15 @@ export function readGenerationHistory(
                     fileKey: item.fileKey,
                     createdAt,
                     mediaType: item.mediaType === "video" ? "video" : "image",
+                    ...(typeof item.prompt === "string" && item.prompt.trim()
+                        ? { prompt: item.prompt.trim() }
+                        : {}),
+                    ...(typeof item.videoMode === "string" && item.videoMode
+                        ? { videoMode: item.videoMode }
+                        : {}),
+                    ...(typeof item.model === "string" && item.model
+                        ? { model: item.model }
+                        : {}),
                 });
             }
         }

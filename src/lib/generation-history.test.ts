@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     generationTaskId,
+    readGenerationHistory,
     sortGenerationHistoryRecords,
 } from "./generation-history";
 
@@ -25,6 +26,36 @@ describe("generation history ordering", () => {
             { fileKey: "tasks/old/a.png", createdAt: 400 },
             { fileKey: "tasks/new/b.png", createdAt: 300 },
             { fileKey: "tasks/middle/c.png", createdAt: 200 },
+        ]);
+    });
+
+    it("preserves the exact prompt attached to a generated video", () => {
+        expect(
+            readGenerationHistory(
+                {
+                    generationHistoryVersion: 2,
+                    generationHistoryRecords: [
+                        {
+                            fileKey: "tasks/video-1/output.mp4",
+                            createdAt: 500,
+                            mediaType: "video",
+                            prompt: "最终版视频提示词",
+                            videoMode: "edit",
+                            model: "seedance-2.5",
+                        },
+                    ],
+                },
+                600,
+            ),
+        ).toEqual([
+            {
+                fileKey: "tasks/video-1/output.mp4",
+                createdAt: 500_000,
+                mediaType: "video",
+                prompt: "最终版视频提示词",
+                videoMode: "edit",
+                model: "seedance-2.5",
+            },
         ]);
     });
 });
