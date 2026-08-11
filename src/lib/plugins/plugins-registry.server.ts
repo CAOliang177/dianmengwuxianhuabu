@@ -48,6 +48,7 @@ const ALLOWED_BUNDLED_PLUGIN_IDS = new Set([
     "tongflow-api-banana-relay",
     "tongflow-api-new-channel",
     "tongflow-api-bytedance",
+    "tongflow-api-prompt-llm",
 ]);
 
 const CORE_PLUGIN_CONFIGS: Record<string, PluginConfig> = {
@@ -111,6 +112,14 @@ const CORE_PLUGIN_CONFIGS: Record<string, PluginConfig> = {
                 methodName: "images_gen_video",
                 models: BYTEDANCE_VIDEO_MODELS,
             },
+        },
+        entryFile: "entry.py",
+        needsDeploy: false,
+    },
+    "tongflow-api-prompt-llm": {
+        localSubdir: "tongflow-api-prompt-llm",
+        methodsByNodeSlot: {
+            "gen-text": { methodName: "gen_text" },
         },
         entryFile: "entry.py",
         needsDeploy: false,

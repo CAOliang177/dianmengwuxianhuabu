@@ -10,13 +10,14 @@ class ImagesGenVideoInput(BaseModel):
 
     text: str
     asset_ids: str | None = None
+    audios: list[Asset] | None = None
     duration: float | None = None
     height: int | None = None
     images: list[Asset] | None = None
-    videos: list[Asset] | None = None
-    audios: list[Asset] | None = None
+    operation: str | None = None
     resolution: str | None = None
     seed: int | None = None
+    videos: list[Asset] | None = None
     width: int | None = None
 
 class ImagesGenVideoOutput(BaseModel):

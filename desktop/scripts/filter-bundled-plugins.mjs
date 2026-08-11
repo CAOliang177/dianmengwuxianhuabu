@@ -14,6 +14,7 @@ const allowedPluginIds = new Set([
     "tongflow-api-banana-relay",
     "tongflow-api-new-channel",
     "tongflow-api-bytedance",
+    "tongflow-api-prompt-llm",
 ]);
 
 if (fs.existsSync(bundledPluginsDir)) {
@@ -24,6 +25,24 @@ if (fs.existsSync(bundledPluginsDir)) {
             force: true,
         });
     }
+
+    const removeDevelopmentArtifacts = (directory) => {
+        for (const entry of fs.readdirSync(directory, {
+            withFileTypes: true,
+        })) {
+            const fullPath = path.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                if (entry.name === "__pycache__") {
+                    fs.rmSync(fullPath, { recursive: true, force: true });
+                } else {
+                    removeDevelopmentArtifacts(fullPath);
+                }
+            } else if (/^test_.*\.py$/i.test(entry.name)) {
+                fs.rmSync(fullPath, { force: true });
+            }
+        }
+    };
+    removeDevelopmentArtifacts(bundledPluginsDir);
 }
 
 console.log(

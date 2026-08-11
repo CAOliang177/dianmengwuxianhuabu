@@ -1,0 +1,48 @@
+{
+    "plugin": {
+        "name": "提示词大模型（OpenAI 兼容）",
+        "description": "为画布 Skill 和提示词优化提供推理能力，支持三方 GPT/OpenAI 兼容的 Chat Completions API。",
+        "icon": "/dianmeng-brand.png"
+    },
+    "env": [
+        {
+            "key": "PROMPT_LLM_API_KEY",
+            "required": true,
+            "description": "三方 GPT/OpenAI 兼容接口的 API Key"
+        },
+        {
+            "key": "PROMPT_LLM_BASE_URL",
+            "default": "https://api.openai.com/v1",
+            "description": "接口根地址，通常以 /v1 结尾；也可以直接填写完整的 /chat/completions 地址"
+        },
+        {
+            "key": "PROMPT_LLM_MODEL",
+            "required": true,
+            "description": "三方接口实际支持的文本模型 ID；例如 gpt-4o-mini 或服务商自定义 ID"
+        },
+        {
+            "key": "PROMPT_LLM_INSTRUCTION_ROLE",
+            "default": "system",
+            "description": "方法论指令的消息角色；兼容接口通常填 system，支持新版协议时可填 developer"
+        },
+        {
+            "key": "PROMPT_LLM_MAX_TOKENS",
+            "default": "2400",
+            "description": "优化结果最大 token 数"
+        },
+        {
+            "key": "PROMPT_LLM_TOKEN_PARAM",
+            "default": "max_tokens",
+            "description": "token 参数名；常见三方接口填 max_tokens，新推理模型可填 max_completion_tokens"
+        },
+        {
+            "key": "PROMPT_LLM_TEMPERATURE",
+            "description": "可选 temperature；留空时不发送，兼容不支持该参数的推理模型"
+        },
+        {
+            "key": "PROMPT_LLM_TIMEOUT",
+            "default": "120",
+            "description": "单次提示词推理超时秒数"
+        }
+    ]
+}

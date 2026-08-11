@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    buildCreativeSkillModelInstruction,
     buildCreativeSkillPrompt,
     CREATIVE_SKILLS,
     getCreativeSkill,
@@ -37,6 +38,17 @@ describe("creative skills", () => {
         expect(result).toContain("女孩在海边回头看向镜头");
         expect(result).toContain("连续性约束");
         expect(result.length).toBeGreaterThan(100);
+    });
+
+    it("builds model instructions that require reasoning instead of template copying", () => {
+        const result = buildCreativeSkillModelInstruction(
+            "image-to-video-director",
+            "女孩在海边回头看向镜头",
+        );
+        expect(result).toContain("先在内部分析");
+        expect(result).toContain("不是让你机械复制的固定模板");
+        expect(result).toContain("女孩在海边回头看向镜头");
+        expect(result).toContain("只输出一个可直接提交");
     });
 
     it("returns the selected catalog item", () => {

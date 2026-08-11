@@ -217,6 +217,12 @@ const _slot_images_gen_video_inputs = {
             description:
                 "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines",
         },
+        operation: {
+            type: "string",
+            enum: ["generate", "edit"],
+            description:
+                "Video operation. Edit mode follows the source video's ratio and duration.",
+        },
         resolution: {
             type: "string",
             enum: ["480p", "720p", "1080p", "4k"],
@@ -3850,6 +3856,12 @@ export const ABI_NODES = {
                     type: "string",
                     description:
                         "Optional Volcano Engine Ark material-library Asset IDs, separated by commas or new lines",
+                },
+                operation: {
+                    type: "string",
+                    enum: ["generate", "edit"],
+                    description:
+                        "Video operation. Edit mode follows the source video's ratio and duration.",
                 },
                 resolution: {
                     type: "string",

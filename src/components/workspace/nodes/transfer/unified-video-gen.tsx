@@ -87,7 +87,14 @@ import {
     volcengineMaterialLimitsForModel,
 } from "../base/volcengine-material-picker";
 
-type VideoMode = "text" | "reference" | "first" | "first-last";
+type VideoMode =
+    | "text"
+    | "reference"
+    | "first"
+    | "first-last"
+    | "image-reference"
+    | "edit"
+    | "long";
 type ReferenceKind = "image" | "video" | "audio";
 type ConnectedReferenceEntry = { fileKey: string; edgeId: string };
 type VideoFeature =
@@ -99,11 +106,28 @@ const MODE_OPTIONS: Array<{
     value: VideoMode;
     label: string;
     hint: string;
+    beta?: boolean;
 }> = [
     { value: "text", label: "文生视频", hint: "只使用提示词生成" },
-    { value: "reference", label: "多参考视频", hint: "引用多张图片或素材" },
-    { value: "first", label: "首帧 / 图生视频", hint: "固定视频第一帧" },
+    { value: "reference", label: "全能参考", hint: "混合引用图片、视频和音频" },
+    { value: "first", label: "图生视频", hint: "使用一张图片作为首帧" },
     { value: "first-last", label: "首尾帧", hint: "固定第一帧和最后一帧" },
+    {
+        value: "image-reference",
+        label: "图片参考",
+        hint: "引用多张图片，不锁定首帧",
+    },
+    {
+        value: "edit",
+        label: "视频编辑",
+        hint: "Seedance 2.5 · 编辑一个 4–30 秒视频",
+    },
+    {
+        value: "long",
+        label: "超长视频",
+        hint: "Seedance 2.5 · 最长生成 30 秒",
+        beta: true,
+    },
 ];
 
 const REFERENCE_SOURCE = {
@@ -134,17 +158,19 @@ function isVideoMode(value: unknown): value is VideoMode {
 }
 
 function modeFeature(mode: VideoMode): VideoFeature {
-    if (mode === "text" || mode === "reference") return "images-gen-video";
     if (mode === "first") return "image-gen-video";
     if (mode === "first-last") return "image-image-gen-video";
     return "images-gen-video";
 }
 
 function modeIcon(mode: VideoMode) {
-    if (mode === "reference") return <Images className="h-4 w-4" />;
+    if (mode === "reference") return <Layers3 className="h-4 w-4" />;
     if (mode === "first") return <ImagePlus className="h-4 w-4" />;
     if (mode === "first-last")
         return <GalleryHorizontalEnd className="h-4 w-4" />;
+    if (mode === "image-reference") return <Images className="h-4 w-4" />;
+    if (mode === "edit") return <SlidersHorizontal className="h-4 w-4" />;
+    if (mode === "long") return <Play className="h-4 w-4" />;
     return <Film className="h-4 w-4" />;
 }
 
@@ -183,7 +209,11 @@ function updateModeEdges(nodeId: string, nextMode: VideoMode) {
         return;
     }
 
-    if (nextMode === "reference") {
+    if (
+        nextMode === "reference" ||
+        nextMode === "edit" ||
+        nextMode === "long"
+    ) {
         flow.setEdges([
             ...untouched,
             ...incomingMedia.map((edge) => ({
@@ -197,6 +227,16 @@ function updateModeEdges(nodeId: string, nextMode: VideoMode) {
     const imageEdges = incomingMedia.filter(
         (edge) => kindForEdge(edge) === "image",
     );
+    if (nextMode === "image-reference") {
+        flow.setEdges([
+            ...untouched,
+            ...imageEdges.map((edge) => ({
+                ...edge,
+                targetHandle: "in:images",
+            })),
+        ]);
+        return;
+    }
     const limit = nextMode === "first-last" ? 2 : 1;
     const remapped = imageEdges.slice(0, limit).map((edge, index) => ({
         ...edge,
@@ -228,6 +268,7 @@ function VideoModeEditor<F extends VideoFeature>({
     const form = useAbiForm(feature, sourceSpec);
     const nodeId = useNodeId();
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [modeMenuOpen, setModeMenuOpen] = useState(false);
     const [viewerOpen, setViewerOpen] = useState(false);
     const promptRef = useRef<HTMLTextAreaElement>(null);
 
@@ -257,6 +298,8 @@ function VideoModeEditor<F extends VideoFeature>({
                             kind !== undefined &&
                             (mode === "reference" ||
                                 mode === "text" ||
+                                mode === "edit" ||
+                                mode === "long" ||
                                 kind === "image")
                         );
                     })
@@ -373,9 +416,19 @@ function VideoModeEditor<F extends VideoFeature>({
     const materialValue =
         typeof state.asset_ids === "string" ? state.asset_ids : "";
     const materials = parseVolcengineMaterials(materialValue);
-    const frameMaterials = materials.filter(
+    const imageMaterials = materials.filter(
         (material) => material.type === "image",
     );
+    const frameMaterials = imageMaterials;
+    const materialVideoCount = materials.filter(
+        (material) => material.type === "video",
+    ).length;
+    const editVideoCount = referenceGroups.videos.length + materialVideoCount;
+    const baseMaterialLimits = volcengineMaterialLimitsForModel(effectiveModel);
+    const materialLimits =
+        mode === "edit"
+            ? { ...baseMaterialLimits, video: 1 }
+            : baseMaterialLimits;
     const materialLabels = materialReferenceLabels(materials, {
         image: referenceGroups.images.length,
         video: referenceGroups.videos.length,
@@ -442,9 +495,13 @@ function VideoModeEditor<F extends VideoFeature>({
     }, [allReferences.length, materials.length, mode, onModeChange]);
 
     useEffect(() => {
+        const expectedOperation = mode === "edit" ? "edit" : "generate";
         const nextDuration = Math.max(4, Math.min(maxDuration, duration));
         const next: Record<string, unknown> = {};
-        if (nextDuration !== duration) next.duration = nextDuration;
+        if (state.operation !== expectedOperation)
+            next.operation = expectedOperation;
+        if (mode !== "edit" && nextDuration !== duration)
+            next.duration = nextDuration;
         if (isVolcengine && state.resolution !== resolution)
             next.resolution = resolution;
         if (!isVolcengine && state.resolution !== undefined)
@@ -453,7 +510,9 @@ function VideoModeEditor<F extends VideoFeature>({
     }, [
         duration,
         maxDuration,
+        mode,
         isVolcengine,
+        state.operation,
         state.resolution,
         resolution,
         patch,
@@ -544,6 +603,10 @@ function VideoModeEditor<F extends VideoFeature>({
     const selectedModelLabel = effectiveModel
         ? modelDisplayName(pluginId, effectiveModel)
         : "选择模型";
+    const settingsSummary =
+        mode === "edit"
+            ? `自适应 / ${resolution.toUpperCase()} / 跟随源视频`
+            : `${ratio.value} / ${resolution.toUpperCase()} / ${duration}s`;
     const materialVisualCount = materials.filter(
         (material) => material.type === "image" || material.type === "video",
     ).length;
@@ -558,6 +621,20 @@ function VideoModeEditor<F extends VideoFeature>({
         audioReferenceCount === 0 || visualReferenceCount > 0;
     const hasUnsupportedLocalVolcengineVideo =
         isVolcengine && referenceGroups.videos.length > 0;
+    const editModeReady = is25 && editVideoCount === 1;
+    const modeUnavailableReason = useCallback(
+        (candidate: VideoMode) => {
+            if ((candidate === "edit" || candidate === "long") && !is25)
+                return "仅 Seedance 2.5 可用";
+            if (candidate !== "edit") return undefined;
+            if (hasUnsupportedLocalVolcengineVideo)
+                return "请改用火山素材库中的视频";
+            if (editVideoCount === 0) return "需要选择 1 个源视频";
+            if (editVideoCount > 1) return "只能选择 1 个源视频";
+            return undefined;
+        },
+        [editVideoCount, hasUnsupportedLocalVolcengineVideo, is25],
+    );
     const canExecute =
         !!prompt.trim() &&
         !hasUnsupportedLocalVolcengineVideo &&
@@ -565,6 +642,10 @@ function VideoModeEditor<F extends VideoFeature>({
             (mode === "reference" &&
                 (allReferences.length > 0 || materials.length > 0) &&
                 referenceCombinationValid) ||
+            (mode === "image-reference" &&
+                references.length + imageMaterials.length >= 1) ||
+            (mode === "edit" && editModeReady) ||
+            (mode === "long" && is25 && referenceCombinationValid) ||
             (mode === "first" &&
                 references.length + frameMaterials.length >= 1) ||
             (mode === "first-last" &&
@@ -584,7 +665,7 @@ function VideoModeEditor<F extends VideoFeature>({
     );
 
     const visibleReferences =
-        mode === "reference"
+        mode === "reference" || mode === "edit" || mode === "long"
             ? allReferences
             : referenceEntries.images.map((entry, index) => ({
                   ...entry,
@@ -598,12 +679,43 @@ function VideoModeEditor<F extends VideoFeature>({
                   token: `@图片${index + 1}`,
               }));
     const visibleMaterials =
-        mode === "reference" || mode === "text" ? materials : frameMaterials;
+        mode === "reference" ||
+        mode === "text" ||
+        mode === "edit" ||
+        mode === "long"
+            ? materials
+            : imageMaterials;
 
     const updateMaterials = useCallback(
         (value: string) => {
-            if (mode === "reference" || mode === "text") {
+            if (mode === "reference" || mode === "text" || mode === "long") {
                 patch({ asset_ids: value });
+                return;
+            }
+            if (mode === "edit") {
+                let selectedVideos = referenceGroups.videos.length;
+                const selected = parseVolcengineMaterials(value).filter(
+                    (material) => {
+                        if (material.type !== "video") return true;
+                        if (selectedVideos >= 1) return false;
+                        selectedVideos += 1;
+                        return true;
+                    },
+                );
+                patch({
+                    asset_ids: selected.length ? JSON.stringify(selected) : "",
+                });
+                return;
+            }
+            if (mode === "image-reference") {
+                const selectedImages = parseVolcengineMaterials(value).filter(
+                    (material) => material.type === "image",
+                );
+                patch({
+                    asset_ids: selectedImages.length
+                        ? JSON.stringify(selectedImages)
+                        : "",
+                });
                 return;
             }
             const available = mode === "first-last" ? 2 : 1;
@@ -623,7 +735,7 @@ function VideoModeEditor<F extends VideoFeature>({
                     : "",
             });
         },
-        [mode, patch, references.length],
+        [mode, patch, referenceGroups.videos.length, references.length],
     );
 
     return (
@@ -715,8 +827,7 @@ function VideoModeEditor<F extends VideoFeature>({
                                         尝试：
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <Layers3 className="h-4 w-4" />{" "}
-                                        多参考视频
+                                        <Layers3 className="h-4 w-4" /> 全能参考
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <GalleryHorizontalEnd className="h-4 w-4" />{" "}
@@ -730,8 +841,7 @@ function VideoModeEditor<F extends VideoFeature>({
                                 {modeIcon(mode)} 视频节点 · {modeLabel}
                             </span>
                             <span className="text-xs text-white/70">
-                                {ratio.value} / {resolution.toUpperCase()} /{" "}
-                                {duration}s
+                                {settingsSummary}
                             </span>
                         </div>
                         {outputUrl && (
@@ -955,7 +1065,13 @@ function VideoModeEditor<F extends VideoFeature>({
                                             <ImagePlus className="h-4 w-4" />
                                             {mode === "first-last"
                                                 ? "请连接首帧和尾帧图片"
-                                                : "可连接图片、视频和音频作为参考"}
+                                                : mode === "first"
+                                                  ? "请连接一张首帧图片"
+                                                  : mode === "image-reference"
+                                                    ? "请连接图片或从素材库选择参考图"
+                                                    : mode === "edit"
+                                                      ? "请从火山素材库选择 1 个 4–30 秒源视频"
+                                                      : "可连接图片、视频和音频作为参考"}
                                         </div>
                                     )}
                                 </div>
@@ -965,6 +1081,15 @@ function VideoModeEditor<F extends VideoFeature>({
                                 <div className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200">
                                     火山方舟参考视频需要公网 URL
                                     或素材库资产，桌面端本地视频不能直接提交。请断开本地视频连线，然后点击下方“素材库”选择已上传的视频。
+                                </div>
+                            )}
+
+                            {mode === "edit" && (
+                                <div className="rounded-xl border border-sky-400/35 bg-sky-500/10 px-3 py-2 text-xs leading-5 text-sky-100">
+                                    Seedance 2.5
+                                    视频编辑会保持源视频比例和时长；请求自动使用
+                                    adaptive 与 -1。源视频必须为 4–30
+                                    秒，且只能选择 1 个。
                                 </div>
                             )}
 
@@ -1011,18 +1136,30 @@ function VideoModeEditor<F extends VideoFeature>({
                                             horizontal
                                         />
                                     </div>
-                                    <AspectRatioPicker
-                                        ratios={VIDEO_ASPECT_RATIOS}
-                                        value={ratio}
-                                        onChange={(next) =>
-                                            patch({
-                                                width: next.width,
-                                                height: next.height,
-                                            })
-                                        }
-                                        showSize
-                                        compact
-                                    />
+                                    {mode === "edit" ? (
+                                        <div className="rounded-xl border border-sky-400/25 bg-sky-500/10 p-3 text-sm">
+                                            <div className="font-medium text-sky-100">
+                                                输出跟随源视频
+                                            </div>
+                                            <div className="mt-1 text-xs text-sky-200/75">
+                                                比例：adaptive ·
+                                                时长：原视频（4–30 秒）
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <AspectRatioPicker
+                                            ratios={VIDEO_ASPECT_RATIOS}
+                                            value={ratio}
+                                            onChange={(next) =>
+                                                patch({
+                                                    width: next.width,
+                                                    height: next.height,
+                                                })
+                                            }
+                                            showSize
+                                            compact
+                                        />
+                                    )}
                                     {isVolcengine && (
                                         <VideoResolutionPicker
                                             model={effectiveModel}
@@ -1035,14 +1172,16 @@ function VideoModeEditor<F extends VideoFeature>({
                                             compact
                                         />
                                     )}
-                                    <VideoDurationSlider
-                                        value={duration}
-                                        min={4}
-                                        max={maxDuration}
-                                        onChange={(value) =>
-                                            patch({ duration: value })
-                                        }
-                                    />
+                                    {mode !== "edit" && (
+                                        <VideoDurationSlider
+                                            value={duration}
+                                            min={4}
+                                            max={maxDuration}
+                                            onChange={(value) =>
+                                                patch({ duration: value })
+                                            }
+                                        />
+                                    )}
                                 </div>
                             )}
 
@@ -1052,40 +1191,114 @@ function VideoModeEditor<F extends VideoFeature>({
                                     data={data}
                                     compact
                                 />
-                                <select
-                                    className="h-9 rounded-lg border border-border bg-muted/60 px-2 text-xs outline-none"
-                                    value={mode}
-                                    onChange={(event) =>
-                                        onModeChange(
-                                            event.target.value as VideoMode,
-                                        )
-                                    }
-                                    aria-label="视频生成模式"
-                                >
-                                    {MODE_OPTIONS.map((option) => (
-                                        <option
-                                            key={option.value}
-                                            value={option.value}
+                                <div className="relative shrink-0">
+                                    <button
+                                        type="button"
+                                        className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-2.5 text-xs font-medium transition hover:bg-muted"
+                                        onClick={() => {
+                                            setModeMenuOpen((open) => !open);
+                                            setSettingsOpen(false);
+                                        }}
+                                        aria-haspopup="menu"
+                                        aria-expanded={modeMenuOpen}
+                                        aria-label="视频生成模式"
+                                    >
+                                        {modeIcon(mode)}
+                                        <span>{modeLabel}</span>
+                                        {MODE_OPTIONS.find(
+                                            (option) => option.value === mode,
+                                        )?.beta && (
+                                            <span className="rounded bg-cyan-500/20 px-1 py-0.5 text-[9px] font-semibold text-cyan-300">
+                                                Beta
+                                            </span>
+                                        )}
+                                        <ChevronDown
+                                            className={`h-3.5 w-3.5 transition-transform ${modeMenuOpen ? "rotate-180" : ""}`}
+                                        />
+                                    </button>
+                                    {modeMenuOpen && (
+                                        <div
+                                            role="menu"
+                                            className="absolute bottom-20 left-0 z-[120] w-64 overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/98 p-1.5 text-zinc-100 shadow-2xl backdrop-blur-xl"
                                         >
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
+                                            <div className="px-3 pb-1.5 pt-1 text-[11px] font-medium text-zinc-500">
+                                                视频生成模式
+                                            </div>
+                                            {MODE_OPTIONS.map((option) => {
+                                                const unavailable =
+                                                    modeUnavailableReason(
+                                                        option.value,
+                                                    );
+                                                const active =
+                                                    option.value === mode;
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        role="menuitem"
+                                                        disabled={!!unavailable}
+                                                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${
+                                                            active
+                                                                ? "bg-white/10 text-white"
+                                                                : unavailable
+                                                                  ? "cursor-not-allowed text-zinc-600"
+                                                                  : "text-zinc-200 hover:bg-white/8"
+                                                        }`}
+                                                        title={
+                                                            unavailable ||
+                                                            option.hint
+                                                        }
+                                                        onClick={() => {
+                                                            onModeChange(
+                                                                option.value,
+                                                            );
+                                                            setModeMenuOpen(
+                                                                false,
+                                                            );
+                                                        }}
+                                                    >
+                                                        <span className="shrink-0">
+                                                            {modeIcon(
+                                                                option.value,
+                                                            )}
+                                                        </span>
+                                                        <span className="min-w-0 flex-1">
+                                                            <span className="flex items-center gap-2 text-sm font-medium">
+                                                                {option.label}
+                                                                {option.beta && (
+                                                                    <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300">
+                                                                        Beta
+                                                                    </span>
+                                                                )}
+                                                            </span>
+                                                            <span className="mt-0.5 block truncate text-[10px] text-zinc-500">
+                                                                {unavailable ||
+                                                                    option.hint}
+                                                            </span>
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                                 <button
                                     type="button"
                                     className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg bg-muted/70 px-3 text-xs hover:bg-muted"
                                     onClick={() =>
-                                        setSettingsOpen((open) => !open)
+                                        setSettingsOpen((open) => {
+                                            setModeMenuOpen(false);
+                                            return !open;
+                                        })
                                     }
-                                    title={`${selectedModelLabel} · ${ratio.value} / ${resolution.toUpperCase()} / ${duration}s`}
+                                    title={`${selectedModelLabel} · ${settingsSummary}`}
                                 >
                                     <SlidersHorizontal className="h-4 w-4" />
                                     <span className="max-w-44 truncate">
                                         {selectedModelLabel}
                                     </span>
                                     <span className="text-muted-foreground">
-                                        {ratio.value} /{" "}
-                                        {resolution.toUpperCase()} / {duration}s
+                                        {settingsSummary}
                                     </span>
                                     <ChevronDown
                                         className={`h-3.5 w-3.5 transition-transform ${settingsOpen ? "rotate-180" : ""}`}
@@ -1099,7 +1312,8 @@ function VideoModeEditor<F extends VideoFeature>({
                                         onChange={updateMaterials}
                                         allowedTypes={
                                             mode === "first" ||
-                                            mode === "first-last"
+                                            mode === "first-last" ||
+                                            mode === "image-reference"
                                                 ? ["image"]
                                                 : undefined
                                         }
@@ -1124,9 +1338,7 @@ function VideoModeEditor<F extends VideoFeature>({
                                             audio: referenceGroups.audios
                                                 .length,
                                         }}
-                                        limits={volcengineMaterialLimitsForModel(
-                                            effectiveModel,
-                                        )}
+                                        limits={materialLimits}
                                     />
                                 )}
                                 {execution.loading && execution.canCancel && (
@@ -1145,6 +1357,11 @@ function VideoModeEditor<F extends VideoFeature>({
                                             patch({ text: value })
                                         }
                                         duration={duration}
+                                        operation={
+                                            mode === "edit"
+                                                ? "edit"
+                                                : "generate"
+                                        }
                                         referenceLabels={[
                                             ...allReferences.map(
                                                 (reference) => reference.token,
@@ -1165,9 +1382,14 @@ function VideoModeEditor<F extends VideoFeature>({
                                     title={
                                         hasUnsupportedLocalVolcengineVideo
                                             ? "请先断开本地视频，并从火山素材库选择视频"
-                                            : canExecute
-                                              ? "生成视频"
-                                              : "请补充提示词和当前模式所需的参考图"
+                                            : mode === "edit" && !is25
+                                              ? "视频编辑仅支持 Seedance 2.5"
+                                              : mode === "edit" &&
+                                                  editVideoCount !== 1
+                                                ? "请从火山素材库选择 1 个 4–30 秒源视频"
+                                                : canExecute
+                                                  ? "生成视频"
+                                                  : "请补充提示词和当前模式所需的参考图"
                                     }
                                 >
                                     {execution.loading ? (
@@ -1274,6 +1496,9 @@ const UnifiedVideoGenNode = ({
                     ...((current?.data ?? {}) as Record<string, unknown>),
                     videoMode: nextMode,
                     feature: modeFeature(nextMode),
+                    operation: nextMode === "edit" ? "edit" : "generate",
+                    ...(nextMode === "text" ? { asset_ids: "" } : {}),
+                    ...(nextMode === "long" ? { duration: 30 } : {}),
                 },
                 { immediate: true },
             );

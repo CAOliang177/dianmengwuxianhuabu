@@ -1,11 +1,13 @@
 "use client";
 
 import {
+    AlertCircle,
     Aperture,
     Check,
     Clapperboard,
     Copy,
     LibraryBig,
+    LoaderCircle,
     Palette,
     Plus,
     Search,
@@ -32,12 +34,13 @@ import {
 } from "@/constants/media-options";
 import { useFlow } from "@/hooks/use-flow";
 import {
-    buildCreativeSkillPrompt,
+    buildCreativeSkillModelInstruction,
     CREATIVE_SKILLS,
     type CreativeSkill,
     type CreativeSkillKind,
     type CreativeSkillTarget,
 } from "@/lib/creative-skills";
+import { generatePromptWithLlm } from "@/lib/prompt-llm";
 import { cn } from "@/lib/utils";
 
 interface CreativeSkillLibraryProps {
@@ -218,6 +221,8 @@ export function CreativeSkillLibrary({
     );
     const [brief, setBrief] = useState("");
     const [generatedPrompt, setGeneratedPrompt] = useState("");
+    const [generating, setGenerating] = useState(false);
+    const [generationError, setGenerationError] = useState("");
 
     const selectedNode = useFlow((state) =>
         state.selectedNodes.length === 1 ? state.selectedNodes[0] : null,
@@ -255,9 +260,10 @@ export function CreativeSkillLibrary({
     const selectSkill = (skill: CreativeSkill) => {
         setSelectedSkillId(skill.id);
         setGeneratedPrompt("");
+        setGenerationError("");
     };
 
-    const ensurePrompt = () => {
+    const ensurePrompt = async (): Promise<string> => {
         if (!selectedSkill) {
             toast.error("请先选择一个 Skill");
             return "";
@@ -266,15 +272,37 @@ export function CreativeSkillLibrary({
             toast.error("请先输入画面或视频想法");
             return "";
         }
-        const next = buildCreativeSkillPrompt(selectedSkill.id, brief);
-        setGeneratedPrompt(next);
-        return next;
+        setGenerating(true);
+        setGenerationError("");
+        try {
+            const next = await generatePromptWithLlm({
+                input: brief,
+                instruction: buildCreativeSkillModelInstruction(
+                    selectedSkill.id,
+                    brief,
+                ),
+            });
+            setGeneratedPrompt(next);
+            return next;
+        } catch (cause) {
+            const message =
+                cause instanceof Error
+                    ? cause.message
+                    : "Skill 大模型执行失败，请检查提示词大模型插件设置";
+            setGeneratedPrompt("");
+            setGenerationError(message);
+            toast.error(message);
+            return "";
+        } finally {
+            setGenerating(false);
+        }
     };
 
-    const promptForAction = () => generatedPrompt.trim() || ensurePrompt();
+    const promptForAction = async () =>
+        generatedPrompt.trim() || (await ensurePrompt());
 
-    const applyToSelected = () => {
-        const prompt = promptForAction();
+    const applyToSelected = async () => {
+        const prompt = await promptForAction();
         if (!prompt || !selectedSkill || !selectedNode || !canApply) return;
         useFlow.getState().updates(selectedNode.id, {
             ...(selectedNode.data as Record<string, unknown>),
@@ -288,8 +316,8 @@ export function CreativeSkillLibrary({
         onOpenChange(false);
     };
 
-    const createNode = () => {
-        const prompt = promptForAction();
+    const createNode = async () => {
+        const prompt = await promptForAction();
         if (!prompt || !selectedSkill) return;
         const commonData = {
             text: prompt,
@@ -318,7 +346,7 @@ export function CreativeSkillLibrary({
     };
 
     const copyPrompt = async () => {
-        const prompt = promptForAction();
+        const prompt = await promptForAction();
         if (!prompt) return;
         await navigator.clipboard.writeText(prompt);
         toast.success("提示词已复制", { duration: 2000 });
@@ -492,6 +520,7 @@ export function CreativeSkillLibrary({
                                         onChange={(event) => {
                                             setBrief(event.target.value);
                                             setGeneratedPrompt("");
+                                            setGenerationError("");
                                         }}
                                         className="min-h-28 resize-y border-white/10 bg-zinc-900 text-zinc-100 placeholder:text-zinc-600"
                                         placeholder={
@@ -505,11 +534,25 @@ export function CreativeSkillLibrary({
                                 <Button
                                     type="button"
                                     className="w-full bg-gradient-to-r from-violet-600 via-fuchsia-600 to-orange-500 text-white hover:brightness-110"
-                                    onClick={ensurePrompt}
+                                    onClick={() => void ensurePrompt()}
+                                    disabled={generating}
                                 >
-                                    <Wand2 className="mr-2 h-4 w-4" />
-                                    生成可用提示词
+                                    {generating ? (
+                                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Wand2 className="mr-2 h-4 w-4" />
+                                    )}
+                                    {generating
+                                        ? "大模型正在执行 Skill…"
+                                        : "用大模型执行 Skill"}
                                 </Button>
+
+                                {generationError ? (
+                                    <div className="flex items-start gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-200">
+                                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                        <span>{generationError}</span>
+                                    </div>
+                                ) : null}
 
                                 {generatedPrompt ? (
                                     <div className="space-y-2">
@@ -542,8 +585,9 @@ export function CreativeSkillLibrary({
                                     <Button
                                         type="button"
                                         variant="outline"
+                                        disabled={generating}
                                         className="border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/10"
-                                        onClick={copyPrompt}
+                                        onClick={() => void copyPrompt()}
                                     >
                                         <Copy className="mr-2 h-4 w-4" />
                                         复制
@@ -551,9 +595,9 @@ export function CreativeSkillLibrary({
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        disabled={!canApply}
+                                        disabled={!canApply || generating}
                                         className="border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/10 disabled:text-zinc-600"
-                                        onClick={applyToSelected}
+                                        onClick={() => void applyToSelected()}
                                         title={
                                             canApply
                                                 ? "只替换当前节点的提示词，保留模型和比例设置"
@@ -568,7 +612,8 @@ export function CreativeSkillLibrary({
                                     </Button>
                                     <Button
                                         type="button"
-                                        onClick={createNode}
+                                        onClick={() => void createNode()}
+                                        disabled={generating}
                                         className="bg-zinc-100 text-zinc-950 hover:bg-white"
                                     >
                                         <Plus className="mr-2 h-4 w-4" />
@@ -581,9 +626,10 @@ export function CreativeSkillLibrary({
                                 </div>
 
                                 <p className="text-[11px] leading-5 text-zinc-600">
-                                    功能依据公开的 Skill
-                                    能力描述筛选，内部提示模板为独立编写；运行时使用画布中已配置的模型和
-                                    API，不需要登录第三方平台。
+                                    大模型会读取当前 Skill
+                                    的方法与约束，结合你的具体想法推理后生成；模型、接口地址和
+                                    API Key 来自“提示词大模型（OpenAI
+                                    兼容）”插件设置。
                                 </p>
                             </div>
                         ) : null}

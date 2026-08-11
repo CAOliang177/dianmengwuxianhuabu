@@ -11,7 +11,34 @@ export type SeedancePromptOptions = {
     assetCount?: number;
     referenceLabels?: string[];
     duration?: number;
+    operation?: "generate" | "edit";
 };
+
+/** Build the method instructions consumed by the configured prompt LLM. */
+export function buildSeedancePromptModelInstruction(
+    options: SeedancePromptOptions = {},
+): string {
+    const references = options.referenceLabels?.filter(Boolean) ?? [];
+    const duration = Math.round(options.duration ?? 0);
+    const context = [
+        options.operation === "edit"
+            ? "任务类型：Seedance 2.5 视频编辑。输出比例与时长跟随源视频，不要改写成新的生成规格。"
+            : duration > 0
+              ? `任务类型：Seedance 视频生成；目标时长约 ${duration} 秒。`
+              : "任务类型：Seedance 视频生成。",
+        references.length
+            ? `可用素材引用：${references.join("、")}。必须原样保留这些 @引用，并明确每个素材承担的主体、动作、风格、镜头或声音职责。`
+            : "当前没有可引用素材，不要虚构 @图片、@视频或 @音频。",
+    ];
+    return [
+        "你是资深 Seedance 视频导演和提示词工程师。先在内部理解用户真正要保留的创意、主体关系、动作因果和镜头意图，再重写成可直接提交的高质量中文提示词。",
+        ...context,
+        "要求：保留用户已经明确的人物、事件、台词、风格和限制，不擅自改变剧情；补足必要的动作起点—过程—结果、空间连续性、镜头动机、光线和声音同步，但不要堆砌空泛的电影感形容词。",
+        "声音标记规范：音乐用（），音效用<>，台词用{角色：台词}，字幕用【】。只有用户需要声音时才添加。",
+        "约束应针对当前画面中的具体失败风险，例如身份漂移、肢体形变、物体穿插、镜头跳变或随机文字；不要机械附加一长串通用负面词。",
+        "只输出最终提示词，不输出分析、标题、前言、Markdown 代码块或解释。",
+    ].join("\n");
+}
 
 const STRUCTURED_PREFIXES = [
     "主体与动作：",

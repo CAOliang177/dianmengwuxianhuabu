@@ -383,11 +383,13 @@ def _create_task(
     videos: list[object] | None = None,
     audios: list[object] | None = None,
     asset_ids: object = None,
+    operation: str | None = None,
     image_role: str = "reference_image",
     image_roles: list[str] | None = None,
 ) -> Asset:
     model = _model()
     is_seedance_25 = _is_seedance_25(model)
+    is_video_edit = (operation or "generate").strip().lower() == "edit"
     max_images = 30 if is_seedance_25 else 9
     provided_images = [image for image in images or [] if image is not None]
     provided_videos = [video for video in videos or [] if video is not None]
@@ -396,6 +398,13 @@ def _create_task(
     image_materials = sum(1 for item in materials if item["type"] == "image")
     video_materials = sum(1 for item in materials if item["type"] == "video")
     audio_materials = sum(1 for item in materials if item["type"] == "audio")
+    edit_video_count = len(provided_videos) + video_materials
+    if is_video_edit and not is_seedance_25:
+        raise RuntimeError("视频编辑模式仅支持 Seedance 2.5 模型")
+    if is_video_edit and edit_video_count != 1:
+        raise RuntimeError(
+            f"Seedance 2.5 视频编辑必须且只能选择 1 个源视频，当前为 {edit_video_count} 个"
+        )
     if len(provided_images) + image_materials > max_images:
         raise RuntimeError(
             f"当前模型最多支持 {max_images} 张参考图片，现有 {len(provided_images) + image_materials} 张"
@@ -453,8 +462,8 @@ def _create_task(
     request_body: dict[str, Any] = {
         "model": model,
         "content": content,
-        "ratio": _ratio(width, height),
-        "duration": seconds,
+        "ratio": "adaptive" if is_video_edit else _ratio(width, height),
+        "duration": -1 if is_video_edit else seconds,
         "return_last_frame": False,
     }
     requested_resolution = (
@@ -656,6 +665,7 @@ def images_gen_video(input: ImagesGenVideoInput) -> ImagesGenVideoOutput:
         videos=list(input.videos or []),
         audios=list(input.audios or []),
         asset_ids=input.asset_ids,
+        operation=input.operation,
     )
     return ImagesGenVideoOutput(success=True, video=video)
 

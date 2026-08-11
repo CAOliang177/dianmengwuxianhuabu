@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import importlib.util
+import os
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO_ROOT / "sdk"))
+SPEC = importlib.util.spec_from_file_location(
+    "tongflow_api_prompt_llm_entry",
+    Path(__file__).with_name("entry.py"),
+)
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError("无法加载提示词大模型插件")
+ENTRY = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(ENTRY)
+
+
+class PromptLlmPluginTests(unittest.TestCase):
+    def setUp(self) -> None:
+        ENTRY._REQUEST_MODEL = ""
+
+    def test_chat_completions_request_uses_configured_model_and_instruction(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_post(body: dict[str, object]) -> dict[str, object]:
+            captured.update(body)
+            return {"choices": [{"message": {"content": "最终提示词"}}]}
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "PROMPT_LLM_API_KEY": "test-key",
+                    "PROMPT_LLM_MODEL": "provider-gpt-model",
+                    "PROMPT_LLM_INSTRUCTION_ROLE": "system",
+                },
+                clear=False,
+            ),
+            patch.object(ENTRY, "_post_json", side_effect=fake_post),
+        ):
+            result = ENTRY.gen_text(
+                {"text": "一只猫奔跑", "userPrompt": "只输出视频提示词"}
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["text"], "最终提示词")
+        self.assertEqual(captured["model"], "provider-gpt-model")
+        self.assertEqual(
+            captured["messages"],
+            [
+                {"role": "system", "content": "只输出视频提示词"},
+                {"role": "user", "content": "一只猫奔跑"},
+            ],
+        )
+        self.assertFalse(captured["stream"])
+
+    def test_base_url_accepts_root_or_full_endpoint(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"PROMPT_LLM_BASE_URL": "https://provider.example/v1/"},
+            clear=False,
+        ):
+            self.assertEqual(
+                ENTRY._endpoint(),
+                "https://provider.example/v1/chat/completions",
+            )
+        with patch.dict(
+            os.environ,
+            {
+                "PROMPT_LLM_BASE_URL": (
+                    "https://provider.example/openai/v1/chat/completions"
+                )
+            },
+            clear=False,
+        ):
+            self.assertEqual(
+                ENTRY._endpoint(),
+                "https://provider.example/openai/v1/chat/completions",
+            )
+
+    def test_content_array_is_supported(self) -> None:
+        payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "text", "text": "第一段"},
+                            {"type": "text", "text": "第二段"},
+                        ]
+                    }
+                }
+            ]
+        }
+        self.assertEqual(ENTRY._extract_text(payload), "第一段\n第二段")
+
+    def test_model_must_be_configured(self) -> None:
+        with patch.dict(os.environ, {"PROMPT_LLM_MODEL": ""}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "PROMPT_LLM_MODEL"):
+                ENTRY._model()
+
+
+if __name__ == "__main__":
+    unittest.main()

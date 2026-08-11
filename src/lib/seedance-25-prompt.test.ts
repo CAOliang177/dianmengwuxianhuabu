@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { optimizeSeedance25Prompt } from "./seedance-25-prompt";
+import {
+    buildSeedancePromptModelInstruction,
+    optimizeSeedance25Prompt,
+} from "./seedance-25-prompt";
 
 describe("Seedance 2.5 prompt optimizer", () => {
     it("keeps the original idea and adds production sections", () => {
@@ -20,5 +23,16 @@ describe("Seedance 2.5 prompt optimizer", () => {
 
     it("returns an empty string for an empty prompt", () => {
         expect(optimizeSeedance25Prompt("   ")).toBe("");
+    });
+
+    it("gives the model edit-specific constraints and exact references", () => {
+        const instruction = buildSeedancePromptModelInstruction({
+            operation: "edit",
+            referenceLabels: ["@视频1"],
+        });
+        expect(instruction).toContain("Seedance 2.5 视频编辑");
+        expect(instruction).toContain("比例与时长跟随源视频");
+        expect(instruction).toContain("@视频1");
+        expect(instruction).toContain("只输出最终提示词");
     });
 });

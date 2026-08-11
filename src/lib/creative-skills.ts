@@ -429,3 +429,28 @@ export function buildCreativeSkillPrompt(
     if (!brief.trim()) return "";
     return skill.buildPrompt(brief);
 }
+
+/** Build model instructions from a Skill's method without returning its template directly. */
+export function buildCreativeSkillModelInstruction(
+    skillId: string,
+    brief: string,
+): string {
+    const skill = getCreativeSkill(skillId);
+    if (!skill) throw new Error(`Unknown creative skill: ${skillId}`);
+    const methodDraft = skill.buildPrompt(brief).slice(0, 24_000);
+    const outputSpec =
+        skill.target === "video"
+            ? `输出用于视频生成；默认画幅 ${skill.defaultAspectRatio}，目标时长约 ${skill.defaultDuration ?? 8} 秒。`
+            : `输出用于图片生成；默认画幅 ${skill.defaultAspectRatio}。`;
+    return [
+        "你是画布中的专业 AIGC 创作导演。先在内部分析用户真正的叙事目标、主体关系、视觉重点和生成模型可执行性，再输出最终提示词。",
+        `当前 Skill：${skill.name}。能力说明：${skill.description}`,
+        outputSpec,
+        "下面的 Skill 方法是创作依据，不是让你机械复制的固定模板。结合用户当前主题做具体判断，删除不适用项，补足真正缺失的镜头、动作、构图、光线、材质、声音或连续性信息。",
+        "--- Skill 方法与约束 ---",
+        methodDraft,
+        "--- 输出规则 ---",
+        "保留用户的核心创意和明确限制；使用具体、可拍摄、可执行的语言，避免空泛夸赞、同义词堆叠和与主题无关的通用负面词。",
+        "只输出一个可直接提交给生成模型的最终提示词，不解释推理过程，不输出标题、前言或 Markdown 代码块。",
+    ].join("\n");
+}
