@@ -12,12 +12,12 @@
         },
         {
             "key": "PROMPT_LLM_BASE_URL",
-            "default": "https://api.openai.com/v1",
+            "default": "http://ai.maxagent.top/v1",
             "description": "接口根地址，通常以 /v1 结尾；也可以直接填写完整的 /chat/completions 地址"
         },
         {
             "key": "PROMPT_LLM_MODEL",
-            "required": true,
+            "default": "gpt-5.6-terra",
             "description": "三方接口实际支持的文本模型 ID；例如 gpt-4o-mini 或服务商自定义 ID"
         },
         {

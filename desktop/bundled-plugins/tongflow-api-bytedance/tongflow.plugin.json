@@ -47,6 +47,15 @@
             "description": "素材所在的火山项目名称，必须与创建素材组时选择的项目一致；例如 WHDDM"
         },
         {
+            "key": "VOLCENGINE_TOS_BUCKET",
+            "description": "可选：端内上传素材使用的 TOS 临时存储桶名称。AK/SK 需有该桶的 PutObject、GetObject、DeleteObject 权限。"
+        },
+        {
+            "key": "VOLCENGINE_TOS_ENDPOINT",
+            "default": "tos-cn-beijing.volces.com",
+            "description": "可选：端内上传素材使用的 TOS Endpoint，默认北京地域。"
+        },
+        {
             "key": "VOLCENGINE_VIDEO_RESOLUTION",
             "default": "720p",
             "description": "输出清晰度。Seedance 2.5 与 2.0 Fast 支持 480p/720p；2.0 标准版还支持 1080p/4k"

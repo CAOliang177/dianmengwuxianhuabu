@@ -18,6 +18,7 @@ from tongflow.slots import node_slot
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _REQUEST_MODEL = ""
+_MULTIMODAL_PREFIX = "__DIANMENG_MULTIMODAL_V1__"
 
 
 def _env(name: str, fallback: str = "") -> str:
@@ -56,6 +57,35 @@ def _timeout() -> int:
         return max(10, min(600, int(_env("PROMPT_LLM_TIMEOUT", "120"))))
     except ValueError:
         return 120
+
+
+def _parse_multimodal_source(source: str) -> tuple[str, list[dict[str, str]]]:
+    if not source.startswith(_MULTIMODAL_PREFIX):
+        return source, []
+    try:
+        payload = json.loads(source[len(_MULTIMODAL_PREFIX) :])
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Agent 多模态素材数据损坏，请重新选择节点后再试") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("Agent 多模态素材格式错误")
+    text = str(payload.get("text") or "").strip()
+    media: list[dict[str, str]] = []
+    values = payload.get("media")
+    if isinstance(values, list):
+        for item in values[:6]:
+            if not isinstance(item, dict) or item.get("type") != "image":
+                continue
+            url = str(item.get("url") or "").strip()
+            if not url.startswith(("data:image/", "https://", "http://")):
+                continue
+            media.append(
+                {
+                    "type": "image",
+                    "url": url,
+                    "label": str(item.get("label") or "视觉参考").strip(),
+                }
+            )
+    return text, media
 
 
 def _redact(value: object, limit: int = 1200) -> str:
@@ -97,7 +127,7 @@ def _post_json(body: dict[str, Any]) -> dict[str, Any]:
     )
     last_error: Exception | None = None
     deadline = time.monotonic() + _timeout()
-    for attempt in range(3):
+    for attempt in range(4):
         remaining = max(1.0, deadline - time.monotonic())
         try:
             with urlopen(request, timeout=remaining) as response:  # noqa: S310
@@ -109,7 +139,7 @@ def _post_json(body: dict[str, Any]) -> dict[str, Any]:
         except HTTPError as exc:
             raw = exc.read()
             message = _error_message(raw)
-            if exc.code in {408, 409, 429} or exc.code >= 500:
+            if exc.code in {408, 409, 425, 429} or exc.code >= 500:
                 last_error = RuntimeError(
                     f"大语言模型 API HTTP {exc.code}: {message}"
                 )
@@ -123,13 +153,14 @@ def _post_json(body: dict[str, Any]) -> dict[str, Any]:
             socket.timeout,
             TimeoutError,
             ConnectionError,
+            OSError,
             http.client.IncompleteRead,
             http.client.RemoteDisconnected,
         ) as exc:
             last_error = exc
         except json.JSONDecodeError as exc:
             raise RuntimeError("大语言模型 API 返回的不是有效 JSON") from exc
-        if attempt < 2 and time.monotonic() < deadline:
+        if attempt < 3 and time.monotonic() < deadline:
             time.sleep(min(1.2 * (2**attempt), max(0.0, deadline - time.monotonic())))
         if time.monotonic() >= deadline:
             break
@@ -146,6 +177,8 @@ def _content_text(value: object) -> str:
                 parts.append(item)
             elif isinstance(item, dict):
                 text = item.get("text") or item.get("output_text")
+                if isinstance(text, dict):
+                    text = text.get("value") or text.get("text")
                 if isinstance(text, str):
                     parts.append(text)
         return "\n".join(part.strip() for part in parts if part.strip()).strip()
@@ -162,9 +195,10 @@ def _extract_text(payload: dict[str, Any]) -> str:
         if isinstance(choice, dict):
             message = choice.get("message")
             if isinstance(message, dict):
-                content = _content_text(message.get("content"))
-                if content:
-                    return content
+                for key in ("content", "output_text", "reasoning_content"):
+                    content = _content_text(message.get(key))
+                    if content:
+                        return content
             content = _content_text(choice.get("text"))
             if content:
                 return content
@@ -176,12 +210,20 @@ def _extract_text(payload: dict[str, Any]) -> str:
             content = _content_text(item.get("content"))
             if content:
                 return content
-    raise RuntimeError("大语言模型 API 没有返回可用文本，请检查接口兼容格式")
+    for key in ("response", "answer", "content", "text"):
+        content = _content_text(payload.get(key))
+        if content:
+            return content
+    fields = ", ".join(sorted(str(key) for key in payload.keys())[:12])
+    raise RuntimeError(
+        "大语言模型 API 没有返回可用文本，请检查接口是否兼容 OpenAI "
+        f"Chat Completions 格式（实际字段：{fields or '空响应'}）"
+    )
 
 
 @node_slot(NodeSlots.GEN_TEXT)
 def gen_text(input: GenTextInput) -> GenTextOutput:
-    source = input.text.strip()
+    source, media = _parse_multimodal_source(input.text.strip())
     if not source:
         raise RuntimeError("大语言模型输入不能为空")
     instruction = (input.userPrompt or "").strip() or (
@@ -190,11 +232,31 @@ def gen_text(input: GenTextInput) -> GenTextOutput:
     role = _env("PROMPT_LLM_INSTRUCTION_ROLE", "system").lower()
     if role not in {"system", "developer"}:
         role = "system"
+    user_content: str | list[dict[str, Any]] = source
+    if media:
+        visual_parts: list[dict[str, Any]] = [
+            {"type": "text", "text": source},
+            {
+                "type": "text",
+                "text": "以下是用户实际选择的图片原图或视频关键帧，请先观察画面再分析。",
+            },
+        ]
+        for item in media:
+            visual_parts.append(
+                {"type": "text", "text": f"视觉附件：{item['label']}"}
+            )
+            visual_parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": item["url"], "detail": "high"},
+                }
+            )
+        user_content = visual_parts
     body: dict[str, Any] = {
         "model": _model(),
         "messages": [
             {"role": role, "content": instruction},
-            {"role": "user", "content": source},
+            {"role": "user", "content": user_content},
         ],
         "stream": False,
     }

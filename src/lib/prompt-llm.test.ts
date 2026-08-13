@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTask, getTask } from "@/lib/api/task";
-import { generatePromptWithLlm, PROMPT_LLM_PLUGIN_ID } from "@/lib/prompt-llm";
+import {
+    encodePromptLlmInput,
+    generatePromptWithLlm,
+    PROMPT_LLM_MULTIMODAL_PREFIX,
+    PROMPT_LLM_PLUGIN_ID,
+} from "@/lib/prompt-llm";
 
 vi.mock("@/lib/api/task", () => ({
     createTask: vi.fn(),
@@ -74,5 +79,40 @@ describe("generatePromptWithLlm", () => {
         } as MessageEvent<string>);
 
         await expect(pending).rejects.toThrow("模型 ID 不存在");
+    });
+
+    it("passes visual attachments through the task protocol", async () => {
+        const pending = generatePromptWithLlm({
+            input: "分析参考画面",
+            instruction: "先看图再回答",
+            media: [
+                {
+                    type: "image",
+                    url: "data:image/jpeg;base64,AAA=",
+                    label: "视频中段",
+                },
+            ],
+        });
+
+        await vi.waitFor(() => expect(MockEventSource.latest).toBeDefined());
+        const call = vi.mocked(createTask).mock.calls[0]?.[0];
+        expect(call?.prompt.text).toBe(
+            encodePromptLlmInput("分析参考画面", [
+                {
+                    type: "image",
+                    url: "data:image/jpeg;base64,AAA=",
+                    label: "视频中段",
+                },
+            ]),
+        );
+        expect(call?.prompt.text).toContain(PROMPT_LLM_MULTIMODAL_PREFIX);
+
+        MockEventSource.latest?.onmessage?.({
+            data: JSON.stringify({
+                status: "COMPLETED",
+                data: { text: "已分析画面" },
+            }),
+        } as MessageEvent<string>);
+        await expect(pending).resolves.toBe("已分析画面");
     });
 });

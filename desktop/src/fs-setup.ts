@@ -19,6 +19,12 @@ const PUBLIC_IMAGE_PRESETS: Record<string, string> = {
     NEW_CHANNEL_EDIT_ASYNC: "false",
     NEW_CHANNEL_REQUEST_TIMEOUT: "90",
     NEW_CHANNEL_TIMEOUT: "600",
+    PROMPT_LLM_BASE_URL: "http://ai.maxagent.top/v1",
+    PROMPT_LLM_MODEL: "gpt-5.6-terra",
+    PROMPT_LLM_INSTRUCTION_ROLE: "system",
+    PROMPT_LLM_MAX_TOKENS: "2400",
+    PROMPT_LLM_TOKEN_PARAM: "max_tokens",
+    PROMPT_LLM_TIMEOUT: "120",
     VOLCENGINE_BASE_URL: "https://ark.cn-beijing.volces.com/api/v3",
     VOLCENGINE_VIDEO_MODEL: "doubao-seedance-2-5-260628",
     VOLCENGINE_TIMEOUT: "1800",
@@ -29,6 +35,7 @@ const BUNDLED_CORE_PLUGIN_IDS = new Set([
     "tongflow-api-banana-relay",
     "tongflow-api-new-channel",
     "tongflow-api-bytedance",
+    "tongflow-api-prompt-llm",
 ]);
 
 const RETIRED_BUNDLED_PLUGIN_IDS = [

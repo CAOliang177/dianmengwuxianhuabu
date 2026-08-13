@@ -190,6 +190,7 @@ export interface FlowState {
         position?: { x: number; y: number },
     ) => string;
     removeNode: (nodeId: string) => void;
+    removeNodes: (nodeIds: string[]) => void;
     removeEdges: (edgeIds: string[]) => void;
     /** Dissolve a multi-image upload group into standalone image nodes. */
     ungroupImageNode: (nodeId: string) => string[];
@@ -295,6 +296,13 @@ export const useFlow = create<FlowState>((set, get) => ({
     getCompute: (id) => get().computeMap.get(id),
     selectedNodes: [],
     onSelectionChange: ({ nodes }) => {
+        const current = get().selectedNodes;
+        if (
+            current.length === nodes.length &&
+            current.every((node, index) => node.id === nodes[index]?.id)
+        ) {
+            return;
+        }
         set({
             selectedNodes: nodes,
         });
@@ -451,17 +459,23 @@ export const useFlow = create<FlowState>((set, get) => ({
         return nodeId;
     },
     removeNode: (nodeId: string) => {
-        get().pushHistory();
+        get().removeNodes([nodeId]);
+    },
+    removeNodes: (nodeIds: string[]) => {
+        if (nodeIds.length === 0) return;
+        const idSet = new Set(nodeIds);
         const { nodes, edges } = get();
-        const newNodes = nodes.filter((node) => node.id !== nodeId);
+        const newNodes = nodes.filter((node) => !idSet.has(node.id));
+        if (newNodes.length === nodes.length) return;
+        get().pushHistory();
         const newEdges = edges.filter(
-            (edge) => edge.source !== nodeId && edge.target !== nodeId,
+            (edge) => !idSet.has(edge.source) && !idSet.has(edge.target),
         );
         set({
             nodes: newNodes,
             edges: newEdges,
         });
-        saveNodesImmediately(newNodes, [nodeId]);
+        saveNodesImmediately(newNodes, nodeIds);
         saveEdgesImmediately(newEdges);
     },
     removeEdges: (edgeIds: string[]) => {

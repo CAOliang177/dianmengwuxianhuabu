@@ -5,6 +5,10 @@ export interface VideoPromptHistoryRecord {
     createdAt: number;
     mode?: string;
     model?: string;
+    resolution?: string;
+    duration?: number;
+    width?: number;
+    height?: number;
 }
 
 export function readVideoPromptHistory(
@@ -34,13 +38,35 @@ export function readVideoPromptHistory(
             ...(typeof item.model === "string" && item.model
                 ? { model: item.model }
                 : {}),
+            ...(typeof item.resolution === "string" && item.resolution
+                ? { resolution: item.resolution }
+                : {}),
+            ...(typeof item.duration === "number" &&
+            Number.isFinite(item.duration)
+                ? { duration: item.duration }
+                : {}),
+            ...(typeof item.width === "number" && Number.isFinite(item.width)
+                ? { width: item.width }
+                : {}),
+            ...(typeof item.height === "number" && Number.isFinite(item.height)
+                ? { height: item.height }
+                : {}),
         });
     }
     return records
         .sort((a, b) => b.createdAt - a.createdAt)
         .filter(
             (record, index, list) =>
-                list.findIndex((item) => item.text === record.text) === index,
+                list.findIndex(
+                    (item) =>
+                        item.text === record.text &&
+                        item.mode === record.mode &&
+                        item.model === record.model &&
+                        item.resolution === record.resolution &&
+                        item.duration === record.duration &&
+                        item.width === record.width &&
+                        item.height === record.height,
+                ) === index,
         )
         .slice(0, VIDEO_PROMPT_HISTORY_LIMIT);
 }

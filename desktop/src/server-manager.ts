@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import http from "node:http";
+import { app } from "electron";
 import {
     appResourcesDir,
     bundledNode,
@@ -37,6 +38,7 @@ export async function startServer(
         TONGFLOW_DATA_DIR: dataDir(),
         TONGFLOW_PLUGINS_DIR: pluginsDir(),
         TONGFLOW_RESOURCES_DIR: appResourcesDir(),
+        TONGFLOW_APP_VERSION: app.getVersion(),
         PYTHON: venvPython(),
     };
 

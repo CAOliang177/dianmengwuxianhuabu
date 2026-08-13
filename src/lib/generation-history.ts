@@ -10,6 +10,10 @@ export interface GenerationHistoryRecord {
     prompt?: string;
     videoMode?: string;
     model?: string;
+    resolution?: string;
+    duration?: number;
+    width?: number;
+    height?: number;
 }
 
 export function normalizeGenerationTimestamp(value: number): number {
@@ -77,6 +81,21 @@ export function readGenerationHistory(
                         : {}),
                     ...(typeof item.model === "string" && item.model
                         ? { model: item.model }
+                        : {}),
+                    ...(typeof item.resolution === "string" && item.resolution
+                        ? { resolution: item.resolution }
+                        : {}),
+                    ...(typeof item.duration === "number" &&
+                    Number.isFinite(item.duration)
+                        ? { duration: item.duration }
+                        : {}),
+                    ...(typeof item.width === "number" &&
+                    Number.isFinite(item.width)
+                        ? { width: item.width }
+                        : {}),
+                    ...(typeof item.height === "number" &&
+                    Number.isFinite(item.height)
+                        ? { height: item.height }
                         : {}),
                 });
             }

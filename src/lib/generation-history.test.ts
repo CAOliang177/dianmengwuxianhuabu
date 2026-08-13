@@ -42,6 +42,10 @@ describe("generation history ordering", () => {
                             prompt: "最终版视频提示词",
                             videoMode: "edit",
                             model: "seedance-2.5",
+                            resolution: "1080p",
+                            duration: 12,
+                            width: 1920,
+                            height: 1080,
                         },
                     ],
                 },
@@ -55,6 +59,10 @@ describe("generation history ordering", () => {
                 prompt: "最终版视频提示词",
                 videoMode: "edit",
                 model: "seedance-2.5",
+                resolution: "1080p",
+                duration: 12,
+                width: 1920,
+                height: 1080,
             },
         ]);
     });

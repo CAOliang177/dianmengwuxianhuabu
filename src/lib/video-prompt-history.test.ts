@@ -13,6 +13,10 @@ describe("video prompt history", () => {
                 createdAt: 200,
                 mode: "edit",
                 model: "seedance-2.5",
+                resolution: "1080p",
+                duration: 12,
+                width: 1920,
+                height: 1080,
             },
         );
         expect(data.text).toBe("最终版提示词");
@@ -24,6 +28,10 @@ describe("video prompt history", () => {
                 createdAt: 200,
                 mode: "edit",
                 model: "seedance-2.5",
+                resolution: "1080p",
+                duration: 12,
+                width: 1920,
+                height: 1080,
             },
         ]);
     });
@@ -41,5 +49,29 @@ describe("video prompt history", () => {
             "另一版",
         ]);
         expect(records[0]?.createdAt).toBe(300);
+    });
+
+    it("keeps the same prompt when its generation parameters differ", () => {
+        const records = readVideoPromptHistory({
+            promptHistoryRecords: [
+                {
+                    text: "相同文案",
+                    createdAt: 200,
+                    mode: "reference",
+                    resolution: "1080p",
+                },
+                {
+                    text: "相同文案",
+                    createdAt: 100,
+                    mode: "reference",
+                    resolution: "720p",
+                },
+            ],
+        });
+        expect(records).toHaveLength(2);
+        expect(records.map((record) => record.resolution)).toEqual([
+            "1080p",
+            "720p",
+        ]);
     });
 });

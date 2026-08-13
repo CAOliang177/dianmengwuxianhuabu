@@ -5,7 +5,15 @@
  * Contains: workflow list, task list, portfolio
  */
 
-import { FolderOpen, Loader2, Workflow, Zap } from "lucide-react";
+import {
+    ExternalLink,
+    FolderOpen,
+    Layers3,
+    Loader2,
+    Plus,
+    Workflow,
+    Zap,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +31,13 @@ import {
 import { PortfolioDialog } from "@/components/workspace/portfolio-dialog";
 import { WorkflowDialog } from "@/components/workspace/workflow-dialog";
 import { listTasks, type Task } from "@/lib/api/task";
+import {
+    type CanvasHistoryItem,
+    createCanvas,
+    getActiveCanvasId,
+    getCanvasHistory,
+    hydrateCanvasHistoryFromDisk,
+} from "@/lib/canvas-history";
 import { logger } from "@/lib/logger";
 import { formatStoredTaskErrorForDisplay } from "@/lib/task/error-format";
 
@@ -37,6 +52,9 @@ export function WorkspaceLeftNav() {
     const [taskPage, setTaskPage] = useState(1);
     const [taskHasMore, setTaskHasMore] = useState(true);
     const taskScrollContainerRef = useRef<HTMLDivElement>(null);
+    const [isCanvasSheetOpen, setIsCanvasSheetOpen] = useState(false);
+    const [canvasList, setCanvasList] = useState<CanvasHistoryItem[]>([]);
+    const [canvasLoading, setCanvasLoading] = useState(false);
 
     // Load the task list (initial load or refresh)
     const loadTasks = async () => {
@@ -89,6 +107,45 @@ export function WorkspaceLeftNav() {
         }
     }, [isTaskSheetOpen]);
 
+    useEffect(() => {
+        if (!isCanvasSheetOpen) return;
+        let cancelled = false;
+        setCanvasLoading(true);
+        void hydrateCanvasHistoryFromDisk()
+            .then(() => {
+                if (!cancelled) setCanvasList(getCanvasHistory());
+            })
+            .catch((error) => {
+                logger.error("Failed to load canvas list:", error);
+                if (!cancelled) setCanvasList(getCanvasHistory());
+            })
+            .finally(() => {
+                if (!cancelled) setCanvasLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [isCanvasSheetOpen]);
+
+    const openCanvasInNewWindow = useCallback(async (canvasId: string) => {
+        const bridge = window.tongflowDesktop;
+        if (bridge?.openCanvasWindow) {
+            const opened = await bridge.openCanvasWindow(canvasId);
+            if (opened) return;
+        }
+        window.open(
+            `/workspace?canvas=${encodeURIComponent(canvasId)}`,
+            "_blank",
+            "noopener,noreferrer",
+        );
+    }, []);
+
+    const createCanvasInNewWindow = useCallback(async () => {
+        const canvasId = createCanvas(undefined, { activate: false });
+        setCanvasList(getCanvasHistory());
+        await openCanvasInNewWindow(canvasId);
+    }, [openCanvasInNewWindow]);
+
     return (
         <>
             <div className="flex items-center gap-2">
@@ -106,6 +163,25 @@ export function WorkspaceLeftNav() {
                         </Button>
                     }
                 />
+
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            onClick={() => setIsCanvasSheetOpen(true)}
+                            aria-label={t("multiCanvas")}
+                            className="h-10 gap-2 rounded-xl border border-gray-100 bg-white px-3 text-gray-700 transition-all duration-200 hover:bg-gray-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-200 dark:hover:bg-zinc-700"
+                        >
+                            <Layers3 className="h-5 w-5" />
+                            <span className="hidden xl:inline">
+                                {t("multiCanvas")}
+                            </span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                        {t("multiCanvasHint")}
+                    </TooltipContent>
+                </Tooltip>
 
                 {/* Task button */}
                 <Tooltip>
@@ -240,6 +316,66 @@ export function WorkspaceLeftNav() {
                                     </div>
                                 )}
                             </>
+                        )}
+                    </div>
+                </SheetContent>
+            </Sheet>
+
+            <Sheet open={isCanvasSheetOpen} onOpenChange={setIsCanvasSheetOpen}>
+                <SheetContent side="left" className="flex flex-col">
+                    <SheetHeader>
+                        <SheetTitle>{t("multiCanvas")}</SheetTitle>
+                    </SheetHeader>
+                    <Button
+                        className="mt-4 w-full gap-2"
+                        onClick={() => void createCanvasInNewWindow()}
+                    >
+                        <Plus className="h-4 w-4" />
+                        {t("newCanvasWindow")}
+                    </Button>
+                    <div className="mt-4 flex-1 space-y-2 overflow-y-auto pr-1">
+                        {canvasLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : canvasList.length === 0 ? (
+                            <div className="py-8 text-center text-muted-foreground">
+                                {t("noCanvases")}
+                            </div>
+                        ) : (
+                            canvasList.map((canvas) => {
+                                const isCurrent =
+                                    canvas.id === getActiveCanvasId();
+                                return (
+                                    <button
+                                        key={canvas.id}
+                                        type="button"
+                                        onClick={() =>
+                                            void openCanvasInNewWindow(
+                                                canvas.id,
+                                            )
+                                        }
+                                        className="flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:border-primary/40 hover:bg-muted/50"
+                                    >
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                                            <Layers3 className="h-5 w-5 text-muted-foreground" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate text-sm font-medium">
+                                                {canvas.name}
+                                            </div>
+                                            <div className="mt-0.5 text-xs text-muted-foreground">
+                                                {isCurrent
+                                                    ? t("currentCanvas")
+                                                    : t("canvasNodeCount", {
+                                                          count: canvas.nodeCount,
+                                                      })}
+                                            </div>
+                                        </div>
+                                        <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    </button>
+                                );
+                            })
                         )}
                     </div>
                 </SheetContent>

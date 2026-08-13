@@ -39,7 +39,6 @@ import {
     collectConnectedImageReferences,
 } from "@/lib/image-references";
 import { logger } from "@/lib/logger";
-import { removeAndRenumberReferenceTokens } from "@/lib/reference-tokens";
 import {
     getAbiNodeBySlot,
     resolveAbiOutputMappings,
@@ -194,15 +193,9 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
             if (!nodeId) return;
             const entry = referenceEntries[index];
             if (!entry) return;
-            const removedNumbers = new Set<number>();
             if (entry.edgeId) {
-                referenceEntries.forEach((candidate, candidateIndex) => {
-                    if (candidate.edgeId === entry.edgeId)
-                        removedNumbers.add(candidateIndex + 1);
-                });
                 useFlow.getState().removeEdges([entry.edgeId]);
             } else {
-                removedNumbers.add(index + 1);
                 const current = useFlow
                     .getState()
                     .nodes.find((node) => node.id === nodeId);
@@ -223,15 +216,10 @@ const TextGenImageNode = ({ selected, data }: TextGenImageNodeProps) => {
                     ),
                 });
             }
-            form.patch({
-                text: removeAndRenumberReferenceTokens(
-                    localText,
-                    "图片",
-                    removedNumbers,
-                ),
-            });
+            // Keep @图片N exactly as authored. It is prompt text and must not
+            // be deleted merely because the current material is detached.
         },
-        [form, localText, nodeId, referenceEntries],
+        [nodeId, referenceEntries],
     );
 
     useEffect(() => {

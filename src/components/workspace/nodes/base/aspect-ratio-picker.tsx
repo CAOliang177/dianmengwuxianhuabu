@@ -92,6 +92,7 @@ export function AspectRatioPicker({
                                 key={ratio.value}
                                 variant={isSelected ? "default" : "outline"}
                                 size="sm"
+                                disabled={autoOption?.active}
                                 onClick={() => onChange(ratio)}
                                 className={cn(
                                     "h-auto min-w-0 px-1 flex flex-col items-center gap-1 text-xs whitespace-normal transition-all",

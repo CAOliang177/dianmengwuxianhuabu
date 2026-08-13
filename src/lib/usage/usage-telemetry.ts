@@ -5,6 +5,7 @@ type TrackConfig = {
     pluginId: string;
     model?: string;
     nodeId: string;
+    prompt?: Record<string, unknown>;
 };
 
 type TaskResult = {
@@ -19,6 +20,12 @@ type Tracked = TrackConfig & {
     startedAt: number;
     projectId: string;
     projectName: string;
+};
+
+type VideoMetadata = {
+    mediaType: "video";
+    videoDurationSeconds?: number;
+    videoResolution?: string;
 };
 
 const tracked = new Map<string, Tracked>();
@@ -42,6 +49,121 @@ function outputCount(value: unknown, depth = 0): number {
         (sum, item) => sum + outputCount(item, depth + 1),
         0,
     );
+}
+
+function finiteNumber(value: unknown) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+}
+
+function requestedVideoMetadata(config: TrackConfig): VideoMetadata | null {
+    const feature = config.feature.toLowerCase();
+    const model = (config.model || "").toLowerCase();
+    if (!feature.includes("video") && !/seedance|veo|kling|wan-video/.test(model)) {
+        return null;
+    }
+
+    const prompt = config.prompt ?? {};
+    const duration = [
+        prompt.duration,
+        prompt.durationSeconds,
+        prompt.duration_seconds,
+        prompt.seconds,
+    ]
+        .map(finiteNumber)
+        .find((value) => value > 0);
+    const width = finiteNumber(prompt.width);
+    const height = finiteNumber(prompt.height);
+    const resolution =
+        typeof prompt.resolution === "string" && prompt.resolution.trim()
+            ? prompt.resolution.trim().toUpperCase()
+            : width > 0 && height > 0
+              ? `${Math.round(width)}×${Math.round(height)}`
+              : undefined;
+
+    return {
+        mediaType: "video",
+        ...(duration ? { videoDurationSeconds: duration } : {}),
+        ...(resolution ? { videoResolution: resolution } : {}),
+    };
+}
+
+function findVideoSource(value: unknown, depth = 0): string | null {
+    if (depth > 6 || value == null) return null;
+    if (typeof value === "string") {
+        return /(?:\.mp4|\.webm|\.mov)(?:[?#]|$)|\/api\/uploads\/|\/uploads\//i.test(
+            value,
+        )
+            ? value
+            : null;
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findVideoSource(item, depth + 1);
+            if (found) return found;
+        }
+        return null;
+    }
+    if (typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    for (const key of [
+        "videoUrl",
+        "video_url",
+        "fileUrl",
+        "file_url",
+        "url",
+        "output",
+        "result",
+        "data",
+    ]) {
+        const found = findVideoSource(record[key], depth + 1);
+        if (found) return found;
+    }
+    for (const item of Object.values(record)) {
+        const found = findVideoSource(item, depth + 1);
+        if (found) return found;
+    }
+    return null;
+}
+
+async function probeVideoMetadata(
+    value: unknown,
+    fallback: VideoMetadata,
+): Promise<VideoMetadata> {
+    const source = findVideoSource(value);
+    if (!source || typeof document === "undefined") return fallback;
+
+    return new Promise((resolve) => {
+        const video = document.createElement("video");
+        let settled = false;
+        const finish = (metadata: VideoMetadata) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            video.removeAttribute("src");
+            video.load();
+            resolve(metadata);
+        };
+        const timeout = setTimeout(() => finish(fallback), 4_000);
+        video.preload = "metadata";
+        video.onloadedmetadata = () => {
+            const duration =
+                Number.isFinite(video.duration) && video.duration > 0
+                    ? Math.round(video.duration * 10) / 10
+                    : fallback.videoDurationSeconds;
+            const resolution =
+                video.videoWidth > 0 && video.videoHeight > 0
+                    ? `${video.videoWidth}×${video.videoHeight}`
+                    : fallback.videoResolution;
+            finish({
+                mediaType: "video",
+                ...(duration ? { videoDurationSeconds: duration } : {}),
+                ...(resolution ? { videoResolution: resolution } : {}),
+            });
+        };
+        video.onerror = () => finish(fallback);
+        video.src = source;
+    });
 }
 
 function cleanError(value: unknown) {
@@ -69,29 +191,42 @@ export function reportUsageTask(task: TaskResult) {
     reported.add(task.id);
     tracked.delete(task.id);
     const errorMessage = cleanError(task.error || task.data?.error);
-    void fetch("/api/usage-report", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-            id: globalThis.crypto?.randomUUID?.() || `event-${Date.now()}-${task.id}`,
-            projectId: context.projectId,
-            projectName: context.projectName,
-            taskId: task.id,
-            feature: context.feature,
-            pluginId: context.pluginId,
-            model: context.model || "默认模型",
-            status: task.status.toLowerCase(),
-            durationMs: Date.now() - context.startedAt,
-            outputCount: task.status === "COMPLETED" ? Math.max(1, outputCount(task.data ?? task.result)) : 0,
-            errorMessage,
-            occurredAt: Date.now(),
-        }),
-        keepalive: true,
-    }).catch(() => undefined);
+    void (async () => {
+        const requestedVideo = requestedVideoMetadata(context);
+        const videoMetadata = requestedVideo
+            ? await probeVideoMetadata(task.data ?? task.result, requestedVideo)
+            : null;
+        await fetch("/api/usage-report", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                id:
+                    globalThis.crypto?.randomUUID?.() ||
+                    `event-${Date.now()}-${task.id}`,
+                projectId: context.projectId,
+                projectName: context.projectName,
+                taskId: task.id,
+                feature: context.feature,
+                pluginId: context.pluginId,
+                model: context.model || "默认模型",
+                status: task.status.toLowerCase(),
+                durationMs: Date.now() - context.startedAt,
+                outputCount:
+                    task.status === "COMPLETED"
+                        ? Math.max(1, outputCount(task.data ?? task.result))
+                        : 0,
+                ...(videoMetadata ?? { mediaType: "image" }),
+                errorMessage,
+                occurredAt: Date.now(),
+            }),
+            keepalive: true,
+        });
+    })().catch(() => undefined);
 }
 
 export function reportUsageCreateFailure(config: TrackConfig, reason: unknown) {
     const project = projectInfo();
+    const videoMetadata = requestedVideoMetadata(config);
     void fetch("/api/usage-report", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -105,6 +240,7 @@ export function reportUsageCreateFailure(config: TrackConfig, reason: unknown) {
             status: "create_failed",
             durationMs: 0,
             outputCount: 0,
+            ...(videoMetadata ?? { mediaType: "image" }),
             errorMessage: cleanError(reason),
             occurredAt: Date.now(),
         }),

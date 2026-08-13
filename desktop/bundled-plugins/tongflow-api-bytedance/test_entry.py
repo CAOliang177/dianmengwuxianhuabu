@@ -18,6 +18,31 @@ SPEC.loader.exec_module(ENTRY)
 
 
 class Seedance25EditRequestTests(unittest.TestCase):
+    def capture_request(
+        self,
+        *,
+        model: str = "doubao-seedance-2-5-260628",
+        **kwargs: object,
+    ) -> dict[str, object]:
+        captured: dict[str, object] = {}
+
+        def fake_http(
+            _url: str,
+            *,
+            method: str = "GET",
+            body: bytes | None = None,
+        ) -> bytes:
+            captured["body"] = json.loads((body or b"{}").decode("utf-8"))
+            return b'{"id":"task-1"}'
+
+        with (
+            patch.object(ENTRY, "_model", return_value=model),
+            patch.object(ENTRY, "_http", side_effect=fake_http),
+            patch.object(ENTRY, "_poll_task", return_value=object()),
+        ):
+            ENTRY._create_task(**kwargs)
+        return captured["body"]  # type: ignore[return-value]
+
     def test_edit_uses_adaptive_ratio_and_source_duration(self) -> None:
         captured: dict[str, object] = {}
 
@@ -81,6 +106,50 @@ class Seedance25EditRequestTests(unittest.TestCase):
                     asset_ids="video:asset-source-video",
                     operation="edit",
                 )
+
+    def test_first_frame_role_always_uses_adaptive_ratio(self) -> None:
+        request = self.capture_request(
+            prompt="人物向前走",
+            width=1024,
+            height=576,
+            duration=5,
+            images=[ENTRY.asset(b"image", mime="image/png", filename="frame.png")],
+            image_role="first_frame",
+        )
+        self.assertEqual(request["ratio"], "adaptive")
+
+    def test_reference_mode_overrides_first_frame_words_for_all_models(self) -> None:
+        for model in (
+            "doubao-seedance-2-0-260128",
+            "doubao-seedance-2-0-fast-260128",
+            "doubao-seedance-2-5-260628",
+        ):
+            with self.subTest(model=model):
+                original_prompt = "以@图片1作为首帧，人物向前走"
+                request = self.capture_request(
+                    model=model,
+                    prompt=original_prompt,
+                    width=1024,
+                    height=576,
+                    duration=5,
+                    asset_ids="image:asset-reference-image",
+                )
+                self.assertEqual(request["ratio"], "16:9")
+                request_text = request["content"][0]["text"]
+                self.assertNotIn("首帧", request_text)
+                self.assertIn("开场构图参考", request_text)
+                self.assertIn("@图片1", request_text)
+                self.assertEqual(original_prompt, "以@图片1作为首帧，人物向前走")
+
+    def test_regular_reference_prompt_keeps_selected_ratio(self) -> None:
+        request = self.capture_request(
+            prompt="参考@图片1的人物造型，人物向前走",
+            width=1024,
+            height=576,
+            duration=5,
+            asset_ids="image:asset-reference-image",
+        )
+        self.assertEqual(request["ratio"], "16:9")
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +69,7 @@ import {
 } from "@/lib/generation-history";
 import { emitTaskCancelRequest } from "@/lib/task/sse-events";
 import { cn } from "@/lib/utils";
+import { withVideoPromptSnapshot } from "@/lib/video-prompt-history";
 
 interface IconButtonProps {
     icon: React.ComponentType<{ className?: string }>;
@@ -310,7 +312,7 @@ function HistoryVideoCard({
                         onClick={onRestorePrompt}
                     >
                         <FileText className="mr-1 h-3.5 w-3.5" />
-                        恢复提示词
+                        复用提示词
                     </Button>
                 ) : null}
             </div>
@@ -437,12 +439,19 @@ export default function SmartIsland({
             createdAt: number;
             mediaType: "image" | "video";
             prompt?: string;
+            videoMode?: string;
+            model?: string;
+            resolution?: string;
+            duration?: number;
+            width?: number;
+            height?: number;
         }> = [];
         const now = Date.now();
         for (const node of nodes) {
             const data = node.data as Record<string, unknown>;
             const records = readGenerationHistory(data, now);
-            for (const { fileKey, createdAt, mediaType, prompt } of records) {
+            for (const record of records) {
+                const { fileKey, createdAt, mediaType, prompt } = record;
                 if (!fileKey) continue;
                 const taskId = generationTaskId(fileKey);
                 items.push({
@@ -450,6 +459,22 @@ export default function SmartIsland({
                     fileKey,
                     mediaType: mediaType === "video" ? "video" : "image",
                     ...(prompt ? { prompt } : {}),
+                    ...(record.videoMode
+                        ? { videoMode: record.videoMode }
+                        : {}),
+                    ...(record.model ? { model: record.model } : {}),
+                    ...(record.resolution
+                        ? { resolution: record.resolution }
+                        : {}),
+                    ...(typeof record.duration === "number"
+                        ? { duration: record.duration }
+                        : {}),
+                    ...(typeof record.width === "number"
+                        ? { width: record.width }
+                        : {}),
+                    ...(typeof record.height === "number"
+                        ? { height: record.height }
+                        : {}),
                     createdAt:
                         (taskId ? historyTaskTimes.get(taskId) : undefined) ??
                         createdAt,
@@ -576,22 +601,76 @@ export default function SmartIsland({
     );
 
     const restoreHistoryPrompt = useCallback(
-        (nodeId: string, prompt: string) => {
-            const current = useFlow
-                .getState()
-                .nodes.find((node) => node.id === nodeId);
-            if (!current) return;
-            useFlow.getState().updates(
-                nodeId,
+        (item: (typeof generationHistory)[number]) => {
+            if (!item.prompt) return;
+            const state = useFlow.getState();
+            const current = state.nodes.find((node) => node.id === item.nodeId);
+            if (!current) {
+                toast.error("原视频节点已不存在，无法复用这条提示词");
+                return;
+            }
+            const currentData = current.data as Record<string, unknown>;
+            const restoredData = withVideoPromptSnapshot(
                 {
-                    ...(current.data as Record<string, unknown>),
-                    text: prompt,
+                    ...currentData,
+                    ...(item.videoMode
+                        ? {
+                              videoMode: item.videoMode,
+                              operation:
+                                  item.videoMode === "edit"
+                                      ? "edit"
+                                      : "generate",
+                          }
+                        : {}),
+                    ...(item.model ? { pluginModel: item.model } : {}),
+                    ...(item.resolution ? { resolution: item.resolution } : {}),
+                    ...(typeof item.duration === "number"
+                        ? { duration: item.duration }
+                        : {}),
+                    ...(typeof item.width === "number"
+                        ? { width: item.width }
+                        : {}),
+                    ...(typeof item.height === "number"
+                        ? { height: item.height }
+                        : {}),
                 },
-                { immediate: true },
+                {
+                    text: item.prompt,
+                    createdAt: Date.now(),
+                    ...(item.videoMode ? { mode: item.videoMode } : {}),
+                    ...(item.model ? { model: item.model } : {}),
+                    ...(item.resolution ? { resolution: item.resolution } : {}),
+                    ...(typeof item.duration === "number"
+                        ? { duration: item.duration }
+                        : {}),
+                    ...(typeof item.width === "number"
+                        ? { width: item.width }
+                        : {}),
+                    ...(typeof item.height === "number"
+                        ? { height: item.height }
+                        : {}),
+                },
+            );
+            state.updates(item.nodeId, restoredData, { immediate: true });
+            const latest = useFlow.getState();
+            latest.setNodes(
+                latest.nodes.map((node) => ({
+                    ...node,
+                    selected: node.id === item.nodeId,
+                })),
             );
             setHistoryOpen(false);
+            window.setTimeout(() => {
+                void reactFlow.fitView({
+                    nodes: [{ id: item.nodeId }],
+                    duration: 350,
+                    padding: 0.35,
+                    maxZoom: 1.25,
+                });
+            }, 50);
+            toast.success("已恢复提示词和本次生成参数");
         },
-        [],
+        [generationHistory, reactFlow],
     );
 
     const {
@@ -830,9 +909,7 @@ export default function SmartIsland({
                                                         item.prompt
                                                             ? () =>
                                                                   restoreHistoryPrompt(
-                                                                      item.nodeId,
-                                                                      item.prompt ??
-                                                                          "",
+                                                                      item,
                                                                   )
                                                             : undefined
                                                     }

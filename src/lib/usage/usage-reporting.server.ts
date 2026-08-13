@@ -24,12 +24,19 @@ export interface UsageEventInput {
     status: "completed" | "failed" | "cancelled" | "create_failed";
     durationMs: number;
     outputCount: number;
+    mediaType?: "image" | "video" | "audio" | "other";
+    videoDurationSeconds?: number;
+    videoResolution?: string;
     errorCode?: string;
     errorMessage?: string;
     occurredAt: number;
 }
 
-const APP_VERSION = "0.1.56";
+const APP_VERSION = clean(
+    process.env.TONGFLOW_APP_VERSION,
+    32,
+    process.env.npm_package_version || "unknown",
+);
 const DEFAULT_ENDPOINT =
     "https://dianmeng-d4g0o715e8e8e422a.service.tcloudbase.com";
 const LEGACY_ENDPOINTS = new Set([
@@ -131,6 +138,16 @@ function sanitizeEvent(input: UsageEventInput): UsageEventInput | null {
             Math.min(Number(input.durationMs) || 0, 86_400_000),
         ),
         outputCount: Math.max(0, Math.min(Number(input.outputCount) || 0, 100)),
+        mediaType: ["image", "video", "audio", "other"].includes(
+            clean(input.mediaType, 16),
+        )
+            ? input.mediaType
+            : "other",
+        videoDurationSeconds: Math.max(
+            0,
+            Math.min(Number(input.videoDurationSeconds) || 0, 3_600),
+        ),
+        videoResolution: clean(input.videoResolution, 32),
         errorCode: clean(input.errorCode, 120),
         errorMessage: clean(input.errorMessage, 800),
         occurredAt: Number(input.occurredAt) || Date.now(),

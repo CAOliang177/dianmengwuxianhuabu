@@ -98,6 +98,53 @@ class PromptLlmPluginTests(unittest.TestCase):
         }
         self.assertEqual(ENTRY._extract_text(payload), "第一段\n第二段")
 
+    def test_reasoning_content_fallback_is_supported(self) -> None:
+        payload = {
+            "choices": [
+                {"message": {"content": "", "reasoning_content": "最终答案"}}
+            ]
+        }
+        self.assertEqual(ENTRY._extract_text(payload), "最终答案")
+
+    def test_multimodal_input_becomes_openai_image_parts(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_post(body: dict[str, object]) -> dict[str, object]:
+            captured.update(body)
+            return {"choices": [{"message": {"content": "看到了画面"}}]}
+
+        source = ENTRY._MULTIMODAL_PREFIX + __import__("json").dumps(
+            {
+                "text": "分析画面",
+                "media": [
+                    {
+                        "type": "image",
+                        "url": "data:image/jpeg;base64,AAA=",
+                        "label": "视频中段",
+                    }
+                ],
+            }
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "PROMPT_LLM_API_KEY": "test-key",
+                    "PROMPT_LLM_MODEL": "vision-model",
+                },
+                clear=False,
+            ),
+            patch.object(ENTRY, "_post_json", side_effect=fake_post),
+        ):
+            result = ENTRY.gen_text({"text": source, "userPrompt": "观察画面"})
+
+        self.assertEqual(result["text"], "看到了画面")
+        messages = captured["messages"]
+        self.assertIsInstance(messages, list)
+        user_content = messages[1]["content"]
+        self.assertEqual(user_content[0], {"type": "text", "text": "分析画面"})
+        self.assertEqual(user_content[-1]["type"], "image_url")
+
     def test_model_must_be_configured(self) -> None:
         with patch.dict(os.environ, {"PROMPT_LLM_MODEL": ""}, clear=False):
             with self.assertRaisesRegex(RuntimeError, "PROMPT_LLM_MODEL"):

@@ -1,4 +1,4 @@
-import { app, type BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { registerDiagnosticsIpc } from "./diagnostics";
 import { registerDownloadIpc } from "./downloads";
 import { findFreePort } from "./free-port";
@@ -16,6 +16,7 @@ import {
 
 let mainWindow: BrowserWindow | null = null;
 let splash: BrowserWindow | null = null;
+const canvasWindows = new Set<BrowserWindow>();
 
 // Single-instance: focus the existing window instead of starting a 2nd server.
 if (!app.requestSingleInstanceLock()) {
@@ -59,6 +60,24 @@ async function boot(): Promise<void> {
         });
         registerDownloadIpc(() => mainWindow);
         registerDiagnosticsIpc(() => mainWindow);
+        ipcMain.handle("tongflow:canvas-window-open", (event, canvasId) => {
+            const id = String(canvasId || "").trim();
+            if (!id) return false;
+            const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+            const baseUrl =
+                sourceWindow && !sourceWindow.isDestroyed()
+                    ? event.sender.getURL()
+                    : mainWindow?.webContents.getURL();
+            if (!baseUrl?.startsWith("http://127.0.0.1:")) return false;
+            const workspaceUrl = new URL("/workspace", baseUrl);
+            workspaceUrl.searchParams.set("canvas", id);
+            const canvasWindow = createMainWindow(workspaceUrl.toString());
+            canvasWindows.add(canvasWindow);
+            canvasWindow.on("closed", () => {
+                canvasWindows.delete(canvasWindow);
+            });
+            return true;
+        });
 
         mainWindow = createMainWindow(`http://127.0.0.1:${port}`);
         mainWindow.on("closed", () => {
@@ -68,7 +87,6 @@ async function boot(): Promise<void> {
             if (splash && !splash.isDestroyed()) splash.close();
             splash = null;
         });
-
     } catch (err) {
         fatal(err);
     }

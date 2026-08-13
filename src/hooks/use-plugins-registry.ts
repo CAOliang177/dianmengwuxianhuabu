@@ -49,11 +49,27 @@ async function loadRegistry(): Promise<void> {
                 cache: "no-store",
                 credentials: "same-origin",
             });
+            const contentType = res.headers.get("content-type") || "";
+            const raw = await res.text();
             if (!res.ok) {
-                const j = (await res.json()) as { error?: string };
-                throw new Error(j.error || `HTTP ${res.status}`);
+                let detail = "";
+                try {
+                    detail =
+                        (JSON.parse(raw) as { error?: string }).error || "";
+                } catch {
+                    // A missing packaged API route returns a Next.js HTML page.
+                    detail = contentType.includes("text/html")
+                        ? "安装包缺少插件注册接口"
+                        : raw.slice(0, 180);
+                }
+                throw new Error(detail || `HTTP ${res.status}`);
             }
-            const payload = (await res.json()) as PluginsRegistryPayload;
+            if (!contentType.includes("json")) {
+                throw new Error(
+                    "插件注册接口返回了非 JSON 内容，请修复或重装客户端",
+                );
+            }
+            const payload = JSON.parse(raw) as PluginsRegistryPayload;
             usePluginsRegistryStore.setState({
                 registry: payload,
                 isLoaded: true,

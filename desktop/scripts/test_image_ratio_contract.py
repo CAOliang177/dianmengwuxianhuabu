@@ -194,14 +194,13 @@ def main() -> None:
         "aspectRatio": "16:9",
         "imageSize": "2K",
     }
-    assert payload["extra_body"] == {
-        "google": {
-            "image_config": {
-                "aspect_ratio": "16:9",
-                "image_size": "2K",
-            }
+    assert payload["extra_body"]["google"] == {
+        "image_config": {
+            "aspect_ratio": "16:9",
+            "image_size": "2K",
         }
     }
+    assert payload["generationConfig"] == payload["generation_config"]
     assert payload["google"] == payload["extra_body"]["google"]
     assert "Do not preserve an input image's original aspect ratio" in (
         payload["messages"][0]["content"]
@@ -236,6 +235,39 @@ def main() -> None:
     ultra_wide_1k = new_channel._chat_payload("test", [], "1344x576")
     assert ultra_wide_1k["aspect_ratio"] == "21:9"
     assert ultra_wide_1k["image_size"] == "1K"
+
+    # New API distributors often expose Gemini under a Nano Banana alias.
+    # Both Images endpoints must carry the same hard ratio/tier contract as
+    # chat/completions, otherwise the relay silently uses its default canvas.
+    requests: list[tuple[str, bytes, str]] = []
+
+    def capture_request(url: str, **kwargs):
+        requests.append((url, kwargs["body"], kwargs["content_type"]))
+        return json.dumps({"data": [{"b64_json": "eA=="}]}).encode()
+
+    new_channel._REQUEST_MODEL = "nano-banana-pro-2k"
+    new_channel._http = capture_request
+    try:
+        new_channel._images_generate("test", "2560x1440")
+        generate_payload = json.loads(requests.pop()[1])
+        assert generate_payload["size"] == "2048x1152"
+        assert generate_payload["aspect_ratio"] == "16:9"
+        assert generate_payload["image_size"] == "2K"
+        assert generate_payload["google"]["image_config"] == {
+            "aspect_ratio": "16:9",
+            "image_size": "2K",
+        }
+        assert "OUTPUT CANVAS must be 16:9 at 2K" in generate_payload["prompt"]
+
+        new_channel._images_edit("test", [b"\x89PNG\r\n"], "2560x1440")
+        _url, edit_body, content_type = requests.pop()
+        assert content_type.startswith("multipart/form-data; boundary=")
+        assert b'name="aspect_ratio"\r\n\r\n16:9' in edit_body
+        assert b'name="image_size"\r\n\r\n2K' in edit_body
+        assert b'name="image_config"' in edit_body
+        assert b"OUTPUT CANVAS must be 16:9 at 2K" in edit_body
+    finally:
+        new_channel._http = original_http
 
     print("image ratio contract OK")
 

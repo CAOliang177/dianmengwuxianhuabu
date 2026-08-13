@@ -1,6 +1,7 @@
 import "server-only";
 
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
+import { TosClient } from "@volcengine/tos-sdk";
 import { type NextRequest, NextResponse } from "next/server";
 import { loadEnvStore } from "@/lib/settings/env-store.server";
 
@@ -245,11 +246,208 @@ function safeErrorMessage(error: unknown, env: Record<string, string>): string {
         "VOLCENGINE_API_KEY",
         "VOLCENGINE_ACCESS_KEY_ID",
         "VOLCENGINE_SECRET_ACCESS_KEY",
+        "VOLCENGINE_TOS_ACCESS_KEY_ID",
+        "VOLCENGINE_TOS_SECRET_ACCESS_KEY",
     ]) {
         const secret = env[key]?.trim();
         if (secret) message = message.replaceAll(secret, "***");
     }
     return message.slice(0, 1200);
+}
+
+function assetTypeForFile(file: File): "Image" | "Video" | "Audio" {
+    const hint = `${file.type} ${file.name}`.toLowerCase();
+    if (
+        file.type.startsWith("video/") ||
+        /\.(?:mp4|mov|m4v|webm|avi|mkv)$/i.test(hint)
+    )
+        return "Video";
+    if (
+        file.type.startsWith("audio/") ||
+        /\.(?:mp3|wav|m4a|aac|ogg|flac)$/i.test(hint)
+    )
+        return "Audio";
+    if (
+        file.type.startsWith("image/") ||
+        /\.(?:png|jpe?g|webp|gif|bmp|avif)$/i.test(hint)
+    )
+        return "Image";
+    throw new Error("只支持上传图片、视频或音频素材。");
+}
+
+function stagingObjectKey(fileName: string, env: Record<string, string>) {
+    const prefix = (env.VOLCENGINE_TOS_PREFIX || "dianmeng-assets")
+        .trim()
+        .replace(/^\/+|\/+$/g, "");
+    const date = new Date().toISOString().slice(0, 10).replaceAll("-", "/");
+    const safeName = fileName
+        .normalize("NFKC")
+        .replace(/[^\p{L}\p{N}._-]+/gu, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(-120);
+    return `${prefix || "dianmeng-assets"}/${date}/${randomUUID()}-${safeName || "asset"}`;
+}
+
+async function waitForAsset(
+    id: string,
+    env: Record<string, string>,
+): Promise<{ item: Record<string, unknown>; ready: boolean }> {
+    const deadline = Date.now() + 75_000;
+    let item: Record<string, unknown> = { Id: id, Status: "Processing" };
+    while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        const response = await callBearerEndpoint(
+            "GetAsset",
+            {
+                Id: id,
+                ProjectName: env.VOLCENGINE_PROJECT_NAME?.trim() || "default",
+            },
+            env,
+        );
+        item = resultOf(response);
+        const status = String(item.Status || item.status || "").toLowerCase();
+        if (status === "active") return { item, ready: true };
+        if (status === "failed") {
+            throw new Error(
+                String(
+                    item.Message || item.ErrorMessage || "火山素材预处理失败",
+                ),
+            );
+        }
+    }
+    return { item, ready: false };
+}
+
+export async function POST(request: NextRequest) {
+    const env = loadEnvStore();
+    let stagingClient: TosClient | null = null;
+    let stagingBucket = "";
+    let stagingKey = "";
+    let assetSubmitted = false;
+    try {
+        const form = await request.formData();
+        const file = form.get("file");
+        const groupId = String(form.get("groupId") || "").trim();
+        if (!(file instanceof File) || file.size === 0) {
+            return NextResponse.json(
+                { error: "请选择要上传的素材文件。" },
+                { status: 400 },
+            );
+        }
+        if (!groupId || groupId === "__all_assets__") {
+            return NextResponse.json(
+                { error: "请先进入一个具体素材组，再上传素材。" },
+                { status: 400 },
+            );
+        }
+        if (file.size > 512 * 1024 * 1024) {
+            return NextResponse.json(
+                { error: "单个素材不能超过 512 MB。" },
+                { status: 413 },
+            );
+        }
+
+        const accessKey = (
+            env.VOLCENGINE_TOS_ACCESS_KEY_ID ||
+            env.VOLCENGINE_ACCESS_KEY_ID ||
+            ""
+        ).trim();
+        const secretKey = (
+            env.VOLCENGINE_TOS_SECRET_ACCESS_KEY ||
+            env.VOLCENGINE_SECRET_ACCESS_KEY ||
+            ""
+        ).trim();
+        stagingBucket = env.VOLCENGINE_TOS_BUCKET?.trim() || "";
+        if (!accessKey || !secretKey || !stagingBucket) {
+            throw new Error(
+                "端内上传需要在火山插件设置中填写 VOLCENGINE_TOS_BUCKET，并确保素材库 AK/SK 具有该 TOS 桶的 PutObject、GetObject 和 DeleteObject 权限。",
+            );
+        }
+
+        const region = normalizeRegion(env.VOLCENGINE_REGION);
+        const endpoint =
+            env.VOLCENGINE_TOS_ENDPOINT?.trim() || `tos-${region}.volces.com`;
+        stagingClient = new TosClient({
+            accessKeyId: accessKey,
+            accessKeySecret: secretKey,
+            region,
+            endpoint,
+            requestTimeout: 10 * 60 * 1000,
+        });
+        stagingKey = stagingObjectKey(file.name, env);
+        const body = Buffer.from(await file.arrayBuffer());
+        if (body.length >= 20 * 1024 * 1024) {
+            await stagingClient.uploadFile({
+                bucket: stagingBucket,
+                key: stagingKey,
+                file: body,
+                contentType: file.type || "application/octet-stream",
+                partSize: 20 * 1024 * 1024,
+                taskNum: 3,
+            });
+        } else {
+            await stagingClient.putObject({
+                bucket: stagingBucket,
+                key: stagingKey,
+                body,
+                contentType: file.type || "application/octet-stream",
+            });
+        }
+        const sourceUrl = stagingClient.getPreSignedUrl({
+            bucket: stagingBucket,
+            key: stagingKey,
+            method: "GET",
+            expires: 24 * 60 * 60,
+        });
+
+        const created = resultOf(
+            await callBearerEndpoint(
+                "CreateAsset",
+                {
+                    GroupId: groupId,
+                    URL: sourceUrl,
+                    AssetType: assetTypeForFile(file),
+                    Name: file.name,
+                    ProjectName:
+                        env.VOLCENGINE_PROJECT_NAME?.trim() || "default",
+                },
+                env,
+            ),
+        );
+        const id = String(created.Id || created.AssetId || "").trim();
+        if (!id) throw new Error("火山 CreateAsset 响应中没有素材 ID。");
+        assetSubmitted = true;
+        const result = await waitForAsset(id, env);
+        if (result.ready) {
+            await stagingClient
+                .deleteObject({ bucket: stagingBucket, key: stagingKey })
+                .catch(() => undefined);
+            stagingKey = "";
+        }
+        return NextResponse.json({
+            item: {
+                ...result.item,
+                Id: id,
+                GroupId: groupId,
+                AssetType: assetTypeForFile(file),
+                Name: file.name,
+            },
+            ready: result.ready,
+            message: result.ready
+                ? "素材已上传并完成火山预处理。"
+                : "素材已提交火山预处理，请稍后刷新素材组。",
+        });
+    } catch (error) {
+        if (!assetSubmitted && stagingClient && stagingBucket && stagingKey) {
+            await stagingClient
+                .deleteObject({ bucket: stagingBucket, key: stagingKey })
+                .catch(() => undefined);
+        }
+        return NextResponse.json(
+            { error: safeErrorMessage(error, env) },
+            { status: 502 },
+        );
+    }
 }
 
 export async function GET(request: NextRequest) {

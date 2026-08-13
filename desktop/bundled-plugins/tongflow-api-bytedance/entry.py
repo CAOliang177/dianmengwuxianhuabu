@@ -191,6 +191,21 @@ def _clean_prompt(prompt: str) -> str:
     return cleaned.strip()
 
 
+def _neutralize_frame_mode_words(prompt: str) -> str:
+    """Keep reference mode authoritative without changing the canvas prompt."""
+    replacements = (
+        (r"首尾帧", "开场与收束构图参考"),
+        (r"(?:第一帧|起始帧|开场帧|首帧)", "开场构图参考"),
+        (r"(?:最后一帧|结束帧|尾帧)", "收束构图参考"),
+        (r"first\s*frame|start(?:ing)?\s*frame", "opening composition reference"),
+        (r"last\s*frame|end(?:ing)?\s*frame", "closing composition reference"),
+    )
+    normalized = prompt
+    for pattern, replacement in replacements:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+    return normalized
+
+
 def _split_asset_ids(value: object) -> list[dict[str, str]]:
     raw: list[object] = []
     if isinstance(value, str):
@@ -386,6 +401,7 @@ def _create_task(
     operation: str | None = None,
     image_role: str = "reference_image",
     image_roles: list[str] | None = None,
+    adaptive_ratio: bool = False,
 ) -> Asset:
     model = _model()
     is_seedance_25 = _is_seedance_25(model)
@@ -437,10 +453,25 @@ def _create_task(
     ):
         raise RuntimeError("使用音频参考时，请至少同时连接一张图片或一个视频")
 
+    frame_roles = {"first_frame", "last_frame"}
+    has_frame_role = image_role in frame_roles or any(
+        role in frame_roles for role in (image_roles or [])
+    ) or any(material.get("role") in frame_roles for material in materials)
+    has_visual_reference = bool(
+        provided_images
+        or provided_videos
+        or image_materials
+        or video_materials
+    )
+    is_reference_mode = has_visual_reference and not has_frame_role and not is_video_edit
+    request_prompt = _clean_prompt(prompt)
+    if is_reference_mode:
+        request_prompt = _neutralize_frame_mode_words(request_prompt)
+
     content: list[dict[str, Any]] = [
         {
             "type": "text",
-            "text": _clean_prompt(prompt),
+            "text": request_prompt,
         }
     ]
     for index, image in enumerate(provided_images):
@@ -457,12 +488,14 @@ def _create_task(
     for material in materials:
         content.append(_asset_item(material))
 
+    use_adaptive_ratio = is_video_edit or adaptive_ratio or has_frame_role
+
     duration_max = 30 if is_seedance_25 else 15
     seconds = max(4, min(duration_max, int(round(duration or 5))))
     request_body: dict[str, Any] = {
         "model": model,
         "content": content,
-        "ratio": "adaptive" if is_video_edit else _ratio(width, height),
+        "ratio": "adaptive" if use_adaptive_ratio else _ratio(width, height),
         "duration": -1 if is_video_edit else seconds,
         "return_last_frame": False,
     }
@@ -649,6 +682,7 @@ def image_gen_video(input: ImageGenVideoInput) -> ImageGenVideoOutput:
         images=[input.image] if input.image is not None else [],
         asset_ids=input.asset_ids,
         image_role="first_frame",
+        adaptive_ratio=True,
     )
     return ImageGenVideoOutput(success=True, video=video)
 
@@ -696,6 +730,7 @@ def image_image_gen_video(
             else ["first_frame"]
         ),
         asset_ids=input.asset_ids,
+        adaptive_ratio=True,
     )
     return ImageImageGenVideoOutput(success=True, video=video)
 

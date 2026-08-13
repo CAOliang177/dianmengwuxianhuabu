@@ -1,5 +1,6 @@
 # dependencies
 node_modules/
+/desktop/package-lock.json
 
 # next.js
 .next/

@@ -20,6 +20,10 @@ extraResources:
       to: .
       filter:
           - "**/*"
+          # A copied installed app may contain its old Electron app.asar here.
+          # Exclude it so electron-builder's freshly generated app.asar (and
+          # therefore the current package version) cannot be overwritten.
+          - "!app.asar"
 
 asar: true
 

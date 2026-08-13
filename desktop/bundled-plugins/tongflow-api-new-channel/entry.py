@@ -437,6 +437,25 @@ def _chat_image_config(size: str | None) -> dict[str, str] | None:
     return {"aspect_ratio": aspect_ratio, "image_size": image_size}
 
 
+def _is_google_image_model(model: str) -> bool:
+    """Recognize Gemini/Nano Banana aliases used by compatible relays."""
+    normalized = model.strip().lower()
+    return normalized.startswith("gemini-") or "banana" in normalized
+
+
+def _configured_prompt(
+    prompt: str,
+    image_config: dict[str, str] | None,
+) -> str:
+    if not image_config:
+        return prompt
+    return (
+        f"{prompt}\n\nThe OUTPUT CANVAS must be "
+        f"{image_config['aspect_ratio']} at {image_config['image_size']}. "
+        "Do not preserve an input image's original aspect ratio."
+    )
+
+
 def _relay_size_hint(
     size: str | None,
     image_config: dict[str, str] | None,
@@ -470,12 +489,7 @@ def _chat_payload(
     is the final compatibility fallback.
     """
     image_config = _chat_image_config(size)
-    if image_config:
-        prompt = (
-            f"{prompt}\n\nThe OUTPUT CANVAS must be "
-            f"{image_config['aspect_ratio']} at {image_config['image_size']}. "
-            "Do not preserve an input image's original aspect ratio."
-        )
+    prompt = _configured_prompt(prompt, image_config)
 
     if images:
         content: str | list[dict[str, Any]] = [{"type": "text", "text": prompt}]
@@ -520,6 +534,7 @@ def _chat_payload(
             "imageConfig": camel_image_config,
             "responseFormat": {"image": camel_image_config},
         }
+        payload["generationConfig"] = payload["generation_config"]
         payload["extra_body"] = {"google": google_extension}
     return payload
 
@@ -615,22 +630,35 @@ def _images_generate(prompt: str, size: str | None):
     payload: dict[str, Any] = {"model": model, "prompt": prompt, "n": 1}
     effective_size = _size_for_model(model, size)
     image_config = _chat_image_config(effective_size)
+    is_google_image = _is_google_image_model(model)
+    prompt = _configured_prompt(prompt, image_config if is_google_image else None)
+    payload["prompt"] = prompt
     if effective_size:
         payload["size"] = (
             _relay_size_hint(effective_size, image_config)
-            if model.lower().startswith("gemini-")
+            if is_google_image
             else effective_size
         )
-    if image_config and model.lower().startswith("gemini-"):
+    if image_config and is_google_image:
         payload["aspect_ratio"] = image_config["aspect_ratio"]
         payload["image_size"] = image_config["image_size"]
+        payload["image_config"] = image_config
+        payload["google"] = {"image_config": image_config}
         payload["generation_config"] = {
             "responseModalities": ["IMAGE"],
             "imageConfig": {
                 "aspectRatio": image_config["aspect_ratio"],
                 "imageSize": image_config["image_size"],
             },
+            "responseFormat": {
+                "image": {
+                    "aspectRatio": image_config["aspect_ratio"],
+                    "imageSize": image_config["image_size"],
+                },
+            },
         }
+        payload["generationConfig"] = payload["generation_config"]
+        payload["extra_body"] = {"google": payload["google"]}
     async_submission = _async_enabled()
     if async_submission:
         payload["async"] = True
@@ -653,15 +681,22 @@ def _images_edit(prompt: str, images: list[bytes], size: str | None):
     fields = {"model": model, "prompt": prompt, "n": "1"}
     effective_size = _size_for_model(model, size)
     image_config = _chat_image_config(effective_size)
+    is_google_image = _is_google_image_model(model)
+    fields["prompt"] = _configured_prompt(
+        prompt,
+        image_config if is_google_image else None,
+    )
     if effective_size:
         fields["size"] = (
             _relay_size_hint(effective_size, image_config)
-            if model.lower().startswith("gemini-")
+            if is_google_image
             else effective_size
         )
-    if image_config and model.lower().startswith("gemini-"):
+    if image_config and is_google_image:
         fields["aspect_ratio"] = image_config["aspect_ratio"]
         fields["image_size"] = image_config["image_size"]
+        fields["image_config"] = json.dumps(image_config)
+        fields["google"] = json.dumps({"image_config": image_config})
         fields["generation_config"] = json.dumps(
             {
                 "responseModalities": ["IMAGE"],
@@ -670,6 +705,10 @@ def _images_edit(prompt: str, images: list[bytes], size: str | None):
                     "imageSize": image_config["image_size"],
                 },
             }
+        )
+        fields["generationConfig"] = fields["generation_config"]
+        fields["extra_body"] = json.dumps(
+            {"google": {"image_config": image_config}}
         )
     async_submission = _edit_async_enabled()
     if async_submission:
@@ -714,14 +753,18 @@ def _generate(prompt: str, size: str | None):
     model = _model().lower()
     chat = ("多模态 /chat/completions", lambda: _chat_image(prompt, [], size))
     images = ("Images /images/generations", lambda: _images_generate(prompt, size))
-    return _run_protocol_fallback(*(chat, images) if model.startswith("gemini-") else (images, chat))
+    return _run_protocol_fallback(*(
+        (chat, images) if _is_google_image_model(model) else (images, chat)
+    ))
 
 
 def _edit(prompt: str, images: list[bytes], size: str | None):
     model = _model().lower()
     chat = ("多模态 /chat/completions", lambda: _chat_image(prompt, images, size))
     edits = ("Images /images/edits", lambda: _images_edit(prompt, images, size))
-    return _run_protocol_fallback(*(chat, edits) if model.startswith("gemini-") else (edits, chat))
+    return _run_protocol_fallback(*(
+        (chat, edits) if _is_google_image_model(model) else (edits, chat)
+    ))
 
 
 @node_slot(NodeSlots.IMAGE_GEN)

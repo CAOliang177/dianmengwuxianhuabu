@@ -42,6 +42,10 @@ const TIMEOUT_MS = 60_000;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tongflow-smoke-"));
 fs.mkdirSync(path.join(tmp, "data"), { recursive: true });
 fs.mkdirSync(path.join(tmp, "plugins"), { recursive: true });
+const bundledPlugins = path.join(resources, "bundled-plugins");
+if (fs.existsSync(bundledPlugins)) {
+    fs.cpSync(bundledPlugins, path.join(tmp, "plugins"), { recursive: true });
+}
 
 const child = spawn(bundledNode, [serverEntry], {
     cwd: path.join(resources, "app"),
@@ -78,8 +82,7 @@ function probe() {
             res.resume();
             const status = res.statusCode ?? 0;
             if (status < 500) {
-                child.removeAllListeners("exit");
-                finish(0, `OK — GET / responded with HTTP ${status}`);
+                probePluginRegistry(status);
             } else {
                 retry(`HTTP ${status}`);
             }
@@ -89,6 +92,71 @@ function probe() {
     req.on("timeout", () => {
         req.destroy();
         retry("request timeout");
+    });
+}
+
+function probePluginRegistry(rootStatus) {
+    const req = http.get(
+        {
+            host: "127.0.0.1",
+            port: PORT,
+            path: "/api/plugins/registry",
+            timeout: 5000,
+        },
+        (res) => {
+            const chunks = [];
+            res.on("data", (chunk) => chunks.push(chunk));
+            res.on("end", () => {
+                const status = res.statusCode ?? 0;
+                const contentType = String(res.headers["content-type"] ?? "");
+                const body = Buffer.concat(chunks).toString("utf8");
+                if (status !== 200 || !contentType.includes("json")) {
+                    child.removeAllListeners("exit");
+                    finish(
+                        1,
+                        `plugin registry is not packaged correctly (HTTP ${status}, ${contentType || "no content-type"})`,
+                    );
+                    return;
+                }
+                try {
+                    const payload = JSON.parse(body);
+                    if (payload?.version !== 1 || !payload?.nodePluginMap) {
+                        throw new Error("missing registry fields");
+                    }
+                    if (
+                        !payload.nodePluginMap["gen-text"]?.includes(
+                            "tongflow-api-prompt-llm",
+                        ) ||
+                        !payload.nodePluginMap["text-gen-video"]?.includes(
+                            "tongflow-api-bytedance",
+                        )
+                    ) {
+                        throw new Error("bundled providers are missing");
+                    }
+                } catch (error) {
+                    child.removeAllListeners("exit");
+                    finish(
+                        1,
+                        `plugin registry returned invalid JSON: ${error}`,
+                    );
+                    return;
+                }
+                child.removeAllListeners("exit");
+                finish(
+                    0,
+                    `OK — GET / HTTP ${rootStatus}; plugin registry JSON verified`,
+                );
+            });
+        },
+    );
+    req.on("error", (error) => {
+        child.removeAllListeners("exit");
+        finish(1, `plugin registry request failed: ${error}`);
+    });
+    req.on("timeout", () => {
+        req.destroy();
+        child.removeAllListeners("exit");
+        finish(1, "plugin registry request timed out");
     });
 }
 

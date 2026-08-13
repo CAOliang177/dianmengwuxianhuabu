@@ -26,7 +26,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { FileText, Home, ImagePlus, Trash2, Upload, Video } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
     AlertDialog,
@@ -55,6 +55,7 @@ import {
     hydrateCanvasHistoryFromDisk,
     saveCanvasNodesForCanvas,
     setActiveCanvasId,
+    setWindowActiveCanvasId,
 } from "@/lib/canvas-history";
 import { logger } from "@/lib/logger";
 import { reconcileCompletedImageTasks } from "@/lib/task/reconcile-image-results";
@@ -65,6 +66,7 @@ import {
     collectCopyableSelectionByIds,
     duplicateSelection,
 } from "@/lib/workflow/duplicate-selection";
+import { CanvasAgentAssistant } from "./canvas-agent-assistant";
 import { ModeSwitch } from "./mode-switch";
 import SmartIsland from "./smart-island";
 import { EDGE_TYPES, NODE_TYPES } from "./types";
@@ -81,6 +83,7 @@ const selector = (state: FlowState) => ({
 
 const IMAGE_FILE_EXTENSION = /\.(?:png|jpe?g|jfif|webp|gif|avif)$/i;
 const VIDEO_FILE_EXTENSION = /\.(?:mp4|mov|m4v|webm|avi|mkv)$/i;
+const AUTO_FOLLOW_STORAGE_KEY = "dianmeng-canvas-auto-follow";
 
 function isSupportedImageFile(file: File): boolean {
     return (
@@ -174,9 +177,14 @@ function WorkspaceInner({
     const locale = useLocale();
     const [colorMode, setColorMode] = useState<"light" | "dark">("light");
     const [selectionModeActive, setSelectionModeActive] = useState(false);
+    const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+    const [agentReferencedNodeIds, setAgentReferencedNodeIds] = useState<
+        string[]
+    >([]);
     const [miniMapVisible, setMiniMapVisible] = useState(false);
     const [edgeLinesVisible, setEdgeLinesVisible] = useState(true);
     const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
+    const [autoFollowEnabled, setAutoFollowEnabled] = useState(true);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const [paneContextMenu, setPaneContextMenu] = useState<{
         left: number;
@@ -222,8 +230,65 @@ function WorkspaceInner({
     const nodeDragHistoryRef = useRef(false);
     const altDragDuplicatedRef = useRef(false);
 
+    useEffect(() => {
+        const saved = window.localStorage.getItem(AUTO_FOLLOW_STORAGE_KEY);
+        if (saved !== null) setAutoFollowEnabled(saved !== "false");
+    }, []);
+
+    const changeAutoFollow = useCallback((enabled: boolean) => {
+        setAutoFollowEnabled(enabled);
+        window.localStorage.setItem(
+            AUTO_FOLLOW_STORAGE_KEY,
+            enabled ? "true" : "false",
+        );
+    }, []);
+
     // Separate data and functions to avoid re-renders caused by function reference changes
     const { nodes, edges } = useFlow(useShallow(selector));
+    const agentReferenceIdSet = useMemo(
+        () => new Set(agentReferencedNodeIds),
+        [agentReferencedNodeIds],
+    );
+    const renderedNodes = useMemo(() => {
+        if (agentReferenceIdSet.size === 0) return nodes;
+        return nodes.map((node) => {
+            if (!agentReferenceIdSet.has(node.id)) return node;
+            return {
+                ...node,
+                className: [node.className, "agent-reference-selected"]
+                    .filter(Boolean)
+                    .join(" "),
+            };
+        });
+    }, [nodes, agentReferenceIdSet]);
+
+    useEffect(() => {
+        const existing = new Set(nodes.map((node) => node.id));
+        setAgentReferencedNodeIds((current) => {
+            const next = current.filter((id) => existing.has(id));
+            return next.length === current.length ? current : next;
+        });
+    }, [nodes]);
+
+    const handleAgentNodePointerDownCapture = useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+            if (!agentPanelOpen || event.button !== 0) return;
+            const target = event.target as HTMLElement;
+            const nodeElement = target.closest<HTMLElement>(
+                ".react-flow__node[data-id]",
+            );
+            const nodeId = nodeElement?.dataset.id;
+            if (!nodeId) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setAgentReferencedNodeIds((current) =>
+                current.includes(nodeId)
+                    ? current.filter((id) => id !== nodeId)
+                    : [...current, nodeId],
+            );
+        },
+        [agentPanelOpen],
+    );
     const virtualizeCanvasNodes = useTaskStore((state) =>
         shouldVirtualizeCanvasNodes(state.tasks.values()),
     );
@@ -475,7 +540,7 @@ function WorkspaceInner({
     // Subscribe to node-creation events and smoothly zoom to the new node
     useEffect(() => {
         const unsubscribe = useFlow.getState().onNodeCreated((nodeIds) => {
-            if (nodeIds.length === 0) return;
+            if (!autoFollowEnabled || nodeIds.length === 0) return;
             // Defer fitView until the node has finished rendering
             setTimeout(() => {
                 void reactFlowInstance.fitView({
@@ -488,7 +553,7 @@ function WorkspaceInner({
             }, 50);
         });
         return unsubscribe;
-    }, [reactFlowInstance]);
+    }, [autoFollowEnabled, reactFlowInstance]);
 
     // Handle node double-click: smoothly zoom the view to the node
     const handleNodeDoubleClick = (_event: React.MouseEvent, node: Node) => {
@@ -1025,6 +1090,14 @@ function WorkspaceInner({
                 (e.key === "Delete" || e.key === "Backspace")
             ) {
                 const state = useFlow.getState();
+                const selectedNodeIds = state.nodes
+                    .filter((node) => node.selected)
+                    .map((node) => node.id);
+                if (selectedNodeIds.length > 0) {
+                    state.removeNodes(selectedNodeIds);
+                    e.preventDefault();
+                    return;
+                }
                 const selectedEdgeIds = new Set(
                     state.edges
                         .filter((edge) => edge.selected)
@@ -1128,7 +1201,8 @@ function WorkspaceInner({
             await hydrateCanvasHistoryFromDisk();
             if (cancelled) return;
             const canvasId = requestedId || getActiveCanvasId();
-            setActiveCanvasId(canvasId);
+            if (requestedId) setWindowActiveCanvasId(canvasId);
+            else setActiveCanvasId(canvasId);
             ensureCanvas(canvasId);
 
             try {
@@ -1257,7 +1331,8 @@ function WorkspaceInner({
 
     return (
         <div
-            className="relative w-full h-full overflow-hidden [&_.react-flow]:!bg-[#f6f7f9] dark:[&_.react-flow]:!bg-background [&_.react-flow__background]:!pointer-events-none [&_.react-flow__handle]:!z-20 [&_.react-flow__handle]:!pointer-events-auto [&_.react-flow__handle-source]:!h-7 [&_.react-flow__handle-source]:!w-7 [&_.react-flow__handle-source]:!cursor-crosshair [&_.react-flow__handle-source]:!border-[3px] [&_.react-flow__handle-source]:!border-white [&_.react-flow__handle-source]:!bg-amber-500 [&_.react-flow__handle-source]:!shadow-[0_0_0_4px_rgba(245,158,11,.22)] [&_.react-flow__handle-target]:!h-6 [&_.react-flow__handle-target]:!w-6 [&_.react-flow__handle-target]:!cursor-crosshair [&_.react-flow__handle-target]:!border-[3px] [&_.react-flow__handle-target]:!border-white [&_.react-flow__handle-target]:!bg-blue-500"
+            className="relative w-full h-full overflow-hidden [&_.react-flow]:!bg-[#f6f7f9] dark:[&_.react-flow]:!bg-background [&_.react-flow__background]:!pointer-events-none [&_.agent-reference-selected]:!ring-4 [&_.agent-reference-selected]:!ring-cyan-400/70 [&_.agent-reference-selected]:!ring-offset-2 [&_.agent-reference-selected]:!ring-offset-transparent [&_.react-flow__handle]:!z-20 [&_.react-flow__handle]:!pointer-events-auto [&_.react-flow__handle-source]:!h-7 [&_.react-flow__handle-source]:!w-7 [&_.react-flow__handle-source]:!cursor-crosshair [&_.react-flow__handle-source]:!border-[3px] [&_.react-flow__handle-source]:!border-white [&_.react-flow__handle-source]:!bg-amber-500 [&_.react-flow__handle-source]:!shadow-[0_0_0_4px_rgba(245,158,11,.22)] [&_.react-flow__handle-target]:!h-6 [&_.react-flow__handle-target]:!w-6 [&_.react-flow__handle-target]:!cursor-crosshair [&_.react-flow__handle-target]:!border-[3px] [&_.react-flow__handle-target]:!border-white [&_.react-flow__handle-target]:!bg-blue-500"
+            onPointerDownCapture={handleAgentNodePointerDownCapture}
             onContextMenuCapture={handlePaneContextMenu}
             onDragEnter={handleImageDragEnter}
             onDragOver={handleImageDragOver}
@@ -1265,7 +1340,7 @@ function WorkspaceInner({
             onDrop={(event) => void handleCanvasImageDrop(event)}
         >
             <ReactFlow
-                nodes={nodes}
+                nodes={renderedNodes}
                 onNodesChange={onNodesChange}
                 edges={edgeLinesVisible ? edges : []}
                 onEdgesChange={onEdgesChange}
@@ -1325,23 +1400,36 @@ function WorkspaceInner({
                 connectionRadius={64}
                 reconnectRadius={40}
                 connectionDragThreshold={0}
+                deleteKeyCode={null}
                 connectOnClick={true}
                 autoPanOnConnect={true}
                 proOptions={{ hideAttribution: true }}
                 colorMode={colorMode}
             >
                 <Background style={{ pointerEvents: "none" }} />
+                <Panel
+                    position="top-right"
+                    className="!right-[212px] !top-5 z-30"
+                >
+                    <CanvasAgentAssistant
+                        referencedNodeIds={agentReferencedNodeIds}
+                        onReferencedNodeIdsChange={setAgentReferencedNodeIds}
+                        onOpenChange={setAgentPanelOpen}
+                    />
+                </Panel>
                 <Controls position="top-right" className="!mt-16 !mr-4" />
                 <WorkspaceViewTools
                     colorMode={colorMode}
                     miniMapVisible={miniMapVisible}
                     edgeLinesVisible={edgeLinesVisible}
                     gridSnapEnabled={gridSnapEnabled}
+                    autoFollowEnabled={autoFollowEnabled}
                     shortcutsOpen={shortcutsOpen}
                     onAutoArrange={autoArrangeCanvas}
                     onMiniMapVisibleChange={setMiniMapVisible}
                     onEdgeLinesVisibleChange={setEdgeLinesVisible}
                     onGridSnapEnabledChange={setGridSnapEnabled}
+                    onAutoFollowEnabledChange={changeAutoFollow}
                     onShortcutsOpenChange={setShortcutsOpen}
                 />
                 <Panel position="bottom-center" className="!mb-5 z-10">

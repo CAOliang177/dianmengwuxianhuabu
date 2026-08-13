@@ -49,10 +49,6 @@ import {
 } from "@/lib/generation-history";
 import { logger } from "@/lib/logger";
 import {
-    type ReferenceTokenKind,
-    removeAndRenumberReferenceTokens,
-} from "@/lib/reference-tokens";
-import {
     getAbiNodeBySlot,
     resolveAbiOutputMappings,
 } from "@/lib/schema/tongflow-abi";
@@ -191,12 +187,6 @@ function referenceKindForEdge(
     if (sourceType === "audioNode" || sourceHandle === "out:audio")
         return "audio";
     return undefined;
-}
-
-function tokenKindForReference(kind: ReferenceKind): ReferenceTokenKind {
-    if (kind === "video") return "视频";
-    if (kind === "audio") return "音频";
-    return "图片";
 }
 
 function updateModeEdges(nodeId: string, nextMode: VideoMode) {
@@ -448,35 +438,17 @@ function VideoModeEditor<F extends VideoFeature>({
 
     const removeConnectedReference = useCallback(
         (reference: { edgeId: string; type: ReferenceKind }) => {
-            const entries =
-                reference.type === "image"
-                    ? referenceEntries.images
-                    : reference.type === "video"
-                      ? referenceEntries.videos
-                      : referenceEntries.audios;
-            const removedNumbers = new Set<number>();
-            entries.forEach((entry, index) => {
-                if (entry.edgeId === reference.edgeId)
-                    removedNumbers.add(index + 1);
-            });
+            // Prompt @tokens are authored text, not live bindings. Removing a
+            // material must never erase or rewrite the user's prompt history.
             useFlow.getState().removeEdges([reference.edgeId]);
-            patch({
-                text: removeAndRenumberReferenceTokens(
-                    prompt,
-                    tokenKindForReference(reference.type),
-                    removedNumbers,
-                ),
-            });
         },
-        [patch, prompt, referenceEntries],
+        [],
     );
 
     const removeMaterialReference = useCallback(
         (materialIndex: number) => {
             const material = materials[materialIndex];
             if (!material) return;
-            const token = materialLabels[materialIndex] || "";
-            const number = Number(token.match(/(\d+)$/)?.[1]);
             patch({
                 asset_ids: (() => {
                     const next = materials.filter(
@@ -484,16 +456,9 @@ function VideoModeEditor<F extends VideoFeature>({
                     );
                     return next.length ? JSON.stringify(next) : "";
                 })(),
-                text: Number.isFinite(number)
-                    ? removeAndRenumberReferenceTokens(
-                          prompt,
-                          tokenKindForReference(material.type),
-                          new Set([number]),
-                      )
-                    : prompt,
             });
         },
-        [materialLabels, materials, patch, prompt],
+        [materials, patch],
     );
 
     useEffect(() => {
@@ -507,9 +472,14 @@ function VideoModeEditor<F extends VideoFeature>({
 
     useEffect(() => {
         const expectedOperation = mode === "edit" ? "edit" : "generate";
+        const persistedOperation = (data as Record<string, unknown>).operation;
         const nextDuration = Math.max(4, Math.min(maxDuration, duration));
         const next: Record<string, unknown> = {};
-        if (state.operation !== expectedOperation)
+        // `operation` is not part of every legacy ABI form spec. Reading it
+        // from form state made old video nodes drop the value on every inbound
+        // sync, then patch it again forever (React error #185). Compare the
+        // durable node data instead so a missing legacy value is written once.
+        if (persistedOperation !== expectedOperation)
             next.operation = expectedOperation;
         if (mode !== "edit" && nextDuration !== duration)
             next.duration = nextDuration;
@@ -523,7 +493,7 @@ function VideoModeEditor<F extends VideoFeature>({
         maxDuration,
         mode,
         isVolcengine,
-        state.operation,
+        data,
         state.resolution,
         resolution,
         patch,
@@ -581,6 +551,18 @@ function VideoModeEditor<F extends VideoFeature>({
                             ...(promptSnapshot?.model
                                 ? { model: promptSnapshot.model }
                                 : {}),
+                            ...(promptSnapshot?.resolution
+                                ? { resolution: promptSnapshot.resolution }
+                                : {}),
+                            ...(typeof promptSnapshot?.duration === "number"
+                                ? { duration: promptSnapshot.duration }
+                                : {}),
+                            ...(typeof promptSnapshot?.width === "number"
+                                ? { width: promptSnapshot.width }
+                                : {}),
+                            ...(typeof promptSnapshot?.height === "number"
+                                ? { height: promptSnapshot.height }
+                                : {}),
                         })),
                         ...previousHistory,
                     ],
@@ -630,7 +612,9 @@ function VideoModeEditor<F extends VideoFeature>({
     const settingsSummary =
         mode === "edit"
             ? `自适应 / ${resolution.toUpperCase()} / 跟随源视频`
-            : `${ratio.value} / ${resolution.toUpperCase()} / ${duration}s`;
+            : mode === "first" || mode === "first-last"
+              ? `跟随首帧 / ${resolution.toUpperCase()} / ${duration}s`
+              : `${ratio.value} / ${resolution.toUpperCase()} / ${duration}s`;
     const materialVisualCount = materials.filter(
         (material) => material.type === "image" || material.type === "video",
     ).length;
@@ -770,6 +754,10 @@ function VideoModeEditor<F extends VideoFeature>({
             createdAt: Date.now(),
             mode,
             ...(effectiveModel ? { model: effectiveModel } : {}),
+            ...(resolution ? { resolution } : {}),
+            duration,
+            width,
+            height,
         };
         const current = useFlow
             .getState()
@@ -781,11 +769,27 @@ function VideoModeEditor<F extends VideoFeature>({
             .updates(nodeId, withVideoPromptSnapshot(currentData, record), {
                 immediate: true,
             });
-    }, [effectiveModel, mode, nodeId, prompt]);
+    }, [
+        duration,
+        effectiveModel,
+        height,
+        mode,
+        nodeId,
+        prompt,
+        resolution,
+        width,
+    ]);
 
     const restorePromptSnapshot = useCallback(
         (record: VideoPromptHistoryRecord) => {
             if (!nodeId) return;
+            if (
+                record.mode &&
+                isVideoMode(record.mode) &&
+                record.mode !== mode
+            ) {
+                onModeChange(record.mode);
+            }
             const current = useFlow
                 .getState()
                 .nodes.find((node) => node.id === nodeId);
@@ -794,13 +798,26 @@ function VideoModeEditor<F extends VideoFeature>({
                 {
                     ...((current?.data ?? {}) as Record<string, unknown>),
                     text: record.text,
+                    ...(record.model ? { pluginModel: record.model } : {}),
+                    ...(record.resolution
+                        ? { resolution: record.resolution }
+                        : {}),
+                    ...(typeof record.duration === "number"
+                        ? { duration: record.duration }
+                        : {}),
+                    ...(typeof record.width === "number"
+                        ? { width: record.width }
+                        : {}),
+                    ...(typeof record.height === "number"
+                        ? { height: record.height }
+                        : {}),
                 },
                 { immediate: true },
             );
             setPromptHistoryOpen(false);
             requestAnimationFrame(() => promptRef.current?.focus());
         },
-        [nodeId],
+        [mode, nodeId, onModeChange],
     );
 
     return (
@@ -1223,6 +1240,15 @@ function VideoModeEditor<F extends VideoFeature>({
                                             }
                                             showSize
                                             compact
+                                            autoOption={
+                                                mode === "first" ||
+                                                mode === "first-last"
+                                                    ? {
+                                                          active: true,
+                                                          onSelect: () => {},
+                                                      }
+                                                    : undefined
+                                            }
                                         />
                                     )}
                                     {isVolcengine && (

@@ -4,6 +4,7 @@ import {
     ArrowRight,
     Clock3,
     Layers3,
+    PanelsTopLeft,
     Pencil,
     Plus,
     RotateCcw,
@@ -54,7 +55,7 @@ const LETTER_COLORS = [
     "#ff8fb3",
     "#89ddff",
 ];
-const RELEASE_VERSION = "0.1.56";
+const RELEASE_VERSION = "0.1.76";
 const RELEASE_NOTICE_KEY = `dianmeng-release-notice:${RELEASE_VERSION}`;
 
 function InteractiveTitle({ text }: { text: string }) {
@@ -135,6 +136,24 @@ export default function Home() {
     };
 
     const newCanvas = () => openCanvas(createCanvas());
+
+    const openCanvasInNewWindow = async (
+        event: React.MouseEvent,
+        id: string,
+    ) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const bridge = window.tongflowDesktop;
+        if (bridge?.openCanvasWindow) {
+            const opened = await bridge.openCanvasWindow(id);
+            if (opened) return;
+        }
+        window.open(
+            `/workspace?canvas=${encodeURIComponent(id)}`,
+            "_blank",
+            "noopener,noreferrer",
+        );
+    };
 
     const recoverGeneratedNodes = async () => {
         if (isRecovering) return;
@@ -416,6 +435,20 @@ export default function Home() {
                                     </button>
                                     <button
                                         type="button"
+                                        title="在新窗口打开，可与其他画布同时运行"
+                                        aria-label={`在新窗口打开${canvas.name || "未命名画布"}`}
+                                        className="absolute right-[6.5rem] top-3 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/45 text-slate-200 opacity-0 shadow-lg backdrop-blur transition hover:bg-violet-500 hover:text-white group-hover:opacity-100 focus:opacity-100"
+                                        onClick={(event) =>
+                                            void openCanvasInNewWindow(
+                                                event,
+                                                canvas.id,
+                                            )
+                                        }
+                                    >
+                                        <PanelsTopLeft className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        type="button"
                                         title="重命名画布"
                                         aria-label={`重命名 ${canvas.name || "未命名画布"}`}
                                         className="absolute right-14 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/45 text-slate-200 opacity-0 shadow-lg backdrop-blur transition hover:bg-blue-500 hover:text-white group-hover:opacity-100 focus:opacity-100"
@@ -457,11 +490,10 @@ export default function Home() {
                         </div>
                         <DialogHeader>
                             <DialogTitle className="text-2xl font-semibold text-white">
-                                Seedance 视频引用更稳了
+                                画布操作与素材流程升级
                             </DialogTitle>
                             <DialogDescription className="mt-2 text-sm leading-6 text-slate-300">
-                                修复本地视频连线导致的错误大请求，并把火山任务默认等待时间延长到
-                                30 分钟。
+                                新渠道图片比例更可靠，火山素材可以直接在端内上传，并支持多画布并行创作。
                             </DialogDescription>
                         </DialogHeader>
                     </div>
@@ -469,32 +501,31 @@ export default function Home() {
                         <div className="rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-amber-400/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <WandSparkles className="h-4 w-4 text-violet-300" />
-                                不再出现误导性的 TLS EOF
+                                新渠道香蕉严格传递比例与分辨率
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                火山官方接口要求参考视频使用公网 URL
-                                或素材库资产。本地视频连线现在会在提交前给出明确提示，不再把整个视频错误塞进
-                                JSON。
+                                比例与清晰度会同时写入 Google、New API
+                                和通用图片协议字段，图生图也会明确要求输出画布不要跟随输入图尺寸。
                             </p>
                         </div>
                         <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
                             <div className="flex items-center gap-2 font-semibold text-white">
                                 <SlidersHorizontal className="h-4 w-4 text-emerald-300" />
-                                长任务等待提升到 30 分钟
+                                火山素材直接端内上传
                             </div>
                             <p className="mt-2 leading-6 text-slate-300">
-                                `VOLCENGINE_TIMEOUT` 默认值从 900 秒调整为 1800
-                                秒，旧版默认值会在升级后自动迁移。
+                                在具体素材组中选择本地图片、视频或音频，画布会经
+                                TOS
+                                自动入库并等待火山完成预处理，无需再打开外接上传网页。
                             </p>
                         </div>
                         {[
-                            "火山节点检测到本地视频连线时，会阻止不受支持的 Base64 大请求并显示正确操作方法。",
-                            "参考视频请先上传到火山素材库，再从节点下方的“素材库”选择；asset:// 引用保持小体积、稳定提交。",
-                            "补齐 MP4、MOV、M4V、AVI、WebM、MKV 等视频格式的 MIME 类型识别。",
-                            "插件层增加同样的本地视频保护，工作流执行也不会绕过界面校验。",
-                            "VOLCENGINE_TIMEOUT 默认值由 900 秒提升到 1800 秒，减少长时间排队或生成被画布提前判定超时。",
-                            "已有安装若仍使用旧默认值 900 秒，升级后会自动迁移为 1800 秒；手动设置的其他值保持不变。",
-                            "火山素材库中的视频、图片和音频仍支持缩略图、@ 精确引用、跨素材组搜索和悬停删除。",
+                            "新增内容自动跟随可在画布视图工具中随时开启或关闭，并会记住个人习惯。",
+                            "选中节点或素材后可直接按 Delete 删除，同时保留撤销记录和连接线清理。",
+                            "历史画布卡片新增“在新窗口打开”，多个窗口可同时运行不同画布且不会串保存目标。",
+                            "火山端内上传需要填写 TOS 桶名，素材库 AK/SK 需具备该桶的上传、读取和删除权限。",
+                            "大于 20 MB 的火山素材自动使用分片上传，成功入库后会清理临时 TOS 对象。",
+                            "香蕉文生图、图生图与多图参考统一发送比例、分辨率和输出画布约束。",
                         ].map((item, index) => (
                             <div
                                 key={item}

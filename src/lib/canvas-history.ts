@@ -31,6 +31,7 @@ interface CanvasCoverNode {
 
 const HISTORY_KEY = "dianmeng.canvas.history.v1";
 const ACTIVE_KEY = "dianmeng.canvas.active.v1";
+const WINDOW_ACTIVE_KEY = "dianmeng.canvas.window-active.v1";
 
 export function canvasStorageKey(id: string, part: CanvasPart) {
     return `dianmeng.canvas.${id}.${part}`;
@@ -256,12 +257,24 @@ function makeId() {
 }
 
 export function setActiveCanvasId(id: string) {
+    sessionStorage.setItem(WINDOW_ACTIVE_KEY, id);
     localStorage.setItem(ACTIVE_KEY, id);
     void persistPatch({ activeCanvasId: id });
 }
 
+// A canvas opened with ?canvas= belongs to that Electron window only. Keeping
+// the selection in sessionStorage prevents one window from silently switching
+// the active canvas of every other open window.
+export function setWindowActiveCanvasId(id: string) {
+    sessionStorage.setItem(WINDOW_ACTIVE_KEY, id);
+}
+
 export function getActiveCanvasId() {
-    return localStorage.getItem(ACTIVE_KEY) || "default";
+    return (
+        sessionStorage.getItem(WINDOW_ACTIVE_KEY) ||
+        localStorage.getItem(ACTIVE_KEY) ||
+        "default"
+    );
 }
 
 export function ensureCanvas(id: string, name = "未命名画布") {
@@ -274,7 +287,7 @@ export function ensureCanvas(id: string, name = "未命名画布") {
     ]);
 }
 
-export function createCanvas(name?: string) {
+export function createCanvas(name?: string, options?: { activate?: boolean }) {
     const id = makeId();
     const now = Date.now();
     const canvasName =
@@ -289,7 +302,7 @@ export function createCanvas(name?: string) {
         canvasStorageKey(id, "meta"),
         JSON.stringify({ id: null, name: canvasName, description: "" }),
     );
-    setActiveCanvasId(id);
+    if (options?.activate !== false) setActiveCanvasId(id);
     void persistPatch({
         canvas: {
             id,
@@ -489,6 +502,7 @@ export function deleteCanvas(id: string) {
         currentActiveId === id
             ? (history[0]?.id ?? "default")
             : currentActiveId;
+    sessionStorage.setItem(WINDOW_ACTIVE_KEY, activeCanvasId);
     localStorage.setItem(ACTIVE_KEY, activeCanvasId);
     void persistPatch({ deleteCanvasId: id, history, activeCanvasId });
     return true;
@@ -623,7 +637,7 @@ export async function hydrateCanvasHistoryFromDisk() {
         if (covers.changed) {
             void persistPatch({ history: covers.history });
         }
-        if (disk.activeCanvasId) {
+        if (disk.activeCanvasId && !sessionStorage.getItem(WINDOW_ACTIVE_KEY)) {
             localStorage.setItem(ACTIVE_KEY, disk.activeCanvasId);
         }
         for (const [id, canvas] of Object.entries(selectedCanvases)) {

@@ -11,9 +11,11 @@ import {
     Loader2,
     Plus,
     RefreshCw,
+    UploadCloud,
     X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -80,6 +82,13 @@ export function volcengineMaterialLimitsForModel(
 
 type ApiListResponse = {
     items?: unknown[];
+    error?: string;
+};
+
+type ApiUploadResponse = {
+    item?: unknown;
+    ready?: boolean;
+    message?: string;
     error?: string;
 };
 
@@ -204,6 +213,8 @@ export function VolcengineMaterialPicker({
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+    const [uploading, setUploading] = useState(false);
+    const uploadInputRef = useRef<HTMLInputElement>(null);
     const draftSelectionError = validateVolcengineMaterials(
         draftSelected,
         occupied,
@@ -385,6 +396,42 @@ export function VolcengineMaterialPicker({
         setDraftSelected(next);
     };
 
+    const uploadAsset = async (file?: File) => {
+        if (!file || !groupId || groupId === ALL_ASSETS_SCOPE || uploading)
+            return;
+        setUploading(true);
+        setError("");
+        try {
+            const form = new FormData();
+            form.append("file", file);
+            form.append("groupId", groupId);
+            const response = await fetch("/api/volcengine/materials", {
+                method: "POST",
+                body: form,
+            });
+            const data = (await response.json()) as ApiUploadResponse;
+            if (!response.ok) {
+                throw new Error(
+                    data.error || `上传失败（HTTP ${response.status}）`,
+                );
+            }
+            const uploaded = normalizeVolcengineMaterial(data.item, groupId);
+            if (uploaded && data.ready) {
+                const normalized = { ...uploaded, groupType };
+                setAssets((current) => [
+                    normalized,
+                    ...current.filter((item) => item.id !== normalized.id),
+                ]);
+            }
+            toast.success(data.message || "素材已上传到火山素材库");
+        } catch (cause) {
+            setError(cause instanceof Error ? cause.message : "素材上传失败");
+        } finally {
+            setUploading(false);
+            if (uploadInputRef.current) uploadInputRef.current.value = "";
+        }
+    };
+
     const removeConfirmed = (asset: VolcengineMaterial) => {
         onChange(
             serializeSelected(selected.filter((item) => item.id !== asset.id)),
@@ -403,9 +450,10 @@ export function VolcengineMaterialPicker({
                     size="sm"
                     className="nodrag h-9 shrink-0 gap-1.5 px-2.5"
                     onClick={openPicker}
+                    title="选择素材或直接上传到火山素材库"
                 >
                     <FolderOpen className="size-4" />
-                    素材库
+                    火山素材库
                     {selected.length > 0 && (
                         <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none text-primary-foreground">
                             {selected.length}
@@ -426,7 +474,7 @@ export function VolcengineMaterialPicker({
                             onClick={openPicker}
                         >
                             <FolderOpen className="size-4" />
-                            选择素材
+                            火山素材库
                         </Button>
                     </div>
 
@@ -551,10 +599,10 @@ export function VolcengineMaterialPicker({
                                 <DialogTitle>
                                     {groupId === ALL_ASSETS_SCOPE
                                         ? `素材库 · 全部${assetKindFilter === "video" ? "视频" : assetKindFilter === "audio" ? "音频" : assetKindFilter === "image" ? "图片" : "素材"}`
-                                        : "素材库"}
+                                        : "火山素材库"}
                                 </DialogTitle>
                                 <DialogDescription>
-                                    选择后会作为当前火山方舟视频模型的参考素材发送。
+                                    选择素材组后可在端内直接上传；选中的素材会作为火山方舟视频模型参考发送。
                                 </DialogDescription>
                             </div>
                         </div>
@@ -562,6 +610,15 @@ export function VolcengineMaterialPicker({
 
                     <div className="flex min-h-0 flex-1 flex-col gap-3">
                         <div className="flex items-center gap-2">
+                            <input
+                                ref={uploadInputRef}
+                                type="file"
+                                accept="image/*,video/*,audio/*"
+                                className="hidden"
+                                onChange={(event) =>
+                                    void uploadAsset(event.target.files?.[0])
+                                }
+                            />
                             <Input
                                 value={search}
                                 onChange={(event) =>
@@ -606,6 +663,34 @@ export function VolcengineMaterialPicker({
                                 }
                             >
                                 <Plus className="size-4" /> 创建素材组
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                className="nodrag shrink-0"
+                                disabled={uploading}
+                                onClick={() => {
+                                    if (
+                                        !groupId ||
+                                        groupId === ALL_ASSETS_SCOPE
+                                    ) {
+                                        setError(
+                                            "请先进入一个素材组，再点击“上传到火山素材库”。",
+                                        );
+                                        return;
+                                    }
+                                    uploadInputRef.current?.click();
+                                }}
+                            >
+                                {uploading ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <UploadCloud className="size-4" />
+                                )}
+                                {uploading
+                                    ? "上传并入库中"
+                                    : "上传到火山素材库"}
                             </Button>
                             <div className="flex shrink-0 rounded-lg border bg-muted/30 p-0.5">
                                 <Button

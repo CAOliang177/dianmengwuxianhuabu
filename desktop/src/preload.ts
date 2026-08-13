@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("tongflowDesktop", {
     exportDiagnostics: (request?: {
         rendererCanvasStorage?: Record<string, string>;
     }) => ipcRenderer.invoke("tongflow:diagnostics-export", request),
+    openCanvasWindow: (canvasId: string) =>
+        ipcRenderer.invoke("tongflow:canvas-window-open", canvasId),
     onUpdateState: (callback: (state: unknown) => void) => {
         const listener = (_event: unknown, state: unknown) => callback(state);
         ipcRenderer.on("tongflow:update-state", listener);

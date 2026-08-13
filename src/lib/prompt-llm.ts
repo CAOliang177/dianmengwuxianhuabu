@@ -3,12 +3,45 @@ import { getTaskWaitUrl } from "@/lib/task/api-url";
 import { normalizeTaskPayloadData } from "@/lib/task/payload";
 
 export const PROMPT_LLM_PLUGIN_ID = "tongflow-api-prompt-llm";
+export const PROMPT_LLM_MULTIMODAL_PREFIX = "__DIANMENG_MULTIMODAL_V1__";
+
+export type PromptLlmMedia = {
+    type: "image";
+    url: string;
+    label?: string;
+};
 
 type PromptLlmRequest = {
     input: string;
     instruction: string;
+    media?: PromptLlmMedia[];
     timeoutMs?: number;
 };
+
+export function encodePromptLlmInput(
+    input: string,
+    media: PromptLlmMedia[] = [],
+): string {
+    const text = input.trim();
+    const usableMedia = media
+        .filter(
+            (item) =>
+                item.type === "image" &&
+                typeof item.url === "string" &&
+                item.url.trim(),
+        )
+        .slice(0, 6)
+        .map((item) => ({
+            type: "image" as const,
+            url: item.url.trim(),
+            label: item.label?.trim() || undefined,
+        }));
+    if (!usableMedia.length) return text;
+    return `${PROMPT_LLM_MULTIMODAL_PREFIX}${JSON.stringify({
+        text,
+        media: usableMedia,
+    })}`;
+}
 
 function extractGeneratedText(value: unknown): string {
     const payload = normalizeTaskPayloadData(value);
@@ -128,6 +161,7 @@ function runPromptTask(taskId: string, deadline: number): Promise<string> {
 export async function generatePromptWithLlm({
     input,
     instruction,
+    media = [],
     timeoutMs = 150_000,
 }: PromptLlmRequest): Promise<string> {
     if (!input.trim()) throw new Error("请输入需要优化的内容");
@@ -137,7 +171,7 @@ export async function generatePromptWithLlm({
         feature: "gen-text",
         pluginId: PROMPT_LLM_PLUGIN_ID,
         prompt: {
-            text: input.trim(),
+            text: encodePromptLlmInput(input, media),
             userPrompt: instruction.trim(),
         },
         nodeId: `prompt-llm-${Date.now()}`,
