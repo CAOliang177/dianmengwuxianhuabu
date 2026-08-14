@@ -151,6 +151,56 @@ class Seedance25EditRequestTests(unittest.TestCase):
         )
         self.assertEqual(request["ratio"], "16:9")
 
+    def test_all_reference_video_cannot_be_reclassified_as_extension(self) -> None:
+        prompts = (
+            "续写@视频1，让人物向门口走去",
+            "从@视频1的尾帧开始继续，人物向门口走去",
+            "Extend the input video and let the character walk to the door",
+        )
+        for model in (
+            "doubao-seedance-2-0-260128",
+            "doubao-seedance-2-0-fast-260128",
+            "doubao-seedance-2-5-260628",
+        ):
+            for original_prompt in prompts:
+                with self.subTest(model=model, prompt=original_prompt):
+                    request = self.capture_request(
+                        model=model,
+                        prompt=original_prompt,
+                        width=1024,
+                        height=576,
+                        duration=8,
+                        resolution="480p",
+                        asset_ids="video:asset-reference-video",
+                        operation="generate",
+                    )
+                    self.assertEqual(request["ratio"], "16:9")
+                    self.assertEqual(request["duration"], 8)
+                    self.assertEqual(request["resolution"], "480p")
+                    request_text = request["content"][0]["text"]
+                    self.assertTrue(request_text.startswith("全能参考生成任务"))
+                    self.assertIn("生成独立新视频", request_text)
+                    self.assertNotRegex(
+                        request_text,
+                        r"续写|尾帧开始继续|extend\s+the\s+input\s+video",
+                    )
+                    self.assertEqual(
+                        request["content"][1]["role"],
+                        "reference_video",
+                    )
+    def test_edit_mode_still_uses_adaptive_ratio(self) -> None:
+        request = self.capture_request(
+            prompt="延长这个视频",
+            width=1024,
+            height=576,
+            duration=8,
+            asset_ids="video:asset-source-video",
+            operation="edit",
+        )
+        self.assertEqual(request["ratio"], "adaptive")
+        self.assertEqual(request["duration"], -1)
+        self.assertNotIn("全能参考生成任务", request["content"][0]["text"])
+
 
 if __name__ == "__main__":
     unittest.main()

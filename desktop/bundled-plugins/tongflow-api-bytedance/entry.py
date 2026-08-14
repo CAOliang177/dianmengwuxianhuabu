@@ -206,6 +206,53 @@ def _neutralize_frame_mode_words(prompt: str) -> str:
     return normalized
 
 
+def _neutralize_video_extension_words(prompt: str) -> str:
+    """Keep an explicit all-reference request from being reclassified as extend."""
+    replacement_zh = "参考输入视频的主体状态与动作趋势，生成独立新镜头"
+    replacement_en = (
+        "use the input video as motion and camera reference for an independent new shot"
+    )
+    replacements = (
+        (r"(?:续写|续拍|续接|接续)(?:这个|该|原)?(?:视频|片段|镜头)?", replacement_zh),
+        (
+            r"(?:把|将)?(?:这个|该|原|输入的)?(?:视频|片段|镜头)"
+            r"(?:继续|接着|延长|延伸|扩展|续写|续拍)",
+            replacement_zh,
+        ),
+        (
+            r"(?:继续|接着|承接|衔接)(?:上一段|上一个|前一个|原)"
+            r"(?:视频|片段|镜头)",
+            replacement_zh,
+        ),
+        (
+            r"从(?:@视频\d+|输入视频|原视频|上一段视频)(?:的)?"
+            r"(?:结尾|尾帧|结束处)(?:开始|继续|往后)?",
+            "参考输入视频的主体状态与动作趋势",
+        ),
+        (
+            r"(?:extend|continue|resume)\s+(?:this|the|input|source|previous)\s+"
+            r"(?:video|clip|shot)",
+            replacement_en,
+        ),
+        (
+            r"(?:video|clip|shot)\s+(?:extension|continuation)",
+            replacement_en,
+        ),
+        (
+            r"continue\s+from\s+(?:the\s+)?(?:end|last\s+frame)",
+            "use the source state as reference for an independent new shot",
+        ),
+    )
+    normalized = prompt
+    for pattern, replacement in replacements:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+    prefix = (
+        "全能参考生成任务。输入视频只作为主体状态、动作、镜头、节奏和声音的参考素材。"
+        "生成独立新视频，画幅和时长严格采用请求参数。"
+    )
+    return f"{prefix}\n{normalized.strip()}" if normalized.strip() else prefix
+
+
 def _split_asset_ids(value: object) -> list[dict[str, str]]:
     raw: list[object] = []
     if isinstance(value, str):
@@ -467,6 +514,8 @@ def _create_task(
     request_prompt = _clean_prompt(prompt)
     if is_reference_mode:
         request_prompt = _neutralize_frame_mode_words(request_prompt)
+        if provided_videos or video_materials:
+            request_prompt = _neutralize_video_extension_words(request_prompt)
 
     content: list[dict[str, Any]] = [
         {
