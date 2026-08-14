@@ -253,6 +253,16 @@ def _neutralize_video_extension_words(prompt: str) -> str:
     return f"{prefix}\n{normalized.strip()}" if normalized.strip() else prefix
 
 
+def _is_video_extension_ratio_error(exc: RuntimeError) -> bool:
+    """Return true only for Ark's deterministic extension-ratio rejection."""
+    message = str(exc).lower()
+    return (
+        "video extension" in message
+        and "ratio" in message
+        and "adaptive" in message
+    )
+
+
 def _split_asset_ids(value: object) -> list[dict[str, str]]:
     raw: list[object] = []
     if isinstance(value, str):
@@ -573,13 +583,35 @@ def _create_task(
         request_body["output_format"] = output_format if output_format in {"mp4", "mov"} else "mp4"
 
     endpoint = f"{_base_url()}/contents/generations/tasks"
-    response = _json(
-        _http(
-            endpoint,
-            method="POST",
-            body=json.dumps(request_body, ensure_ascii=False).encode("utf-8"),
+    try:
+        response = _json(
+            _http(
+                endpoint,
+                method="POST",
+                body=json.dumps(request_body, ensure_ascii=False).encode("utf-8"),
+            )
         )
-    )
+    except RuntimeError as exc:
+        # Ark can still classify a detailed reference prompt as video extension
+        # even after extension wording has been removed. That first request is
+        # rejected before a task is created, so retrying it with the provider's
+        # required adaptive ratio is safe and avoids a user-visible hard failure.
+        can_retry_as_extension = (
+            is_reference_mode
+            and bool(provided_videos or video_materials)
+            and request_body.get("ratio") != "adaptive"
+            and _is_video_extension_ratio_error(exc)
+        )
+        if not can_retry_as_extension:
+            raise
+        request_body["ratio"] = "adaptive"
+        response = _json(
+            _http(
+                endpoint,
+                method="POST",
+                body=json.dumps(request_body, ensure_ascii=False).encode("utf-8"),
+            )
+        )
     payload = _response_payload(response)
     task_id = (
         response.get("id")

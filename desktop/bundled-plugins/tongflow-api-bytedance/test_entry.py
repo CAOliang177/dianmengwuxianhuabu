@@ -201,6 +201,48 @@ class Seedance25EditRequestTests(unittest.TestCase):
         self.assertEqual(request["duration"], -1)
         self.assertNotIn("全能参考生成任务", request["content"][0]["text"])
 
+    def test_all_reference_video_retries_adaptive_when_ark_classifies_extension(
+        self,
+    ) -> None:
+        requests: list[dict[str, object]] = []
+
+        def fake_http(
+            _url: str,
+            *,
+            method: str = "GET",
+            body: bytes | None = None,
+        ) -> bytes:
+            request = json.loads((body or b"{}").decode("utf-8"))
+            requests.append(request)
+            if len(requests) == 1:
+                raise RuntimeError(
+                    "火山方舟 API HTTP 400: Seedance identified your task as "
+                    "video extension. `ratio` must be `adaptive`."
+                )
+            return b'{"id":"task-1"}'
+
+        with (
+            patch.object(ENTRY, "_model", return_value="doubao-seedance-2-5-260628"),
+            patch.object(ENTRY, "_http", side_effect=fake_http),
+            patch.object(ENTRY, "_poll_task", return_value=object()),
+        ):
+            ENTRY._create_task(
+                "以参考视频作为完整动作母版，对全程画面进行角色与背景替换",
+                width=1024,
+                height=1024,
+                duration=25,
+                resolution="720p",
+                asset_ids="video:asset-reference-video",
+                operation="generate",
+            )
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[0]["ratio"], "1:1")
+        self.assertEqual(requests[1]["ratio"], "adaptive")
+        self.assertEqual(requests[1]["duration"], 25)
+        self.assertEqual(requests[1]["resolution"], "720p")
+        self.assertEqual(requests[1]["content"][1]["role"], "reference_video")
+
 
 if __name__ == "__main__":
     unittest.main()
