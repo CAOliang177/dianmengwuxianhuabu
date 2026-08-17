@@ -164,7 +164,8 @@ const FullScreenWaterfallModal = ({
                                 ref={videoRef}
                                 src={url}
                                 className="h-full w-full object-cover"
-                                preload="none"
+                                preload="auto"
+                                playsInline
                             />
                             <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/20 transition-colors">
                                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90">
@@ -235,7 +236,8 @@ const VideoGridThumb = ({
                 <video
                     src={url}
                     className="h-full w-full object-cover"
-                    preload="metadata"
+                    preload="auto"
+                    playsInline
                     onError={() => setErrored(true)}
                 />
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -446,7 +448,8 @@ const VideoNode = ({ selected, data }: VideoNodeRfProps) => {
                                 controls
                                 controlsList="nodownload"
                                 className="h-full w-full object-contain"
-                                preload="metadata"
+                                preload="auto"
+                                playsInline
                                 onLoadedMetadata={(event) => {
                                     const video = event.currentTarget;
                                     if (
@@ -457,6 +460,16 @@ const VideoNode = ({ selected, data }: VideoNodeRfProps) => {
                                             width: video.videoWidth,
                                             height: video.videoHeight,
                                         });
+                                    }
+                                    if (
+                                        video.currentTime === 0 &&
+                                        Number.isFinite(video.duration) &&
+                                        video.duration > 0.05
+                                    ) {
+                                        video.currentTime = Math.min(
+                                            0.05,
+                                            video.duration / 2,
+                                        );
                                     }
                                 }}
                                 onError={() => setVideoError(true)}

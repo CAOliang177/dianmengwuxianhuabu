@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Maximize2, Mic, MicOff } from "lucide-react";
+import { Eraser, Maximize2, Mic, MicOff, Minimize2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type * as React from "react";
 import {
@@ -175,6 +175,7 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
         const [interimText, setInterimText] = useState("");
         const [speechSupported, setSpeechSupported] = useState(false);
         const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+        const [isEditorMaximized, setIsEditorMaximized] = useState(false);
         const [fullscreenValue, setFullscreenValue] = useState("");
         const [mentionState, setMentionState] = useState<MentionState | null>(
             null,
@@ -549,6 +550,7 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
         // Expand composer dialog
         const openFullscreen = useCallback(() => {
             setFullscreenValue(localValue || "");
+            setIsEditorMaximized(false);
             setIsFullscreenOpen(true);
             isFullscreenRef.current = true;
         }, [localValue]);
@@ -591,6 +593,10 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
         const showVoiceButton = enableVoiceInput && speechSupported;
         const showFullscreenButton = enableFullscreen;
         const hasButtons = showVoiceButton || showFullscreenButton;
+        const fullscreenCharacterCount = fullscreenValue.length;
+        const fullscreenLineCount = fullscreenValue
+            ? fullscreenValue.split(/\r?\n/).length
+            : 0;
 
         // Dictation shortcut button subtree
         const VoiceButton = ({
@@ -698,17 +704,65 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
                 }}
             >
                 <DialogContent
-                    className="w-[90vw] h-[90vh] max-w-none flex flex-col"
+                    className={cn(
+                        "flex flex-col gap-0 overflow-hidden border-border/70 bg-background p-0 shadow-2xl transition-[width,height,max-width] duration-200",
+                        isEditorMaximized
+                            ? "h-[calc(100vh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-none sm:max-w-none"
+                            : "h-[min(86vh,880px)] w-[calc(100vw-2rem)] max-w-none sm:max-w-[min(1120px,calc(100vw-3rem))]",
+                    )}
                     aria-describedby={undefined}
                 >
-                    <DialogHeader className="flex-shrink-0">
-                        <DialogTitle className="flex items-center gap-2">
-                            {Icon && <Icon className="h-5 w-5" />}
-                            {label || title}
-                        </DialogTitle>
+                    <DialogHeader className="flex-shrink-0 border-b bg-background px-6 py-4 pr-14">
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="min-w-0">
+                                <DialogTitle className="flex items-center gap-2 truncate text-base">
+                                    {Icon && <Icon className="h-5 w-5" />}
+                                    {label || title}
+                                </DialogTitle>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    {t("saveShortcut")}
+                                </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 gap-1.5 text-muted-foreground"
+                                    onClick={() => setFullscreenValue("")}
+                                    disabled={!fullscreenValue}
+                                    title={t("clearText")}
+                                >
+                                    <Eraser className="h-4 w-4" />
+                                    <span className="hidden sm:inline">
+                                        {t("clearText")}
+                                    </span>
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() =>
+                                        setIsEditorMaximized((value) => !value)
+                                    }
+                                    title={
+                                        isEditorMaximized
+                                            ? t("restoreEditor")
+                                            : t("expandEditor")
+                                    }
+                                >
+                                    {isEditorMaximized ? (
+                                        <Minimize2 className="h-4 w-4" />
+                                    ) : (
+                                        <Maximize2 className="h-4 w-4" />
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
                     </DialogHeader>
-                    <div className="flex-1 min-h-0 flex flex-col gap-2">
-                        <div className="flex-1 relative min-h-0 overflow-hidden">
+                    <div className="flex min-h-0 flex-1 flex-col bg-muted/25 p-4 sm:p-6">
+                        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border bg-background shadow-sm focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/15">
                             <Textarea
                                 ref={fullscreenTextareaRef}
                                 value={fullscreenValue}
@@ -717,11 +771,18 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
                                 onClick={handleSelect}
                                 onKeyUp={handleSelect}
                                 onKeyDown={(event) => {
-                                    handleMentionKeyDown(event);
+                                    if (handleMentionKeyDown(event)) return;
+                                    if (
+                                        event.key === "Enter" &&
+                                        (event.ctrlKey || event.metaKey)
+                                    ) {
+                                        event.preventDefault();
+                                        saveAndCloseFullscreen();
+                                    }
                                 }}
                                 placeholder={props.placeholder}
                                 className={cn(
-                                    "resize-none h-full w-full overflow-y-auto",
+                                    "field-sizing-fixed h-full w-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent p-5 text-[15px] leading-7 shadow-none focus-visible:ring-0 sm:p-6",
                                     showVoiceButton && "pr-12",
                                 )}
                             />
@@ -733,18 +794,26 @@ const NodeTextarea = forwardRef<HTMLTextAreaElement, NodeTextareaProps>(
                             )}
                         </div>
                         {isListening && interimText && (
-                            <div className="text-sm text-muted-foreground italic truncate animate-pulse min-h-[20px] px-2 flex-shrink-0">
+                            <div className="mt-2 min-h-[20px] flex-shrink-0 truncate px-2 text-sm italic text-muted-foreground animate-pulse">
                                 {interimText}
                             </div>
                         )}
                     </div>
-                    <DialogFooter className="flex-shrink-0">
-                        <Button variant="outline" onClick={closeFullscreen}>
-                            {t("cancel")}
-                        </Button>
-                        <Button onClick={saveAndCloseFullscreen}>
-                            {t("confirm")}
-                        </Button>
+                    <DialogFooter className="flex-shrink-0 border-t bg-background px-6 py-3 sm:justify-between">
+                        <div className="self-center text-xs tabular-nums text-muted-foreground">
+                            {t("textStats", {
+                                characters: fullscreenCharacterCount,
+                                lines: fullscreenLineCount,
+                            })}
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                            <Button variant="outline" onClick={closeFullscreen}>
+                                {t("cancel")}
+                            </Button>
+                            <Button onClick={saveAndCloseFullscreen}>
+                                {t("saveAndClose")}
+                            </Button>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -249,18 +249,30 @@ def _neutralize_video_extension_words(prompt: str) -> str:
     prefix = (
         "全能参考生成任务。输入视频只作为主体状态、动作、镜头、节奏和声音的参考素材。"
         "生成独立新视频，画幅和时长严格采用请求参数。"
+        "不得编辑或延长输入视频；提示词中的替换、修改、保留原动作等描述，"
+        "均表示在独立新视频中迁移相应参考特征，不是修改输入视频本身。"
     )
     return f"{prefix}\n{normalized.strip()}" if normalized.strip() else prefix
 
 
-def _is_video_extension_ratio_error(exc: RuntimeError) -> bool:
-    """Return true only for Ark's deterministic extension-ratio rejection."""
+def _ark_video_mode_constraint(exc: RuntimeError) -> str | None:
+    """Return the video mode Ark inferred from a deterministic 400 rejection."""
     message = str(exc).lower()
-    return (
+    if (
+        "video editing" in message
+        and "ratio" in message
+        and "adaptive" in message
+        and "duration" in message
+        and "-1" in message
+    ):
+        return "edit"
+    if (
         "video extension" in message
         and "ratio" in message
         and "adaptive" in message
-    )
+    ):
+        return "extend"
+    return None
 
 
 def _split_asset_ids(value: object) -> list[dict[str, str]]:
@@ -592,19 +604,27 @@ def _create_task(
             )
         )
     except RuntimeError as exc:
-        # Ark can still classify a detailed reference prompt as video extension
-        # even after extension wording has been removed. That first request is
-        # rejected before a task is created, so retrying it with the provider's
-        # required adaptive ratio is safe and avoids a user-visible hard failure.
-        can_retry_as_extension = (
+        # Ark can still override an explicit all-reference declaration and
+        # classify a detailed prompt as edit/extend. These deterministic 400s
+        # happen before task creation, so one provider-compliant retry is safe.
+        inferred_mode = _ark_video_mode_constraint(exc)
+        can_retry_mode_constraint = (
             is_reference_mode
             and bool(provided_videos or video_materials)
-            and request_body.get("ratio") != "adaptive"
-            and _is_video_extension_ratio_error(exc)
+            and inferred_mode is not None
+            and (
+                request_body.get("ratio") != "adaptive"
+                or (
+                    inferred_mode == "edit"
+                    and request_body.get("duration") != -1
+                )
+            )
         )
-        if not can_retry_as_extension:
+        if not can_retry_mode_constraint:
             raise
         request_body["ratio"] = "adaptive"
+        if inferred_mode == "edit":
+            request_body["duration"] = -1
         response = _json(
             _http(
                 endpoint,

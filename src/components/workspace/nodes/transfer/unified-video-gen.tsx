@@ -88,6 +88,10 @@ import {
     VolcengineMaterialPicker,
     volcengineMaterialLimitsForModel,
 } from "../base/volcengine-material-picker";
+import {
+    normalizedImageAspectRatio,
+    normalizedVideoPreviewNodeWidthPx,
+} from "../modality/media-node-max-width";
 
 type VideoMode =
     | "text"
@@ -267,6 +271,11 @@ function VideoModeEditor<F extends VideoFeature>({
     const [modeMenuOpen, setModeMenuOpen] = useState(false);
     const [promptHistoryOpen, setPromptHistoryOpen] = useState(false);
     const [viewerOpen, setViewerOpen] = useState(false);
+    const [previewDimensions, setPreviewDimensions] = useState<{
+        width: number;
+        height: number;
+    } | null>(null);
+    const [previewFrameReady, setPreviewFrameReady] = useState(false);
     const promptRef = useRef<HTMLTextAreaElement>(null);
     const submittedPromptRef = useRef<VideoPromptHistoryRecord | null>(null);
 
@@ -590,6 +599,11 @@ function VideoModeEditor<F extends VideoFeature>({
     });
 
     useEffect(() => {
+        setPreviewDimensions(null);
+        setPreviewFrameReady(false);
+    }, [outputUrl]);
+
+    useEffect(() => {
         if (!viewerOpen) return;
         const previous = document.body.style.overflow;
         document.body.style.overflow = "hidden";
@@ -615,6 +629,19 @@ function VideoModeEditor<F extends VideoFeature>({
             : mode === "first" || mode === "first-last"
               ? `跟随首帧 / ${resolution.toUpperCase()} / ${duration}s`
               : `${ratio.value} / ${resolution.toUpperCase()} / ${duration}s`;
+    const previewWidth = previewDimensions?.width ?? width;
+    const previewHeight = previewDimensions?.height ?? height;
+    const previewAspectRatio = normalizedImageAspectRatio(
+        previewWidth,
+        previewHeight,
+    );
+    // Keep roughly the same visible area for every orientation. Landscape
+    // stays close to the original 540×304 node; portrait and square clips get
+    // narrower shells instead of being cropped into a fixed 16:9 box.
+    const previewNodeWidth = normalizedVideoPreviewNodeWidthPx(
+        previewWidth,
+        previewHeight,
+    );
     const materialVisualCount = materials.filter(
         (material) => material.type === "image" || material.type === "video",
     ).length;
@@ -827,7 +854,8 @@ function VideoModeEditor<F extends VideoFeature>({
             form={form as UseAbiFormReturn<F>}
             selected={selected}
             data={data}
-            className="!w-[540px] min-w-0 max-w-none overflow-visible border-white/15 bg-zinc-950 shadow-2xl"
+            className="min-w-0 max-w-none overflow-visible border-white/15 bg-zinc-950 shadow-2xl"
+            style={{ width: previewNodeWidth }}
             showPluginSelect={false}
             showExecuteButton={false}
             executeDisabled={!canExecute}
@@ -879,7 +907,8 @@ function VideoModeEditor<F extends VideoFeature>({
                         isConnectableEnd={false}
                     />
                     <div
-                        className="group relative h-[304px] w-[540px] overflow-hidden rounded-xl bg-zinc-900 text-zinc-300"
+                        className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-br from-zinc-800 via-zinc-900 to-black text-zinc-300 transition-[aspect-ratio] duration-300"
+                        style={{ aspectRatio: previewAspectRatio }}
                         onDoubleClick={(event) => {
                             if (!outputUrl) return;
                             event.stopPropagation();
@@ -887,19 +916,60 @@ function VideoModeEditor<F extends VideoFeature>({
                         }}
                     >
                         {outputUrl ? (
-                            <video
-                                src={outputUrl}
-                                controls
-                                preload={selected ? "metadata" : "none"}
-                                className="h-full w-full object-contain"
-                                onPointerDown={(event) =>
-                                    event.stopPropagation()
-                                }
-                            />
+                            <>
+                                {!previewFrameReady && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-zinc-800 via-zinc-900 to-black text-zinc-500">
+                                        <Film className="h-10 w-10 animate-pulse" />
+                                        <span className="text-xs">
+                                            正在载入视频画面…
+                                        </span>
+                                    </div>
+                                )}
+                                <video
+                                    src={outputUrl}
+                                    controls
+                                    playsInline
+                                    preload="auto"
+                                    className={`relative h-full w-full object-contain transition-opacity duration-200 ${previewFrameReady ? "opacity-100" : "opacity-0"}`}
+                                    onLoadedMetadata={(event) => {
+                                        const video = event.currentTarget;
+                                        if (
+                                            video.videoWidth > 0 &&
+                                            video.videoHeight > 0
+                                        ) {
+                                            setPreviewDimensions({
+                                                width: video.videoWidth,
+                                                height: video.videoHeight,
+                                            });
+                                        }
+                                        // Chromium sometimes keeps a video
+                                        // black until playback starts. Seeking
+                                        // a fraction into the clip forces it to
+                                        // decode a poster frame without playing.
+                                        if (
+                                            video.currentTime === 0 &&
+                                            Number.isFinite(video.duration) &&
+                                            video.duration > 0.05
+                                        ) {
+                                            video.currentTime = Math.min(
+                                                0.05,
+                                                video.duration / 2,
+                                            );
+                                        }
+                                    }}
+                                    onLoadedData={() =>
+                                        setPreviewFrameReady(true)
+                                    }
+                                    onSeeked={() => setPreviewFrameReady(true)}
+                                    onPointerDown={(event) =>
+                                        event.stopPropagation()
+                                    }
+                                />
+                            </>
                         ) : (
-                            <div className="relative flex h-full flex-col items-center justify-center gap-3">
-                                <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/[0.04]">
-                                    <Play className="h-11 w-11 fill-zinc-600 text-zinc-600" />
+                            <div className="relative flex h-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_35%,rgba(59,130,246,0.13),transparent_52%)]">
+                                <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/[0.06] bg-white/[0.05] shadow-inner">
+                                    <Play className="h-11 w-11 fill-zinc-500/70 text-zinc-500/70" />
                                 </div>
                                 <span className="text-sm text-zinc-500">
                                     选中节点后编辑并生成视频

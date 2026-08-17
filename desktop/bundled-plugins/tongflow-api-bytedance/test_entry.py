@@ -243,6 +243,114 @@ class Seedance25EditRequestTests(unittest.TestCase):
         self.assertEqual(requests[1]["resolution"], "720p")
         self.assertEqual(requests[1]["content"][1]["role"], "reference_video")
 
+    def test_all_reference_video_retries_edit_constraints_when_ark_classifies_editing(
+        self,
+    ) -> None:
+        requests: list[dict[str, object]] = []
+
+        def fake_http(
+            _url: str,
+            *,
+            method: str = "GET",
+            body: bytes | None = None,
+        ) -> bytes:
+            request = json.loads((body or b"{}").decode("utf-8"))
+            requests.append(request)
+            if len(requests) == 1:
+                raise RuntimeError(
+                    "火山方舟视频任务失败：The parameters `ratio` and `duration` "
+                    "specified in the request are not valid. Seedance identified "
+                    "your task as video editing based on your prompt. Issues: "
+                    "[0] `ratio` must be `adaptive`. [1] `duration` must be -1."
+                )
+            return b'{"id":"task-1"}'
+
+        with (
+            patch.object(ENTRY, "_model", return_value="doubao-seedance-2-5-260628"),
+            patch.object(ENTRY, "_http", side_effect=fake_http),
+            patch.object(ENTRY, "_poll_task", return_value=object()),
+        ):
+            ENTRY._create_task(
+                "保留@视频1完整动作与镜头，将人物和背景全部替换",
+                width=1024,
+                height=1024,
+                duration=10,
+                resolution="720p",
+                asset_ids="video:asset-reference-video",
+                operation="generate",
+            )
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[0]["ratio"], "1:1")
+        self.assertEqual(requests[0]["duration"], 10)
+        self.assertEqual(requests[1]["ratio"], "adaptive")
+        self.assertEqual(requests[1]["duration"], -1)
+        self.assertEqual(requests[1]["resolution"], "720p")
+        self.assertEqual(requests[1]["content"], requests[0]["content"])
+        self.assertEqual(requests[1]["content"][1]["role"], "reference_video")
+        self.assertIn("不得编辑或延长输入视频", requests[0]["content"][0]["text"])
+
+    def test_all_reference_video_does_not_retry_unrelated_bad_request(self) -> None:
+        requests: list[dict[str, object]] = []
+
+        def fake_http(
+            _url: str,
+            *,
+            method: str = "GET",
+            body: bytes | None = None,
+        ) -> bytes:
+            requests.append(json.loads((body or b"{}").decode("utf-8")))
+            raise RuntimeError("火山方舟 API HTTP 400: unrelated invalid parameter")
+
+        with (
+            patch.object(ENTRY, "_model", return_value="doubao-seedance-2-5-260628"),
+            patch.object(ENTRY, "_http", side_effect=fake_http),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "unrelated invalid parameter"):
+                ENTRY._create_task(
+                    "参考@视频1的动作，生成独立新镜头",
+                    width=1024,
+                    height=1024,
+                    duration=10,
+                    asset_ids="video:asset-reference-video",
+                    operation="generate",
+                )
+
+        self.assertEqual(len(requests), 1)
+
+    def test_all_reference_video_mode_correction_is_attempted_only_once(self) -> None:
+        requests: list[dict[str, object]] = []
+
+        def fake_http(
+            _url: str,
+            *,
+            method: str = "GET",
+            body: bytes | None = None,
+        ) -> bytes:
+            requests.append(json.loads((body or b"{}").decode("utf-8")))
+            raise RuntimeError(
+                "Seedance identified your task as video editing based on your "
+                "prompt. `ratio` must be `adaptive`; `duration` must be -1."
+            )
+
+        with (
+            patch.object(ENTRY, "_model", return_value="doubao-seedance-2-5-260628"),
+            patch.object(ENTRY, "_http", side_effect=fake_http),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "video editing"):
+                ENTRY._create_task(
+                    "参考@视频1完整动作，将人物替换为新角色",
+                    width=1024,
+                    height=1024,
+                    duration=10,
+                    asset_ids="video:asset-reference-video",
+                    operation="generate",
+                )
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[1]["ratio"], "adaptive")
+        self.assertEqual(requests[1]["duration"], -1)
+
 
 if __name__ == "__main__":
     unittest.main()

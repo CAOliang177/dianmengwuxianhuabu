@@ -9,6 +9,7 @@ import {
     Copy,
     Image as ImageIcon,
     LoaderCircle,
+    Maximize2,
     MessageCircle,
     MessageSquareWarning,
     Plus,
@@ -16,8 +17,9 @@ import {
     Trash2,
     Video as VideoIcon,
     Wand2,
+    X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useShallow } from "zustand/react/shallow";
@@ -143,9 +145,12 @@ export function CanvasAgentAssistant({
         useState<SeedanceAgentVersion>("2.5");
     const [brief, setBrief] = useState("");
     const [result, setResult] = useState("");
+    const [resultExpanded, setResultExpanded] = useState(false);
     const [error, setError] = useState("");
     const [mediaNote, setMediaNote] = useState("");
     const [loading, setLoading] = useState(false);
+    const messageScrollRef = useRef<HTMLDivElement>(null);
+    const resultStartRef = useRef<HTMLDivElement>(null);
 
     const selectedNodes = useMemo(() => {
         const ids = new Set(referencedNodeIds);
@@ -186,11 +191,44 @@ export function CanvasAgentAssistant({
             }),
         [brief, edges, mode, nodes, selectedNodes, target, videoVersion],
     );
+    const resultIsLong = useMemo(
+        () => result.length > 900 || result.split(/\r?\n/).length > 18,
+        [result],
+    );
+    const resultPreview = useMemo(() => {
+        if (!resultIsLong) return result;
+        return `${result.slice(0, 900).trimEnd()}…`;
+    }, [result, resultIsLong]);
 
     const changeOpen = (value: boolean) => {
         setOpen(value);
         onOpenChange(value);
     };
+
+    useEffect(() => {
+        if (!result) return;
+        const frame = requestAnimationFrame(() => {
+            const scroller = messageScrollRef.current;
+            const resultStart = resultStartRef.current;
+            if (!scroller || !resultStart) return;
+            scroller.scrollTop = Math.max(0, resultStart.offsetTop - 12);
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [result]);
+
+    useEffect(() => {
+        if (!resultExpanded) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setResultExpanded(false);
+        };
+        window.addEventListener("keydown", closeOnEscape);
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            window.removeEventListener("keydown", closeOnEscape);
+        };
+    }, [resultExpanded]);
 
     const runAgent = async () => {
         if (!brief.trim() && selectedNodes.length === 0) {
@@ -201,6 +239,7 @@ export function CanvasAgentAssistant({
         setError("");
         setMediaNote("");
         setResult("");
+        setResultExpanded(false);
         try {
             const visual = await collectAgentVisualMedia({
                 nodes,
@@ -296,8 +335,9 @@ export function CanvasAgentAssistant({
             {open && typeof document !== "undefined"
                 ? createPortal(
                       <aside
-                          className="pointer-events-auto fixed bottom-3 right-3 top-3 z-[10000] flex w-[min(410px,calc(100vw-24px))] flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#202020] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.48)]"
+                          className="nodrag nopan nowheel pointer-events-auto fixed bottom-3 right-3 top-3 z-[10000] flex w-[min(410px,calc(100vw-24px))] flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#202020] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.48)]"
                           onPointerDown={(event) => event.stopPropagation()}
+                          onWheel={(event) => event.stopPropagation()}
                       >
                           <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
                               <div className="text-sm font-semibold">
@@ -310,6 +350,7 @@ export function CanvasAgentAssistant({
                                       onClick={() => {
                                           setBrief("");
                                           setResult("");
+                                          setResultExpanded(false);
                                           setError("");
                                           setMediaNote("");
                                       }}
@@ -328,7 +369,11 @@ export function CanvasAgentAssistant({
                               </div>
                           </header>
 
-                          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                          <div
+                              ref={messageScrollRef}
+                              className="nowheel min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-scroll overscroll-contain px-4 py-3 [contain:layout_paint] [scrollbar-gutter:stable]"
+                              onWheel={(event) => event.stopPropagation()}
+                          >
                               <section className="rounded-xl border border-white/[0.08] bg-black/10 p-2.5">
                                   <div className="flex items-center justify-between gap-3">
                                       <span className="text-xs font-medium text-zinc-300">
@@ -460,13 +505,30 @@ export function CanvasAgentAssistant({
                                       Agent 正在读取素材并分析
                                   </div>
                               ) : result ? (
-                                  <div className="mt-4">
-                                      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-400">
-                                          <Bot className="h-4 w-4 text-cyan-300" />
-                                          Agent
+                                  <div ref={resultStartRef} className="mt-4">
+                                      <div className="mb-2 flex items-center justify-between gap-2 text-xs font-medium text-zinc-400">
+                                          <span className="flex items-center gap-2">
+                                              <Bot className="h-4 w-4 text-cyan-300" />
+                                              Agent
+                                          </span>
+                                          {resultIsLong ? (
+                                              <button
+                                                  type="button"
+                                                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-zinc-300 transition hover:border-cyan-300/30 hover:bg-white/[0.08] hover:text-white"
+                                                  onClick={() =>
+                                                      setResultExpanded(true)
+                                                  }
+                                              >
+                                                  <Maximize2 className="h-3.5 w-3.5" />
+                                                  展开全文
+                                              </button>
+                                          ) : null}
                                       </div>
-                                      <div className="whitespace-pre-wrap rounded-2xl rounded-tl-md border border-white/[0.08] bg-zinc-900/80 px-4 py-3 text-[13px] leading-6 text-zinc-200">
-                                          {result}
+                                      <div className="relative max-h-[320px] select-text overflow-hidden whitespace-pre-wrap break-words rounded-2xl rounded-tl-md border border-white/[0.08] bg-zinc-900/80 px-4 py-3 text-[13px] leading-6 text-zinc-200 [overflow-wrap:anywhere]">
+                                          {resultPreview}
+                                          {resultIsLong ? (
+                                              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-zinc-900 via-zinc-900/90 to-transparent" />
+                                          ) : null}
                                       </div>
                                       <div className="mt-2 flex flex-wrap justify-end gap-2">
                                           <Button
@@ -590,7 +652,7 @@ export function CanvasAgentAssistant({
                                           }
                                       }}
                                       placeholder="输入问题，或描述想生成的画面…"
-                                      className="min-h-[72px] resize-none border-0 bg-transparent p-1 text-sm text-zinc-100 shadow-none focus-visible:ring-0 placeholder:text-zinc-600"
+                                      className="field-sizing-fixed min-h-[72px] max-h-36 resize-none overflow-y-auto border-0 bg-transparent p-1 text-sm text-zinc-100 shadow-none focus-visible:ring-0 placeholder:text-zinc-600"
                                   />
                                   <button
                                       type="button"
@@ -608,6 +670,83 @@ export function CanvasAgentAssistant({
                               </div>
                           </div>
                       </aside>,
+                      document.body,
+                  )
+                : null}
+
+            {resultExpanded && result && typeof document !== "undefined"
+                ? createPortal(
+                      <div
+                          className="nodrag nopan nowheel pointer-events-auto fixed inset-0 z-[10020] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6"
+                          role="dialog"
+                          aria-modal="true"
+                          aria-label="Agent 完整回答"
+                          onPointerDown={(event) => {
+                              event.stopPropagation();
+                              if (event.target === event.currentTarget) {
+                                  setResultExpanded(false);
+                              }
+                          }}
+                          onWheel={(event) => event.stopPropagation()}
+                      >
+                          <section className="flex h-[min(92vh,940px)] w-[min(920px,calc(100vw-24px))] min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#202020] text-zinc-100 shadow-2xl">
+                              <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/[0.07] px-5">
+                                  <div className="flex items-center gap-2 text-sm font-semibold">
+                                      <Bot className="h-4 w-4 text-cyan-300" />
+                                      Agent 完整回答
+                                  </div>
+                                  <button
+                                      type="button"
+                                      className="rounded-lg p-2 text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
+                                      onClick={() => setResultExpanded(false)}
+                                      aria-label="关闭完整回答"
+                                  >
+                                      <X className="h-4 w-4" />
+                                  </button>
+                              </header>
+                              <div
+                                  className="nowheel min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-scroll overscroll-contain px-5 py-5 [scrollbar-gutter:stable] sm:px-7"
+                                  onPointerDown={(event) =>
+                                      event.stopPropagation()
+                                  }
+                                  onWheel={(event) => event.stopPropagation()}
+                              >
+                                  <div className="select-text whitespace-pre-wrap break-words text-[14px] leading-7 text-zinc-200 [overflow-wrap:anywhere]">
+                                      {result}
+                                  </div>
+                              </div>
+                              <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/[0.07] px-5 py-3">
+                                  <span className="text-xs tabular-nums text-zinc-500">
+                                      {result.length} 字
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                      <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                              void navigator.clipboard.writeText(
+                                                  extractUsablePrompt(result),
+                                              );
+                                              toast.success("提示词已复制");
+                                          }}
+                                      >
+                                          <Copy className="h-3.5 w-3.5" />
+                                          复制全文
+                                      </Button>
+                                      <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={() =>
+                                              setResultExpanded(false)
+                                          }
+                                      >
+                                          关闭
+                                      </Button>
+                                  </div>
+                              </footer>
+                          </section>
+                      </div>,
                       document.body,
                   )
                 : null}

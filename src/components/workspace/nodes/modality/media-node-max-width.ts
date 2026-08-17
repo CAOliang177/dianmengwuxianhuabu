@@ -88,3 +88,17 @@ export function normalizedImageNodeWidthPx(
 
     return IMAGE_NODE_MAX_DISPLAY_WIDTH_PX;
 }
+
+/**
+ * Preserve a similar on-canvas preview area across video orientations while
+ * allowing the container itself to keep the media's real aspect ratio.
+ */
+export function normalizedVideoPreviewNodeWidthPx(
+    width: number,
+    height: number,
+): number {
+    const aspectRatio = normalizedImageAspectRatio(width, height);
+    return Math.round(
+        Math.min(640, Math.max(360, Math.sqrt(540 * 304 * aspectRatio))),
+    );
+}
