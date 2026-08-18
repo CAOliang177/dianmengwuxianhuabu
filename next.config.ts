@@ -5,6 +5,9 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
     output: "standalone",
+    experimental: {
+        webpackBuildWorker: false,
+    },
     // NOTE: do not add outputFileTracingExcludes for data//plugins//desktop
     // here — its glob matching is unanchored, so "data/**" (even as
     // "./data/**") also strips next/dist/lib/metadata/** from the standalone

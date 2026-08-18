@@ -573,7 +573,9 @@ def _create_task(
     requested_resolution = (
         resolution or _env("VOLCENGINE_VIDEO_RESOLUTION", "720p")
     ).strip().lower()
-    if is_seedance_25 or "fast" in model.lower():
+    if is_seedance_25:
+        allowed_resolutions = {"480p", "720p", "1080p"}
+    elif "fast" in model.lower():
         allowed_resolutions = {"480p", "720p"}
     else:
         allowed_resolutions = {"480p", "720p", "1080p", "4k"}

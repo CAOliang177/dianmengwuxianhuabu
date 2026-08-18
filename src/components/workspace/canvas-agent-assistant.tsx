@@ -48,6 +48,13 @@ const selector = (state: ReturnType<typeof useFlow.getState>) => ({
     updates: state.updates,
 });
 
+const QUICK_STARTS = [
+    "优化当前节点的提示词，指出最影响结果的三处问题",
+    "分析这次生成失败的原因，并给出可直接重试的提示词",
+    "根据引用素材从零撰写一版完整提示词",
+    "检查人物、动作、镜头和参考素材是否存在冲突",
+] as const;
+
 function textValue(value: unknown): string {
     if (typeof value === "string") return value.trim();
     if (Array.isArray(value)) {
@@ -324,7 +331,7 @@ export function CanvasAgentAssistant({
             {!open ? (
                 <button
                     type="button"
-                    className="pointer-events-auto flex h-10 items-center gap-2 rounded-xl border border-zinc-700/80 bg-zinc-950/95 px-3.5 text-sm font-medium text-white shadow-xl transition hover:border-cyan-300/40 hover:bg-zinc-900"
+                    className="pointer-events-auto flex h-10 items-center gap-2 rounded-xl border border-zinc-700/80 bg-zinc-950/95 px-3.5 text-sm font-medium text-white shadow-xl backdrop-blur transition hover:-translate-y-0.5 hover:border-cyan-300/50 hover:bg-zinc-900"
                     onClick={() => changeOpen(true)}
                 >
                     <Bot className="h-4 w-4 text-cyan-300" />
@@ -335,13 +342,31 @@ export function CanvasAgentAssistant({
             {open && typeof document !== "undefined"
                 ? createPortal(
                       <aside
-                          className="nodrag nopan nowheel pointer-events-auto fixed bottom-3 right-3 top-3 z-[10000] flex w-[min(410px,calc(100vw-24px))] flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#202020] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.48)]"
+                          className="nodrag nopan nowheel pointer-events-auto fixed bottom-3 right-3 top-3 z-[10000] flex w-[min(448px,calc(100vw-24px))] flex-col overflow-hidden rounded-[22px] border border-white/10 bg-[#191a1d] text-zinc-100 shadow-[0_24px_90px_rgba(0,0,0,0.52)]"
+                          style={{
+                              backgroundImage:
+                                  "radial-gradient(circle at top right, rgba(34, 211, 238, 0.08), transparent 28%)",
+                          }}
                           onPointerDown={(event) => event.stopPropagation()}
                           onWheel={(event) => event.stopPropagation()}
                       >
-                          <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-                              <div className="text-sm font-semibold">
-                                  新对话
+                          <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.07] px-4">
+                              <div className="flex items-center gap-3">
+                                  <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/10 text-cyan-300">
+                                      <Bot className="h-4.5 w-4.5" />
+                                  </span>
+                                  <div>
+                                      <div className="text-sm font-semibold">
+                                          创作 Agent
+                                      </div>
+                                      <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-500">
+                                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                                          已连接大语言模型
+                                          {selectedNodes.length
+                                              ? ` · 已引用 ${selectedNodes.length} 个节点`
+                                              : ""}
+                                      </div>
+                                  </div>
                               </div>
                               <div className="flex items-center gap-1">
                                   <button
@@ -354,7 +379,7 @@ export function CanvasAgentAssistant({
                                           setError("");
                                           setMediaNote("");
                                       }}
-                                      title="新对话"
+                                      title="清空并新建对话"
                                   >
                                       <Plus className="h-4 w-4" />
                                   </button>
@@ -371,10 +396,10 @@ export function CanvasAgentAssistant({
 
                           <div
                               ref={messageScrollRef}
-                              className="nowheel min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-scroll overscroll-contain px-4 py-3 [contain:layout_paint] [scrollbar-gutter:stable]"
+                              className="nowheel min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-3 [contain:layout_paint] [scrollbar-gutter:stable]"
                               onWheel={(event) => event.stopPropagation()}
                           >
-                              <section className="rounded-xl border border-white/[0.08] bg-black/10 p-2.5">
+                              <section className="rounded-2xl border border-white/[0.08] bg-black/15 p-3">
                                   <div className="flex items-center justify-between gap-3">
                                       <span className="text-xs font-medium text-zinc-300">
                                           当前引用
@@ -568,16 +593,35 @@ export function CanvasAgentAssistant({
                                       </div>
                                   </div>
                               ) : (
-                                  <div className="flex min-h-[220px] flex-col items-center justify-center px-8 text-center">
-                                      <Bot className="mb-3 h-7 w-7 text-zinc-600" />
-                                      <p className="text-xs leading-6 text-zinc-600">
-                                          选择节点后描述生成问题，或直接询问、从零撰写提示词。
-                                      </p>
+                                  <div className="flex min-h-[240px] flex-col justify-center py-5">
+                                      <div className="mb-4 px-2 text-center">
+                                          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] text-cyan-300">
+                                              <Wand2 className="h-5 w-5" />
+                                          </div>
+                                          <p className="text-sm font-medium text-zinc-300">
+                                              今天想解决什么创作问题？
+                                          </p>
+                                          <p className="mt-1 text-[11px] leading-5 text-zinc-600">
+                                              可直接提问，也可以先在画布连续选择图片、视频和生成节点。
+                                          </p>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2">
+                                          {QUICK_STARTS.map((item) => (
+                                              <button
+                                                  type="button"
+                                                  key={item}
+                                                  onClick={() => setBrief(item)}
+                                                  className="min-h-16 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2 text-left text-[11px] leading-5 text-zinc-400 transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.05] hover:text-zinc-200"
+                                              >
+                                                  {item}
+                                              </button>
+                                          ))}
+                                      </div>
                                   </div>
                               )}
                           </div>
 
-                          <div className="shrink-0 border-t border-white/[0.06] bg-[#202020] px-4 pb-4 pt-3">
+                          <div className="shrink-0 border-t border-white/[0.07] bg-[#191a1d]/95 px-4 pb-4 pt-3 backdrop-blur-xl">
                               <div className="mb-2 flex items-center gap-1 overflow-x-auto rounded-lg bg-black/20 p-1">
                                   <Segment
                                       active={mode === "chat"}

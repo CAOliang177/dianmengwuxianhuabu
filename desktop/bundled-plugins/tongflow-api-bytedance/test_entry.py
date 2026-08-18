@@ -151,6 +151,16 @@ class Seedance25EditRequestTests(unittest.TestCase):
         )
         self.assertEqual(request["ratio"], "16:9")
 
+    def test_seedance_25_accepts_1080p_resolution(self) -> None:
+        request = self.capture_request(
+            prompt="人物在自然光下向镜头走来",
+            width=1920,
+            height=1080,
+            duration=8,
+            resolution="1080p",
+        )
+        self.assertEqual(request["resolution"], "1080p")
+
     def test_all_reference_video_cannot_be_reclassified_as_extension(self) -> None:
         prompts = (
             "续写@视频1，让人物向门口走去",

@@ -26,9 +26,15 @@ const VIDEO_RESOLUTION_4K: ResolutionTier = {
     scale: 1,
 };
 
-const SEEDANCE_HD_TIERS = [
+const SEEDANCE_FAST_TIERS = [
     VIDEO_RESOLUTION_480P,
     VIDEO_RESOLUTION_720P,
+] as const;
+
+const SEEDANCE_25_TIERS = [
+    VIDEO_RESOLUTION_480P,
+    VIDEO_RESOLUTION_720P,
+    VIDEO_RESOLUTION_1080P,
 ] as const;
 
 const SEEDANCE_STANDARD_TIERS = [
@@ -49,12 +55,11 @@ export function isSeedance25Model(model?: string): boolean {
 
 export function videoResolutionTiersForModel(model?: string): ResolutionTier[] {
     const normalized = (model || "").trim().toLowerCase();
-    if (
-        isSeedance25Model(normalized) ||
-        normalized.includes("fast") ||
-        normalized.includes("mini")
-    ) {
-        return [...SEEDANCE_HD_TIERS];
+    if (isSeedance25Model(normalized)) {
+        return [...SEEDANCE_25_TIERS];
+    }
+    if (normalized.includes("fast") || normalized.includes("mini")) {
+        return [...SEEDANCE_FAST_TIERS];
     }
     return [...SEEDANCE_STANDARD_TIERS];
 }

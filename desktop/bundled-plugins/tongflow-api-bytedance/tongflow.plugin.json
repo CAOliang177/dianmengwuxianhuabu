@@ -58,7 +58,7 @@
         {
             "key": "VOLCENGINE_VIDEO_RESOLUTION",
             "default": "720p",
-            "description": "输出清晰度。Seedance 2.5 与 2.0 Fast 支持 480p/720p；2.0 标准版还支持 1080p/4k"
+            "description": "输出清晰度。Seedance 2.5 支持 480p/720p/1080p；2.0 Fast 支持 480p/720p；2.0 标准版支持 480p/720p/1080p/4k"
         },
         {
             "key": "VOLCENGINE_GENERATE_AUDIO",
