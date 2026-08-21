@@ -133,6 +133,14 @@ function probePluginRegistry(rootStatus) {
                     ) {
                         throw new Error("bundled providers are missing");
                     }
+                    if (
+                        payload.plugins?.["tongflow-api-gao-channel"] ||
+                        Object.values(payload.nodePluginMap).some((ids) =>
+                            ids?.includes("tongflow-api-gao-channel"),
+                        )
+                    ) {
+                        throw new Error("retired high-channel provider remains");
+                    }
                 } catch (error) {
                     child.removeAllListeners("exit");
                     finish(

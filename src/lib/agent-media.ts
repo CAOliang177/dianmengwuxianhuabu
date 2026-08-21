@@ -16,6 +16,23 @@ const MAX_VISUAL_SOURCES = 5;
 const MAX_VISUAL_ATTACHMENTS = 6;
 const MAX_FRAME_EDGE = 1024;
 
+/** Resolve Agent references in the exact order in which the user selected them. */
+export function resolveAgentSelectedNodes(
+    nodes: Node[],
+    referencedNodeIds: string[],
+): Node[] {
+    const nodesById = new Map(nodes.map((node) => [node.id, node]));
+    const seen = new Set<string>();
+    const selected: Node[] = [];
+    for (const id of referencedNodeIds) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const node = nodesById.get(id);
+        if (node) selected.push(node);
+    }
+    return selected;
+}
+
 function textValue(value: unknown): string {
     return typeof value === "string" ? value.trim() : "";
 }

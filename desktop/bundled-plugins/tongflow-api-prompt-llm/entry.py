@@ -112,6 +112,96 @@ def _error_message(raw: bytes) -> str:
     return _redact(payload)
 
 
+def _event_text(payload: dict[str, Any]) -> str:
+    """Extract text from one OpenAI-compatible streaming event."""
+    def stream_content(value: object) -> str:
+        # Delta strings may intentionally start with a space, so do not strip
+        # them before concatenating consecutive streaming chunks.
+        if isinstance(value, str):
+            return value
+        return _content_text(value)
+
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        choice = choices[0]
+        if isinstance(choice, dict):
+            for container_key in ("delta", "message"):
+                container = choice.get(container_key)
+                if isinstance(container, dict):
+                    content = stream_content(container.get("content"))
+                    if content:
+                        return content
+            content = _content_text(choice.get("text"))
+            if content:
+                return content
+    for key in ("delta", "output_text", "text", "content"):
+        content = stream_content(payload.get(key))
+        if content:
+            return content
+    return ""
+
+
+def _parse_api_payload(raw: bytes) -> dict[str, Any]:
+    """Accept JSON, JSON-in-a-string, fenced JSON, SSE and NDJSON responses."""
+    text = raw.decode("utf-8-sig", errors="replace").strip()
+    if not text:
+        raise ValueError("接口返回了空响应")
+
+    def parse_json(candidate: str) -> dict[str, Any] | None:
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str) and value.strip() != candidate.strip():
+            return parse_json(value.strip())
+        return None
+
+    direct = parse_json(text)
+    if direct is not None:
+        return direct
+
+    if text.startswith("```") and text.endswith("```"):
+        fenced = text[3:-3].strip()
+        if fenced.lower().startswith("json"):
+            fenced = fenced[4:].lstrip()
+        direct = parse_json(fenced)
+        if direct is not None:
+            return direct
+
+    events: list[dict[str, Any]] = []
+    saw_stream_marker = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("event:", "id:", "retry:", ":")):
+            continue
+        if line.startswith("data:"):
+            saw_stream_marker = True
+            line = line[5:].strip()
+        if not line or line == "[DONE]":
+            continue
+        event = parse_json(line)
+        if event is not None:
+            events.append(event)
+
+    if events:
+        pieces = [_event_text(event) for event in events]
+        combined = "".join(piece for piece in pieces if piece)
+        if combined:
+            return {"output_text": combined}
+        for event in reversed(events):
+            if isinstance(event.get("error"), (dict, str)):
+                raise ValueError(f"流式响应返回错误：{_redact(event['error'])}")
+        if len(events) == 1:
+            return events[0]
+        return events[-1]
+
+    preview = " ".join(text.split())[:500]
+    kind = "SSE/NDJSON" if saw_stream_marker else "JSON"
+    raise ValueError(f"无法解析为 {kind}，响应开头：{_redact(preview)}")
+
+
 def _post_json(body: dict[str, Any]) -> dict[str, Any]:
     request = Request(
         _endpoint(),
@@ -120,7 +210,7 @@ def _post_json(body: dict[str, Any]) -> dict[str, Any]:
         headers={
             "Authorization": f"Bearer {_api_key()}",
             "Content-Type": "application/json",
-            "Accept": "application/json",
+            "Accept": "application/json, text/event-stream",
             "Connection": "close",
             "User-Agent": "dianmeng-infinite-canvas/0.1",
         },
@@ -132,10 +222,13 @@ def _post_json(body: dict[str, Any]) -> dict[str, Any]:
         try:
             with urlopen(request, timeout=remaining) as response:  # noqa: S310
                 raw = response.read()
-            payload = json.loads(raw.decode("utf-8", errors="replace"))
-            if not isinstance(payload, dict):
-                raise RuntimeError("大语言模型 API 返回格式错误：顶层不是对象")
-            return payload
+                content_type = str(response.headers.get("Content-Type") or "")
+            try:
+                return _parse_api_payload(raw)
+            except ValueError as exc:
+                last_error = RuntimeError(
+                    f"响应格式异常（Content-Type={content_type or '未提供'}）：{exc}"
+                )
         except HTTPError as exc:
             raw = exc.read()
             message = _error_message(raw)
@@ -158,13 +251,13 @@ def _post_json(body: dict[str, Any]) -> dict[str, Any]:
             http.client.RemoteDisconnected,
         ) as exc:
             last_error = exc
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("大语言模型 API 返回的不是有效 JSON") from exc
         if attempt < 3 and time.monotonic() < deadline:
             time.sleep(min(1.2 * (2**attempt), max(0.0, deadline - time.monotonic())))
         if time.monotonic() >= deadline:
             break
-    raise RuntimeError(f"无法连接大语言模型 API：{_redact(last_error)}") from last_error
+    raise RuntimeError(
+        f"大语言模型 API 连续 4 次未返回可用结果：{_redact(last_error)}"
+    ) from last_error
 
 
 def _content_text(value: object) -> str:

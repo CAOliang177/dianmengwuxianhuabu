@@ -29,6 +29,7 @@ import { useFlow } from "@/hooks/use-flow";
 import {
     collectAgentContextNodes,
     collectAgentVisualMedia,
+    resolveAgentSelectedNodes,
 } from "@/lib/agent-media";
 import type { SeedanceAgentVersion } from "@/lib/agent-skill-library";
 import {
@@ -160,8 +161,7 @@ export function CanvasAgentAssistant({
     const resultStartRef = useRef<HTMLDivElement>(null);
 
     const selectedNodes = useMemo(() => {
-        const ids = new Set(referencedNodeIds);
-        return nodes.filter((node) => ids.has(node.id));
+        return resolveAgentSelectedNodes(nodes, referencedNodeIds);
     }, [nodes, referencedNodeIds]);
     const contextNodes = useMemo(
         () =>

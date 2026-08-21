@@ -106,6 +106,37 @@ class PromptLlmPluginTests(unittest.TestCase):
         }
         self.assertEqual(ENTRY._extract_text(payload), "最终答案")
 
+    def test_sse_response_is_combined_into_output_text(self) -> None:
+        raw = (
+            'data: {"choices":[{"delta":{"content":"第一段"}}]}\n\n'
+            'data: {"choices":[{"delta":{"content":" 第二段"}}]}\n\n'
+            "data: [DONE]\n"
+        ).encode()
+        self.assertEqual(
+            ENTRY._parse_api_payload(raw),
+            {"output_text": "第一段 第二段"},
+        )
+
+    def test_json_wrapped_in_string_or_markdown_fence_is_supported(self) -> None:
+        wrapped = __import__("json").dumps(
+            '{"choices":[{"message":{"content":"字符串 JSON"}}]}'
+        ).encode()
+        fenced = (
+            '```json\n{"choices":[{"message":{"content":"围栏 JSON"}}]}\n```'
+        ).encode()
+        self.assertEqual(
+            ENTRY._extract_text(ENTRY._parse_api_payload(wrapped)),
+            "字符串 JSON",
+        )
+        self.assertEqual(
+            ENTRY._extract_text(ENTRY._parse_api_payload(fenced)),
+            "围栏 JSON",
+        )
+
+    def test_invalid_response_includes_safe_preview(self) -> None:
+        with self.assertRaisesRegex(ValueError, "响应开头"):
+            ENTRY._parse_api_payload(b"<html>gateway error</html>")
+
     def test_multimodal_input_becomes_openai_image_parts(self) -> None:
         captured: dict[str, object] = {}
 

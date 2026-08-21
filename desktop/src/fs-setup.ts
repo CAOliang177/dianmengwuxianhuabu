@@ -39,6 +39,7 @@ const BUNDLED_CORE_PLUGIN_IDS = new Set([
 ]);
 
 const RETIRED_BUNDLED_PLUGIN_IDS = [
+    "tongflow-api-gao-channel",
     "tongflow-api-gada-img2",
     "tongflow-api-gada-banana",
     "tongflow-api-openai",
