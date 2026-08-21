@@ -11,7 +11,7 @@ export type SeedancePromptOptions = {
     assetCount?: number;
     referenceLabels?: string[];
     duration?: number;
-    operation?: "generate" | "edit";
+    operation?: "generate" | "edit" | "extend";
 };
 
 /** Build the method instructions consumed by the configured prompt LLM. */
@@ -23,9 +23,11 @@ export function buildSeedancePromptModelInstruction(
     const context = [
         options.operation === "edit"
             ? "任务类型：Seedance 2.5 视频编辑。输出比例与时长跟随源视频，不要改写成新的生成规格。"
-            : duration > 0
-              ? `任务类型：Seedance 视频生成；目标时长约 ${duration} 秒。`
-              : "任务类型：Seedance 视频生成。",
+            : options.operation === "extend"
+              ? `任务类型：Seedance 2.5 视频延长。必须明确接续源视频结尾继续生成，保持主体、场景、动作和镜头连续；输出比例跟随源视频${duration > 0 ? `，延长约 ${duration} 秒` : ""}。`
+              : duration > 0
+                ? `任务类型：Seedance 视频生成；目标时长约 ${duration} 秒。`
+                : "任务类型：Seedance 视频生成。",
         references.length
             ? `可用素材引用：${references.join("、")}。必须原样保留这些 @引用，并明确每个素材承担的主体、动作、风格、镜头或声音职责。`
             : "当前没有可引用素材，不要虚构 @图片、@视频或 @音频。",

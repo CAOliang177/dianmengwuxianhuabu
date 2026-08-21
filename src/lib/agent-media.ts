@@ -78,6 +78,19 @@ function nodeMediaValues(node: Node): string[] {
     return [...new Set(values)];
 }
 
+/**
+ * Node data can contain a file key, an already-resolved upload route, or a
+ * remote/data/blob URL. Only file keys should pass through getFileUrl.
+ */
+export function resolveAgentMediaUrl(value: string): string {
+    const normalized = value.trim().replace(/\\/g, "/");
+    if (!normalized) return "";
+    if (/^(?:https?:|data:|blob:)/i.test(normalized)) return normalized;
+    if (normalized.startsWith("/api/uploads/")) return normalized;
+    if (normalized.startsWith("api/uploads/")) return `/${normalized}`;
+    return getFileUrl(normalized);
+}
+
 /** Only video outputs inherit their upstream generation references. */
 export function collectAgentContextNodes({
     nodes,
@@ -122,7 +135,7 @@ function visualCandidates(options: {
         const kind = visualKind(node);
         if (!kind) continue;
         for (const value of nodeMediaValues(node)) {
-            const url = getFileUrl(value);
+            const url = resolveAgentMediaUrl(value);
             const identity = `${kind}:${url}`;
             if (!url || seen.has(identity)) continue;
             seen.add(identity);
@@ -161,11 +174,71 @@ function drawFrame(
     return canvas.toDataURL("image/jpeg", 0.76);
 }
 
+async function fetchWithTimeout(
+    input: RequestInfo | URL,
+    init: RequestInit = {},
+    timeoutMs = 30_000,
+) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(input, { ...init, signal: controller.signal });
+    } finally {
+        window.clearTimeout(timeout);
+    }
+}
+
 async function fetchBlob(url: string) {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok)
-        throw new Error(`读取素材失败（HTTP ${response.status}）`);
-    return await response.blob();
+    let directError: unknown;
+    try {
+        const response = await fetchWithTimeout(url, {
+            cache: "no-store",
+            credentials: "same-origin",
+        });
+        if (response.ok) return await response.blob();
+        directError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+        directError = error;
+    }
+
+    // Remote model/CDN URLs frequently omit browser CORS headers. Fetch them
+    // through the local Next server after the direct attempt so images and
+    // video frames remain inspectable without changing the node itself.
+    if (/^https?:\/\//i.test(url)) {
+        try {
+            const response = await fetchWithTimeout(
+                "/api/agent/media",
+                {
+                    method: "POST",
+                    cache: "no-store",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url }),
+                },
+                45_000,
+            );
+            if (response.ok) return await response.blob();
+            let detail = "";
+            try {
+                const payload = (await response.json()) as { error?: unknown };
+                detail = typeof payload.error === "string" ? payload.error : "";
+            } catch {
+                // Keep the status-only fallback for non-JSON gateway errors.
+            }
+            throw new Error(
+                detail || `素材代理读取失败（HTTP ${response.status}）`,
+            );
+        } catch (proxyError) {
+            const reason =
+                proxyError instanceof Error
+                    ? proxyError.message
+                    : "远程素材代理不可用";
+            throw new Error(`读取远程素材失败：${reason}`);
+        }
+    }
+
+    const reason =
+        directError instanceof Error ? directError.message : "请求失败";
+    throw new Error(`读取本地素材失败：${reason}`);
 }
 
 async function imageAttachment(candidate: {

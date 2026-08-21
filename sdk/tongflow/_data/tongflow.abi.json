@@ -272,8 +272,8 @@
                     },
                     "operation": {
                         "type": "string",
-                        "enum": ["generate", "edit"],
-                        "description": "Video operation. Edit mode follows the source video's ratio and duration."
+                        "enum": ["generate", "edit", "extend"],
+                        "description": "Video operation. Edit mode follows the source video's ratio and duration; extend mode continues one source video and follows its ratio."
                     },
                     "resolution": {
                         "type": "string",

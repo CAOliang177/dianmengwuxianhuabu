@@ -28,7 +28,7 @@ type SeedancePromptOptimizerProps = {
     onChange: (value: string) => void;
     duration?: number;
     referenceLabels?: string[];
-    operation?: "generate" | "edit";
+    operation?: "generate" | "edit" | "extend";
 };
 
 /** Model-driven Seedance prompt helper shown beside the video generate button. */

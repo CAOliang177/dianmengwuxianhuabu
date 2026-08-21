@@ -35,4 +35,16 @@ describe("Seedance 2.5 prompt optimizer", () => {
         expect(instruction).toContain("@视频1");
         expect(instruction).toContain("只输出最终提示词");
     });
+
+    it("gives the model video-extension continuity constraints", () => {
+        const instruction = buildSeedancePromptModelInstruction({
+            operation: "extend",
+            duration: 12,
+            referenceLabels: ["@视频1"],
+        });
+        expect(instruction).toContain("Seedance 2.5 视频延长");
+        expect(instruction).toContain("接续源视频结尾");
+        expect(instruction).toContain("比例跟随源视频");
+        expect(instruction).toContain("延长约 12 秒");
+    });
 });

@@ -130,9 +130,8 @@ const MODE_OPTIONS: Array<{
     },
     {
         value: "long",
-        label: "超长视频",
-        hint: "Seedance 2.5 · 最长生成 30 秒",
-        beta: true,
+        label: "延长视频",
+        hint: "Seedance 2.5 · 接续一个源视频继续生成",
     },
 ];
 
@@ -436,7 +435,7 @@ function VideoModeEditor<F extends VideoFeature>({
     const editVideoCount = referenceGroups.videos.length + materialVideoCount;
     const baseMaterialLimits = volcengineMaterialLimitsForModel(effectiveModel);
     const materialLimits =
-        mode === "edit"
+        mode === "edit" || mode === "long"
             ? { ...baseMaterialLimits, video: 1 }
             : baseMaterialLimits;
     const materialLabels = materialReferenceLabels(materials, {
@@ -480,7 +479,8 @@ function VideoModeEditor<F extends VideoFeature>({
     }, [allReferences.length, materials.length, mode, onModeChange]);
 
     useEffect(() => {
-        const expectedOperation = mode === "edit" ? "edit" : "generate";
+        const expectedOperation =
+            mode === "edit" ? "edit" : mode === "long" ? "extend" : "generate";
         const persistedOperation = (data as Record<string, unknown>).operation;
         const nextDuration = Math.max(4, Math.min(maxDuration, duration));
         const next: Record<string, unknown> = {};
@@ -626,9 +626,11 @@ function VideoModeEditor<F extends VideoFeature>({
     const settingsSummary =
         mode === "edit"
             ? `自适应 / ${resolution.toUpperCase()} / 跟随源视频`
-            : mode === "first" || mode === "first-last"
-              ? `跟随首帧 / ${resolution.toUpperCase()} / ${duration}s`
-              : `${ratio.value} / ${resolution.toUpperCase()} / ${duration}s`;
+            : mode === "long"
+              ? `自适应 / ${resolution.toUpperCase()} / 延长 ${duration}s`
+              : mode === "first" || mode === "first-last"
+                ? `跟随首帧 / ${resolution.toUpperCase()} / ${duration}s`
+                : `${ratio.value} / ${resolution.toUpperCase()} / ${duration}s`;
     const previewWidth = previewDimensions?.width ?? width;
     const previewHeight = previewDimensions?.height ?? height;
     const previewAspectRatio = normalizedImageAspectRatio(
@@ -661,7 +663,7 @@ function VideoModeEditor<F extends VideoFeature>({
         (candidate: VideoMode) => {
             if ((candidate === "edit" || candidate === "long") && !is25)
                 return "仅 Seedance 2.5 可用";
-            if (candidate !== "edit") return undefined;
+            if (candidate !== "edit" && candidate !== "long") return undefined;
             if (hasUnsupportedLocalVolcengineVideo)
                 return "请改用火山素材库中的视频";
             if (editVideoCount === 0) return "需要选择 1 个源视频";
@@ -680,7 +682,7 @@ function VideoModeEditor<F extends VideoFeature>({
             (mode === "image-reference" &&
                 references.length + imageMaterials.length >= 1) ||
             (mode === "edit" && editModeReady) ||
-            (mode === "long" && is25 && referenceCombinationValid) ||
+            (mode === "long" && editModeReady && referenceCombinationValid) ||
             (mode === "first" &&
                 references.length + frameMaterials.length >= 1) ||
             (mode === "first-last" &&
@@ -723,11 +725,11 @@ function VideoModeEditor<F extends VideoFeature>({
 
     const updateMaterials = useCallback(
         (value: string) => {
-            if (mode === "reference" || mode === "text" || mode === "long") {
+            if (mode === "reference" || mode === "text") {
                 patch({ asset_ids: value });
                 return;
             }
-            if (mode === "edit") {
+            if (mode === "edit" || mode === "long") {
                 let selectedVideos = referenceGroups.videos.length;
                 const selected = parseVolcengineMaterials(value).filter(
                     (material) => {
@@ -1288,14 +1290,17 @@ function VideoModeEditor<F extends VideoFeature>({
                                             horizontal
                                         />
                                     </div>
-                                    {mode === "edit" ? (
+                                    {mode === "edit" || mode === "long" ? (
                                         <div className="rounded-xl border border-sky-400/25 bg-sky-500/10 p-3 text-sm">
                                             <div className="font-medium text-sky-100">
-                                                输出跟随源视频
+                                                {mode === "edit"
+                                                    ? "输出跟随源视频"
+                                                    : "延长内容接续源视频"}
                                             </div>
                                             <div className="mt-1 text-xs text-sky-200/75">
-                                                比例：adaptive ·
-                                                时长：原视频（4–30 秒）
+                                                {mode === "edit"
+                                                    ? "比例：adaptive · 时长：原视频（4–30 秒）"
+                                                    : `比例：adaptive · 延长：${duration} 秒`}
                                             </div>
                                         </div>
                                     ) : (
@@ -1602,7 +1607,9 @@ function VideoModeEditor<F extends VideoFeature>({
                                         operation={
                                             mode === "edit"
                                                 ? "edit"
-                                                : "generate"
+                                                : mode === "long"
+                                                  ? "extend"
+                                                  : "generate"
                                         }
                                         referenceLabels={[
                                             ...allReferences.map(
@@ -1627,13 +1634,18 @@ function VideoModeEditor<F extends VideoFeature>({
                                     title={
                                         hasUnsupportedLocalVolcengineVideo
                                             ? "请先断开本地视频，并从火山素材库选择视频"
-                                            : mode === "edit" && !is25
-                                              ? "视频编辑仅支持 Seedance 2.5"
-                                              : mode === "edit" &&
+                                            : (mode === "edit" ||
+                                                    mode === "long") &&
+                                                !is25
+                                              ? `${mode === "long" ? "视频延长" : "视频编辑"}仅支持 Seedance 2.5`
+                                              : (mode === "edit" ||
+                                                      mode === "long") &&
                                                   editVideoCount !== 1
                                                 ? "请从火山素材库选择 1 个 4–30 秒源视频"
                                                 : canExecute
-                                                  ? "生成视频"
+                                                  ? mode === "long"
+                                                      ? "延长视频"
+                                                      : "生成视频"
                                                   : "请补充提示词和当前模式所需的参考图"
                                     }
                                 >
@@ -1741,9 +1753,13 @@ const UnifiedVideoGenNode = ({
                     ...((current?.data ?? {}) as Record<string, unknown>),
                     videoMode: nextMode,
                     feature: modeFeature(nextMode),
-                    operation: nextMode === "edit" ? "edit" : "generate",
+                    operation:
+                        nextMode === "edit"
+                            ? "edit"
+                            : nextMode === "long"
+                              ? "extend"
+                              : "generate",
                     ...(nextMode === "text" ? { asset_ids: "" } : {}),
-                    ...(nextMode === "long" ? { duration: 30 } : {}),
                 },
                 { immediate: true },
             );

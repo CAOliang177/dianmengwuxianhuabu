@@ -474,7 +474,9 @@ def _create_task(
 ) -> Asset:
     model = _model()
     is_seedance_25 = _is_seedance_25(model)
-    is_video_edit = (operation or "generate").strip().lower() == "edit"
+    normalized_operation = (operation or "generate").strip().lower()
+    is_video_edit = normalized_operation == "edit"
+    is_video_extend = normalized_operation == "extend"
     max_images = 30 if is_seedance_25 else 9
     provided_images = [image for image in images or [] if image is not None]
     provided_videos = [video for video in videos or [] if video is not None]
@@ -486,9 +488,15 @@ def _create_task(
     edit_video_count = len(provided_videos) + video_materials
     if is_video_edit and not is_seedance_25:
         raise RuntimeError("视频编辑模式仅支持 Seedance 2.5 模型")
+    if is_video_extend and not is_seedance_25:
+        raise RuntimeError("视频延长模式仅支持 Seedance 2.5 模型")
     if is_video_edit and edit_video_count != 1:
         raise RuntimeError(
             f"Seedance 2.5 视频编辑必须且只能选择 1 个源视频，当前为 {edit_video_count} 个"
+        )
+    if is_video_extend and edit_video_count != 1:
+        raise RuntimeError(
+            f"Seedance 2.5 视频延长必须且只能选择 1 个源视频，当前为 {edit_video_count} 个"
         )
     if len(provided_images) + image_materials > max_images:
         raise RuntimeError(
@@ -532,7 +540,12 @@ def _create_task(
         or image_materials
         or video_materials
     )
-    is_reference_mode = has_visual_reference and not has_frame_role and not is_video_edit
+    is_reference_mode = (
+        has_visual_reference
+        and not has_frame_role
+        and not is_video_edit
+        and not is_video_extend
+    )
     request_prompt = _clean_prompt(prompt)
     if is_reference_mode:
         request_prompt = _neutralize_frame_mode_words(request_prompt)
@@ -559,7 +572,9 @@ def _create_task(
     for material in materials:
         content.append(_asset_item(material))
 
-    use_adaptive_ratio = is_video_edit or adaptive_ratio or has_frame_role
+    use_adaptive_ratio = (
+        is_video_edit or is_video_extend or adaptive_ratio or has_frame_role
+    )
 
     duration_max = 30 if is_seedance_25 else 15
     seconds = max(4, min(duration_max, int(round(duration or 5))))

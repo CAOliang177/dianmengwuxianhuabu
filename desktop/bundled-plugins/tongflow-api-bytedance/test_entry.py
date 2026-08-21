@@ -91,6 +91,34 @@ class Seedance25EditRequestTests(unittest.TestCase):
                     operation="edit",
                 )
 
+    def test_extend_uses_adaptive_ratio_and_requested_duration(self) -> None:
+        request = self.capture_request(
+            prompt="接续源视频结尾，人物继续向前奔跑",
+            width=1024,
+            height=576,
+            duration=12,
+            asset_ids="video:asset-source-video",
+            operation="extend",
+        )
+        self.assertEqual(request["ratio"], "adaptive")
+        self.assertEqual(request["duration"], 12)
+        self.assertNotIn("全能参考生成任务", request["content"][0]["text"])
+
+    def test_extend_requires_exactly_one_video(self) -> None:
+        with patch.object(
+            ENTRY,
+            "_model",
+            return_value="doubao-seedance-2-5-260628",
+        ):
+            with self.assertRaisesRegex(RuntimeError, "视频延长必须且只能选择 1 个源视频"):
+                ENTRY._create_task(
+                    "延长视频",
+                    width=1024,
+                    height=576,
+                    duration=8,
+                    operation="extend",
+                )
+
     def test_edit_rejects_seedance_20(self) -> None:
         with patch.object(
             ENTRY,

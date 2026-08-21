@@ -2,6 +2,7 @@ import type { Edge, Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 import {
     collectAgentContextNodes,
+    resolveAgentMediaUrl,
     resolveAgentSelectedNodes,
 } from "@/lib/agent-media";
 
@@ -69,5 +70,31 @@ describe("collectAgentContextNodes", () => {
                 selectedNodes: [image],
             }).map((item) => item.id),
         ).toEqual(["image"]);
+    });
+});
+
+describe("resolveAgentMediaUrl", () => {
+    it("normalizes Windows file keys for the upload route", () => {
+        expect(resolveAgentMediaUrl("tasks\\job-1\\frame 1.png")).toBe(
+            "/api/uploads/tasks/job-1/frame 1.png",
+        );
+    });
+
+    it("does not prefix an already resolved upload route twice", () => {
+        expect(resolveAgentMediaUrl("/api/uploads/tasks/a.png")).toBe(
+            "/api/uploads/tasks/a.png",
+        );
+    });
+
+    it("keeps remote, data, and blob URLs intact", () => {
+        expect(resolveAgentMediaUrl("https://cdn.example.com/a.png")).toBe(
+            "https://cdn.example.com/a.png",
+        );
+        expect(resolveAgentMediaUrl("data:image/png;base64,AA==")).toBe(
+            "data:image/png;base64,AA==",
+        );
+        expect(resolveAgentMediaUrl("blob:http://127.0.0.1/id")).toBe(
+            "blob:http://127.0.0.1/id",
+        );
     });
 });

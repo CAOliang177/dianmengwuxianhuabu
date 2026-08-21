@@ -219,9 +219,9 @@ const _slot_images_gen_video_inputs = {
         },
         operation: {
             type: "string",
-            enum: ["generate", "edit"],
+            enum: ["generate", "edit", "extend"],
             description:
-                "Video operation. Edit mode follows the source video's ratio and duration.",
+                "Video operation. Edit mode follows the source video's ratio and duration; extend mode continues one source video and follows its ratio.",
         },
         resolution: {
             type: "string",
@@ -3859,9 +3859,9 @@ export const ABI_NODES = {
                 },
                 operation: {
                     type: "string",
-                    enum: ["generate", "edit"],
+                    enum: ["generate", "edit", "extend"],
                     description:
-                        "Video operation. Edit mode follows the source video's ratio and duration.",
+                        "Video operation. Edit mode follows the source video's ratio and duration; extend mode continues one source video and follows its ratio.",
                 },
                 resolution: {
                     type: "string",
