@@ -438,7 +438,6 @@ export function SettingsDialog() {
                 apiPut<EnvResponse>("/api/settings/env", { env }),
                 usageSettings
                     ? apiPut<UsageSettingsResponse>("/api/settings/usage", {
-                          enabled: usageSettings.enabled,
                           clientName: usageSettings.clientName,
                       })
                     : Promise.resolve(null),
@@ -485,39 +484,14 @@ export function SettingsDialog() {
                 ) : (
                     <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
                         {usageSettings ? (
-                            <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-900/70 dark:bg-indigo-950/20">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                        <h3 className="text-sm font-medium">
-                                            用量统计
-                                        </h3>
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            只统计渠道、模型、成功或失败次数，不上传提示词、图片和 API Key。
-                                        </p>
-                                    </div>
-                                    <label className="flex shrink-0 items-center gap-2 text-xs">
-                                        <input
-                                            type="checkbox"
-                                            checked={usageSettings.enabled}
-                                            onChange={(event) =>
-                                                setUsageSettings((current) =>
-                                                    current
-                                                        ? {
-                                                              ...current,
-                                                              enabled:
-                                                                  event.target
-                                                                      .checked,
-                                                          }
-                                                        : current,
-                                                )
-                                            }
-                                        />
-                                        允许统计
-                                    </label>
-                                </div>
-                                <label className="block space-y-1 text-xs text-muted-foreground">
+                            <div className="rounded-xl border bg-muted/20 p-4">
+                                <label
+                                    htmlFor="usage-client-name"
+                                    className="block space-y-1 text-xs text-muted-foreground"
+                                >
                                     <span>这台电脑的名称</span>
                                     <Input
+                                        id="usage-client-name"
                                         value={usageSettings.clientName}
                                         placeholder="例如：设计部电脑"
                                         onChange={(event) =>
@@ -533,11 +507,6 @@ export function SettingsDialog() {
                                         }
                                     />
                                 </label>
-                                <p className="text-[11px] text-muted-foreground">
-                                    {usageSettings.queueSize > 0
-                                        ? `有 ${usageSettings.queueSize} 条离线记录，联网后会自动补传。`
-                                        : "离线上报队列为空。"}
-                                </p>
                             </div>
                         ) : null}
                         {desktopAvailable ? (

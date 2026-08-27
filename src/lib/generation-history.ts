@@ -1,4 +1,4 @@
-export const GENERATION_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+export const GENERATION_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export const GENERATION_HISTORY_VERSION = 2;
 
 export interface GenerationHistoryRecord {
@@ -18,8 +18,8 @@ export interface GenerationHistoryRecord {
 
 export function normalizeGenerationTimestamp(value: number): number {
     // Some legacy task runners wrote seconds while others wrote
-    // microseconds. Normalize both to JavaScript milliseconds so one-week
-    // retention and chronological sorting remain reliable after upgrades.
+    // microseconds. Normalize both to JavaScript milliseconds so retention
+    // and chronological sorting remain reliable after upgrades.
     if (value > 100_000_000_000_000) return Math.floor(value / 1000);
     if (value > 0 && value < 100_000_000_000) return Math.floor(value * 1000);
     return Math.floor(value);

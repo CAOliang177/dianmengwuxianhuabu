@@ -176,7 +176,7 @@ describe("buildRecoveredImageNodes", () => {
                         nodeId: "old-node",
                         feature: "image-fusion",
                         status: "completed",
-                        createdAt: now - 8 * 24 * 60 * 60 * 1000,
+                        createdAt: now - 31 * 24 * 60 * 60 * 1000,
                         result: { image: { file_key: "tasks/old.png" } },
                     },
                 ],

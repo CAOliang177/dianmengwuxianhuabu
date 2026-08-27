@@ -756,7 +756,7 @@ export default function SmartIsland({
                     <DialogHeader className="sr-only">
                         <DialogTitle>生成历史</DialogTitle>
                         <DialogDescription>
-                            查看、使用、下载或批量管理近 7 天生成的图片和视频。
+                            查看、使用、下载或批量管理近 30 天生成的图片和视频。
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
@@ -804,7 +804,7 @@ export default function SmartIsland({
                                 ）
                             </button>
                             <span className="px-3 py-1.5 text-sm text-zinc-500">
-                                近 7 天
+                                近 30 天
                             </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -957,7 +957,7 @@ export default function SmartIsland({
                     <DialogHeader className="sr-only">
                         <DialogTitle>查看历史视频</DialogTitle>
                         <DialogDescription>
-                            全屏播放近 7 天生成的视频。
+                            全屏播放近 30 天生成的视频。
                         </DialogDescription>
                     </DialogHeader>
                     {historyVideoPreview ? (

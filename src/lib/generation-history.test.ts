@@ -66,4 +66,27 @@ describe("generation history ordering", () => {
             },
         ]);
     });
+
+    it("keeps 30 days of history and removes older records", () => {
+        const now = 1_800_000_000_000;
+        const day = 24 * 60 * 60 * 1000;
+        expect(
+            readGenerationHistory(
+                {
+                    generationHistoryVersion: 2,
+                    generationHistoryRecords: [
+                        {
+                            fileKey: "tasks/recent/image.png",
+                            createdAt: now - 29 * day,
+                        },
+                        {
+                            fileKey: "tasks/expired/image.png",
+                            createdAt: now - 31 * day,
+                        },
+                    ],
+                },
+                now,
+            ).map((record) => record.fileKey),
+        ).toEqual(["tasks/recent/image.png"]);
+    });
 });

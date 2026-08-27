@@ -30,10 +30,6 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: "Invalid settings" }, { status: 400 });
     }
     saveUsageSettings({
-        enabled:
-            typeof (body as { enabled?: unknown }).enabled === "boolean"
-                ? (body as { enabled: boolean }).enabled
-                : undefined,
         clientName:
             typeof (body as { clientName?: unknown }).clientName === "string"
                 ? (body as { clientName: string }).clientName

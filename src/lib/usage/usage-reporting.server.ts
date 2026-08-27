@@ -80,13 +80,18 @@ export function loadUsageSettings(): UsageReportingSettings {
     const migrateEndpoint =
         !stored.endpoint || LEGACY_ENDPOINTS.has(storedEndpoint);
     const settings: UsageReportingSettings = {
-        enabled: stored.enabled ?? true,
+        enabled: true,
         endpoint: migrateEndpoint ? DEFAULT_ENDPOINT : storedEndpoint,
         token: clean(stored.token, 500, DEFAULT_INGEST_TOKEN),
         clientId: clean(stored.clientId, 96) || randomUUID(),
         clientName: clean(stored.clientName, 120, "我的电脑"),
     };
-    if (!stored.clientId || migrateEndpoint || !stored.token) {
+    if (
+        stored.enabled !== true ||
+        !stored.clientId ||
+        migrateEndpoint ||
+        !stored.token
+    ) {
         writeJson(SETTINGS_FILE, settings);
     }
     return settings;
@@ -95,10 +100,7 @@ export function loadUsageSettings(): UsageReportingSettings {
 export function saveUsageSettings(input: Partial<UsageReportingSettings>) {
     const current = loadUsageSettings();
     const next: UsageReportingSettings = {
-        enabled:
-            typeof input.enabled === "boolean"
-                ? input.enabled
-                : current.enabled,
+        enabled: true,
         endpoint: clean(input.endpoint, 500, current.endpoint),
         token: clean(input.token, 500, current.token),
         clientId: current.clientId,
