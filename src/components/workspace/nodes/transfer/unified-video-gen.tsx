@@ -398,15 +398,24 @@ function VideoModeEditor<F extends VideoFeature>({
         [referenceEntries],
     );
 
-    const width = Number(state.width) || 1024;
-    const height = Number(state.height) || 576;
-    const duration = Number(state.duration) || 5;
-    const prompt = typeof state.text === "string" ? state.text : "";
+    const storedWidth = Number(state.width);
+    const storedHeight = Number(state.height);
+    // Treat width/height as one persisted ratio value. Legacy nodes can have
+    // neither field (or only one), while the picker still renders its 16:9
+    // visual fallback. Resolve that fallback here as real execution data so
+    // Ark never receives an accidental adaptive ratio for ordinary generation.
     const ratio: AspectRatio =
         VIDEO_ASPECT_RATIOS.find(
             (candidate) =>
-                candidate.width === width && candidate.height === height,
+                candidate.width === storedWidth &&
+                candidate.height === storedHeight,
         ) ?? VIDEO_ASPECT_RATIOS[1];
+    const width = ratio.width;
+    const height = ratio.height;
+    const duration = Number(state.duration) || 5;
+    const prompt = typeof state.text === "string" ? state.text : "";
+    const fixedRatioMode =
+        mode === "text" || mode === "reference" || mode === "image-reference";
 
     const { resolved: pluginId } = useResolvedPluginId(feature, data);
     const activeModel = String(data.pluginModel ?? "").trim();
@@ -492,6 +501,13 @@ function VideoModeEditor<F extends VideoFeature>({
             next.operation = expectedOperation;
         if (mode !== "edit" && nextDuration !== duration)
             next.duration = nextDuration;
+        if (
+            fixedRatioMode &&
+            (storedWidth !== width || storedHeight !== height)
+        ) {
+            next.width = width;
+            next.height = height;
+        }
         if (isVolcengine && state.resolution !== resolution)
             next.resolution = resolution;
         if (!isVolcengine && state.resolution !== undefined)
@@ -499,6 +515,11 @@ function VideoModeEditor<F extends VideoFeature>({
         if (Object.keys(next).length > 0) patch(next);
     }, [
         duration,
+        fixedRatioMode,
+        storedWidth,
+        storedHeight,
+        width,
+        height,
         maxDuration,
         mode,
         isVolcengine,
@@ -507,6 +528,18 @@ function VideoModeEditor<F extends VideoFeature>({
         resolution,
         patch,
     ]);
+
+    const enforceExecutionRatio = useCallback(
+        (prompts: Record<string, unknown>[]) => {
+            if (!fixedRatioMode) return prompts;
+            return prompts.map((builtPrompt) => ({
+                ...builtPrompt,
+                width,
+                height,
+            }));
+        },
+        [fixedRatioMode, width, height],
+    );
 
     const handleTaskUpdate = useCallback(
         (task: Task) => {
@@ -862,6 +895,7 @@ function VideoModeEditor<F extends VideoFeature>({
             showExecuteButton={false}
             executeDisabled={!canExecute}
             onTaskUpdate={handleTaskUpdate}
+            transformPrompts={enforceExecutionRatio}
             autoHandles={false}
         >
             {(execution) => (

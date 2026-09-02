@@ -170,7 +170,10 @@ def _json(body: bytes) -> dict[str, Any]:
 
 def _ratio(width: int | None, height: int | None) -> str:
     if not width or not height or width <= 0 or height <= 0:
-        return "adaptive"
+        # Ordinary generation defaults to 16:9 in the canvas. Older saved
+        # nodes may omit dimensions, so preserve that visible selection at the
+        # API boundary instead of silently asking Ark for an adaptive result.
+        return "16:9"
     known = {
         (576, 1024): "9:16",
         (1024, 576): "16:9",
@@ -179,7 +182,7 @@ def _ratio(width: int | None, height: int | None) -> str:
         (768, 1024): "3:4",
         (1344, 576): "21:9",
     }
-    return known.get((int(width), int(height)), "adaptive")
+    return known.get((int(width), int(height)), "16:9")
 
 
 def _clean_prompt(prompt: str) -> str:

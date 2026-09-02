@@ -179,6 +179,34 @@ class Seedance25EditRequestTests(unittest.TestCase):
         )
         self.assertEqual(request["ratio"], "16:9")
 
+    def test_regular_generation_without_legacy_dimensions_defaults_to_16_9(self) -> None:
+        for model in (
+            "doubao-seedance-2-0-260128",
+            "doubao-seedance-2-0-fast-260128",
+            "doubao-seedance-2-5-260628",
+        ):
+            with self.subTest(model=model):
+                request = self.capture_request(
+                    model=model,
+                    prompt="A person walks naturally through the scene",
+                    width=None,
+                    height=None,
+                    duration=5,
+                    operation="generate",
+                )
+                self.assertEqual(request["ratio"], "16:9")
+
+    def test_adaptive_modes_ignore_the_ordinary_generation_fallback(self) -> None:
+        request = self.capture_request(
+            prompt="Continue the source video naturally",
+            width=None,
+            height=None,
+            duration=8,
+            asset_ids="video:asset-source-video",
+            operation="extend",
+        )
+        self.assertEqual(request["ratio"], "adaptive")
+
     def test_seedance_25_accepts_1080p_resolution(self) -> None:
         request = self.capture_request(
             prompt="人物在自然光下向镜头走来",
