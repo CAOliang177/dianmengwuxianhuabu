@@ -179,6 +179,64 @@ class Seedance25EditRequestTests(unittest.TestCase):
         )
         self.assertEqual(request["ratio"], "16:9")
 
+    def test_reference_mode_rewrites_stale_frame_material_roles(self) -> None:
+        request = self.capture_request(
+            prompt="Use all connected media as references",
+            width=1024,
+            height=576,
+            duration=8,
+            images=[ENTRY.asset(b"image", mime="image/png", filename="ref.png")],
+            asset_ids=json.dumps(
+                [
+                    {
+                        "id": "asset-stale-frame",
+                        "type": "image",
+                        "role": "first_frame",
+                    },
+                    {
+                        "id": "asset-reference-video",
+                        "type": "video",
+                        "role": "reference_video",
+                    },
+                ]
+            ),
+            content_mode="reference",
+        )
+        media_roles = [item["role"] for item in request["content"][1:]]
+        self.assertEqual(
+            media_roles,
+            ["reference_image", "reference_image", "reference_video"],
+        )
+        self.assertNotIn("first_frame", media_roles)
+        self.assertNotIn("last_frame", media_roles)
+
+    def test_first_frame_mode_drops_stale_reference_media(self) -> None:
+        request = self.capture_request(
+            prompt="Animate this opening frame",
+            width=1024,
+            height=576,
+            duration=8,
+            asset_ids=json.dumps(
+                [
+                    {
+                        "id": "asset-opening-frame",
+                        "type": "image",
+                        "role": "reference_image",
+                    },
+                    {
+                        "id": "asset-stale-video",
+                        "type": "video",
+                        "role": "reference_video",
+                    },
+                ]
+            ),
+            content_mode="first_frame",
+        )
+        self.assertEqual(len(request["content"]), 2)
+        self.assertEqual(request["content"][1]["role"], "first_frame")
+        self.assertEqual(request["content"][1]["type"], "image_url")
+        self.assertEqual(request["ratio"], "adaptive")
+
     def test_regular_generation_without_legacy_dimensions_defaults_to_16_9(self) -> None:
         for model in (
             "doubao-seedance-2-0-260128",

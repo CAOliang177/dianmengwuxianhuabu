@@ -474,6 +474,7 @@ def _create_task(
     image_role: str = "reference_image",
     image_roles: list[str] | None = None,
     adaptive_ratio: bool = False,
+    content_mode: str | None = None,
 ) -> Asset:
     model = _model()
     is_seedance_25 = _is_seedance_25(model)
@@ -485,6 +486,49 @@ def _create_task(
     provided_videos = [video for video in videos or [] if video is not None]
     provided_audios = [audio for audio in audios or [] if audio is not None]
     materials = _split_asset_ids(asset_ids)
+    normalized_content_mode = (content_mode or "").strip().lower()
+    if not normalized_content_mode:
+        requested_roles = {image_role, *(image_roles or [])}
+        if "last_frame" in requested_roles:
+            normalized_content_mode = "first_last"
+        elif "first_frame" in requested_roles:
+            normalized_content_mode = "first_frame"
+        else:
+            normalized_content_mode = "reference"
+
+    # The selected node mode is authoritative. Material-library entries can
+    # retain a role from a previous mode (for example `first_frame`) after a
+    # user switches to all-reference. Ark rejects a request that mixes any
+    # first/last-frame role with reference media, so normalize every role at
+    # the provider boundary instead of trusting persisted UI metadata.
+    if normalized_content_mode == "reference":
+        image_role = "reference_image"
+        image_roles = ["reference_image"] * len(provided_images)
+        materials = [
+            {**material, "role": f"reference_{material['type']}"}
+            for material in materials
+        ]
+    elif normalized_content_mode in {"first_frame", "first_last"}:
+        frame_limit = 2 if normalized_content_mode == "first_last" else 1
+        provided_images = provided_images[:frame_limit]
+        provided_videos = []
+        provided_audios = []
+        remaining_frame_slots = max(0, frame_limit - len(provided_images))
+        materials = [
+            material
+            for material in materials
+            if material["type"] == "image"
+        ][:remaining_frame_slots]
+        frame_roles_in_order = (
+            ["first_frame", "last_frame"]
+            if normalized_content_mode == "first_last"
+            else ["first_frame"]
+        )
+        image_roles = frame_roles_in_order[: len(provided_images)]
+        for index, material in enumerate(materials, start=len(provided_images)):
+            material["role"] = frame_roles_in_order[index]
+    else:
+        raise RuntimeError(f"Unsupported Seedance content mode: {content_mode}")
     image_materials = sum(1 for item in materials if item["type"] == "image")
     video_materials = sum(1 for item in materials if item["type"] == "video")
     audio_materials = sum(1 for item in materials if item["type"] == "audio")
@@ -804,6 +848,7 @@ def image_gen_video(input: ImageGenVideoInput) -> ImageGenVideoOutput:
         asset_ids=input.asset_ids,
         image_role="first_frame",
         adaptive_ratio=True,
+        content_mode="first_frame",
     )
     return ImageGenVideoOutput(success=True, video=video)
 
@@ -821,6 +866,7 @@ def images_gen_video(input: ImagesGenVideoInput) -> ImagesGenVideoOutput:
         audios=list(input.audios or []),
         asset_ids=input.asset_ids,
         operation=input.operation,
+        content_mode="reference",
     )
     return ImagesGenVideoOutput(success=True, video=video)
 
@@ -852,6 +898,7 @@ def image_image_gen_video(
         ),
         asset_ids=input.asset_ids,
         adaptive_ratio=True,
+        content_mode="first_last",
     )
     return ImageImageGenVideoOutput(success=True, video=video)
 
